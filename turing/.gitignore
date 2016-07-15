@@ -1,0 +1,10 @@
+Debug/
+Release/
+*.yuv
+*.txt
+*.suo
+*.vspx
+*.sdf
+*.psess
+*.opensdf
+

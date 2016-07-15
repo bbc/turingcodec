@@ -1,0 +1,38 @@
+language: c
+
+sudo: false
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - gcc-4.8
+      - g++-4.8
+
+cache:
+  directories:
+    - $HOME/sde-external-7.31.0-2015-09-25-lin
+
+before_script:
+  - export CXX=g++-4.8 CC=gcc-4.8
+  - cp get-intel-sde $HOME
+  - pushd $HOME
+  - wget --no-check-certificate http://www.cmake.org/files/v3.3/cmake-3.3.2-Linux-x86_64.tar.gz
+      && tar -xzf cmake-3.3.2-Linux-x86_64.tar.gz
+      && export PATH=$HOME/cmake-3.3.2-Linux-x86_64/bin:$PATH;
+  - if [ -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then echo "using cached SDE"; fi
+  - if [ ! -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then wget http://pypi.python.org/packages/source/m/mechanize/mechanize-0.2.5.tar.gz; fi
+  - if [ ! -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then tar xf mechanize-0.2.5.tar.gz && mv mechanize-0.2.5 mechanize; fi
+  - if [ ! -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then ./get-intel-sde sde-external-7.31.0-2015-09-25-lin.tar.bz2 && tar xjf sde-external-7.31.0-2015-09-25-lin.tar.bz2; fi
+  - ls -R sde-external-7.31.0-2015-09-25-lin
+  - export PATH=$PATH:$HOME/sde-external-7.31.0-2015-09-25-lin
+  - popd
+
+script:
+  - cd test
+  - cmake .
+  - make
+  - sde64 -nhm -- ./src/bin/hevcasm
+  - sde64 -hsw -- ./src/bin/hevcasm
+

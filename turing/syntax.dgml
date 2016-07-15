@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<DirectedGraph GraphDirection="TopToBottom" Layout="Sugiyama" xmlns="http://schemas.microsoft.com/vs/2009/dgml">
+  <Nodes>
+    <Node Id="AccessUnit" Category="NAL" Bounds="237.195,111.9201,77.2966666666666,25.96" />
+    <Node Id="Bitstream" Category="NAL" Bounds="240.89,-9.99999999997669E-05,69.9066666666666,25.96" />
+    <Node Id="Byte" Category="NAL" Bounds="210.566666666667,167.88,130.553333333333,25.96" Label="byte_stream_nal_unit" />
+    <Node Id="CodedVideoSequence" Category="NAL" Bounds="207.345,55.96,136.996666666667,25.96" />
+    <Node Id="Coding_quadtree1" Category="CABAC" Bounds="111.24,447.68,109.206666666667,25.96" Label="coding_quadtree" />
+    <Node Id="Coding_tree_unit" Category="CABAC" Bounds="221.988333333333,391.72,107.71,25.96" Label="coding_tree_unit" />
+    <Node Id="Coding_unit" Category="CABAC" Bounds="124.875,503.64,81.9366666666669,25.96" Label="coding_unit" />
+    <Node Id="JustDecoded" Bounds="399.914174601237,111.259950395203,87.9066666666666,25.96" UseManualLocation="True" />
+    <Node Id="Mvd_coding" Category="CABAC" Bounds="123.576666666667,615.560000000001,84.5333333333333,25.96" Label="mvd_coding" />
+    <Node Id="Nal_unit" Category="NAL" Bounds="245.175,223.84,61.3366666666666,25.96" Label="nal_unit" />
+    <Node Id="Nal_unit_header" Category="NAL" Bounds="66.3399999999999,279.8,103.006666666667,25.96" Label="nal_unit_header" />
+    <Node Id="OutputPicture" Bounds="-105.085833333333,135.220050395203,94.29,25.96" UseManualLocation="True" />
+    <Node Id="Pcm_sample" Category="RBSP" Bounds="5.6843418860808E-14,559.6,85.6866666666667,25.96" Label="pcm_sample" />
+    <Node Id="Prediction_unit" Category="CABAC" Bounds="116.17,559.6,99.3466666666666,25.96" Label="prediction_unit" />
+    <Node Id="Rbsp_slice_segment_trailing_bits" Category="RBSP" Bounds="49.2016666666668,335.76,135.283333333333,25.96" Label="slice_segment_header" />
+    <Node Id="Residual_coding" Category="CABAC" Bounds="286.491666666667,671.520000000001,102.703333333333,25.96" Label="residual_coding" />
+    <Node Id="Sao" Category="CABAC" Bounds="250.843333333333,447.68,50,25.96" Label="sao" />
+    <Node Id="Slice_segment_data" Category="CABAC" Bounds="214.873333333333,335.76,121.94,25.96" Label="slice_segment_data" />
+    <Node Id="Slice_segment_layer_rbsp" Category="RBSP" Bounds="199.735,279.8,152.216666666667,25.96" Label="slice_segment_layer_rbsp" />
+    <Node Id="Transform_tree" Category="CABAC" Bounds="289.193333333333,559.6,97.3000000000002,25.96" Label="transform_tree" />
+    <Node Id="Transform_unit" Category="CABAC" Bounds="289.313333333333,615.56,97.0599999999999,25.96" Label="transform_unit" />
+    <Node Id="Zzz" Category="RBSP" Bounds="366.858333333333,335.76,187.97,25.96" Label="rbsp_slice_segment_trailing_bits" />
+  </Nodes>
+  <Links>
+    <Link Source="AccessUnit" Target="Byte" Bounds="275.843335171299,137.880104522705,1.75600951024535E-06,20.999895477295" />
+    <Link Source="AccessUnit" Target="JustDecoded" Bounds="314.491671346029,124.447850955391,76.4225726179536,0.300041303305576" />
+    <Link Source="AccessUnit" Target="OutputPicture" Bounds="-1.81768944913878,127.597967776679,239.012694128501,16.6843821999015" />
+    <Link Source="Bitstream" Target="CodedVideoSequence" Bounds="275.843333333333,25.9599,1.13686837721616E-13,21.0001" />
+    <Link Source="Bitstream" Target="OutputPicture" Bounds="-17.5588576992674,25.9587173352142,261.364627098353,105.882085325684" />
+    <Link Source="Byte" Target="Nal_unit" Bounds="275.843333333333,193.84,5.6843418860808E-14,20.9999999999999" />
+    <Link Source="CodedVideoSequence" Target="AccessUnit" Bounds="275.843338012695,81.919998626709,0,21.0001058959961" />
+    <Link Source="Coding_quadtree1" Target="Coding_quadtree1" Bounds="67.7399978637695,454.192047119141,43.5,12.7890319824219" />
+    <Link Source="Coding_quadtree1" Target="Coding_unit" Bounds="165.843338012695,473.640014648438,0,21" />
+    <Link Source="Coding_tree_unit" Target="Coding_quadtree1" Bounds="199.379638671875,417.679992675781,50.9490356445313,25.919189453125" />
+    <Link Source="Coding_tree_unit" Target="Sao" Bounds="275.843322753906,417.679992675781,0,21" />
+    <Link Source="Coding_unit" Target="Pcm_sample" Bounds="79.5653762817383,529.599975585938,57.747932434082,26.2730102539063" />
+    <Link Source="Coding_unit" Target="Prediction_unit" Bounds="165.843338012695,529.599975585938,0,21" />
+    <Link Source="Coding_unit" Target="Transform_tree" Bounds="204.993423461914,529.357421875,84.3958282470703,27.4581298828125" />
+    <Link Source="Nal_unit" Target="Nal_unit_header" Bounds="162.975156737529,247.639428646908,82.3197260072543,29.1558594835222" />
+    <Link Source="Nal_unit" Target="Slice_segment_layer_rbsp" Bounds="275.843333333333,249.799830769231,1.13686837721616E-13,21.0001" />
+    <Link Source="Prediction_unit" Target="Mvd_coding" Bounds="165.843338012695,585.559997558594,0,21" />
+    <Link Source="Rbsp_slice_segment_trailing_bits" Target="OutputPicture" Bounds="-43.3526382446289,168.486999511719,120.328666687012,167.273010253906" />
+    <Link Source="Slice_segment_data" Target="Coding_tree_unit" Bounds="275.843322753906,361.720001220703,0,21" />
+    <Link Source="Slice_segment_layer_rbsp" Target="Rbsp_slice_segment_trailing_bits" Bounds="162.213109615089,305.759930769231,76.7499977219327,27.0121709810109" />
+    <Link Source="Slice_segment_layer_rbsp" Target="Slice_segment_data" Bounds="275.843333333333,305.759930769231,1.70530256582424E-13,21.0001000000001" />
+    <Link Source="Slice_segment_layer_rbsp" Target="Zzz" Bounds="318.754288108916,305.759930769231,90.563572554992,27.3942907565576" />
+    <Link Source="Transform_tree" Target="Transform_tree" Bounds="245.693328857422,566.09521484375,43.5,12.8570556640625" />
+    <Link Source="Transform_tree" Target="Transform_unit" Bounds="337.843322753906,585.559997558594,0,21" />
+    <Link Source="Transform_unit" Target="Residual_coding" Bounds="337.843322753906,641.52001953125,0,21" />
+  </Links>
+  <Categories>
+    <Category Id="CABAC" Label="CABAC" IsTag="True" />
+    <Category Id="NAL" Label="NAL" IsTag="True" />
+    <Category Id="RBSP" Label="NAL" IsTag="True" />
+  </Categories>
+  <Properties>
+    <Property Id="Bounds" DataType="System.Windows.Rect" />
+    <Property Id="Expression" DataType="System.String" />
+    <Property Id="GraphDirection" DataType="Microsoft.VisualStudio.Diagrams.Layout.LayoutOrientation" />
+    <Property Id="GroupLabel" DataType="System.String" />
+    <Property Id="IsEnabled" DataType="System.Boolean" />
+    <Property Id="IsTag" DataType="System.Boolean" />
+    <Property Id="Label" Label="Label" Description="Displayable label of an Annotatable object" DataType="System.String" />
+    <Property Id="Layout" DataType="System.String" />
+    <Property Id="TargetType" DataType="System.Type" />
+    <Property Id="UseManualLocation" DataType="System.Boolean" />
+    <Property Id="Value" DataType="System.String" />
+    <Property Id="ValueLabel" DataType="System.String" />
+  </Properties>
+  <Styles>
+    <Style TargetType="Node" GroupLabel="CABAC" ValueLabel="True">
+      <Condition Expression="HasCategory('CABAC')" />
+      <Setter Property="Background" Value="#FF9AFAFD" />
+    </Style>
+    <Style TargetType="Node" GroupLabel="RBSP" ValueLabel="True">
+      <Condition Expression="HasCategory('RBSP')" />
+      <Setter Property="Background" Value="#FFC0FFAC" />
+    </Style>
+    <Style TargetType="Node" GroupLabel="NAL" ValueLabel="True">
+      <Condition Expression="HasCategory('NAL')" />
+      <Setter Property="Background" Value="#FFC6C1FD" />
+    </Style>
+  </Styles>
+</DirectedGraph>

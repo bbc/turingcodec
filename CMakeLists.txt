@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 2.8)
+project (turing)
+add_subdirectory (boost)
+add_subdirectory (havoc)
+add_subdirectory (turing)

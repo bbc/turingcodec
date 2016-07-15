@@ -1,0 +1,173 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<DirectedGraph GraphDirection="TopToBottom" Layout="Sugiyama" xmlns="http://schemas.microsoft.com/vs/2009/dgml">
+  <Nodes>
+    <Node Id="Analyse" Bounds="592.538333333333,623.64,350.75,253.84" Group="Expanded" />
+    <Node Id="Analyse&lt;IntraPredictionUnit&gt;" Bounds="612.538333333333,831.52,176.956666666667,25.96" />
+    <Node Id="Analyse&lt;coding_unit&gt;" Bounds="612.538333333333,663.64,139.076666666667,25.96" Label="Analyse&lt;coding_unit&gt;" />
+    <Node Id="Analyse&lt;mvd_coding&gt;" Bounds="781.615,663.64,141.673333333333,25.96" />
+    <Node Id="Analysis&lt;prediction_unit&gt;" Bounds="612.538333333333,775.56,156.486666666667,25.96" Label="Analyse&lt;prediction_unit&gt;" />
+    <Node Id="Analysis&lt;transform_tree&gt;" Bounds="612.538333333333,719.6,154.44,25.96" Label="Analyse&lt;transform_tree&gt;" />
+    <Node Id="Encode" Bounds="1031.71166666667,0,204.403333333333,141.92" Group="Expanded" />
+    <Node Id="Encode&lt;coding_quadtree&gt;" Bounds="1051.71166666667,95.96,164.403333333333,25.96" />
+    <Node Id="GetCost&lt;H&gt;()" Bounds="493.778333333333,737.58,68.2699999999999,25.96" Label="getCost()" />
+    <Node Id="GetCostIntra()" Bounds="862.624166666667,323.84,99.7733333333335,25.96" Label="searchIntraCu()" />
+    <Node Id="IntraPredictionCost()" Bounds="4.72166666666658,1077.38,128.383333333333,25.96" Label="intraPredictionCost()" />
+    <Node Id="IntraPredictionCost()1" Bounds="334.721666666667,737.58,128.383333333333,25.96" Label="intraPredictionCost()" />
+    <Node Id="Measure2::puPredictionError()" Bounds="485.906666666667,369.8,170.013333333333,25.96" Label="PuPredictionError&lt;Metric&gt;()" />
+    <Node Id="MotionSearch&lt;Metric&gt;()" Bounds="739.0975,547.68,150.826666666667,25.96" Label="motionSearch&lt;Metric&gt;()" />
+    <Node Id="MvdCost&lt;Metric&gt;" Bounds="512.226666666666,57.98,117.373333333333,25.96" />
+    <Node Id="ProcessPredictionUnit()" Bounds="1030.41833333333,1303.24,142.99,25.96" Label="processPredictionUnit()" />
+    <Node Id="Reconstruct" Bounds="164.016666666667,935.460000000001,469.793333333334,309.8" Group="Expanded" />
+    <Node Id="Reconstruct()" Bounds="444.198333333333,975.460000000001,160.906666666667,25.96" Label="Reconstruct&lt;coding_unit&gt;" />
+    <Node Id="Reconstruct&lt;IntraPredictionUnit&gt;" Bounds="184.016666666667,1199.3,198.786666666667,25.96" />
+    <Node Id="Reconstruct&lt;prediction_unit&gt;" Bounds="435.493333333333,1031.42,178.316666666667,25.96" Label="Reconstruct&lt;prediction_unit&gt;" />
+    <Node Id="Reconstruct&lt;residual_coding&gt;" Bounds="225.815,1143.34,181.673333333333,25.96" />
+    <Node Id="Reconstruct&lt;transform_tree&gt;" Bounds="228.516666666667,1031.42,176.27,25.96" />
+    <Node Id="Reconstruct&lt;transform_unit&gt;" Bounds="228.636666666667,1087.38,176.03,25.96" />
+    <Node Id="Search" Bounds="686.565833333333,171.92,416.695,421.72" Group="Expanded" />
+    <Node Id="Search&lt;IntraPredictionUnit&gt;1" Bounds="911.760833333333,379.8,171.5,25.96" Label="Search&lt;IntraPredictionUnit&gt;" />
+    <Node Id="Search&lt;coding_quadtree" Bounds="751.065833333333,211.92,160.89,25.96" Label="Search&lt;coding_quadtree&gt;" />
+    <Node Id="Search&lt;coding_unit&gt;" Bounds="764.700833333333,267.88,133.62,25.96" Label="Search&lt;coding_unit&gt;" />
+    <Node Id="Search&lt;mvd_coding&gt;" Bounds="748.4025,491.72,136.216666666667,25.96" />
+    <Node Id="Search&lt;prediction_unit&gt;" Bounds="740.995833333333,435.76,151.03,25.96" />
+    <Node Id="Search&lt;residual_coding&gt;" Bounds="920.3175,547.68,154.386666666667,25.96" />
+    <Node Id="Search&lt;transform_tree&gt;" Bounds="923.019166666667,435.76,148.983333333333,25.96" />
+    <Node Id="Search&lt;transform_unit&gt;" Bounds="923.139166666667,491.72,148.743333333333,25.96" />
+    <Node Id="SearchInterCu()" Bounds="781.539166666667,379.8,99.9433333333334,25.96" Label="searchInterCu()" />
+    <Node Id="SignalIntraPredMode()" Bounds="0,1303.24,137.826666666667,25.96" Label="signalIntraPredMode()" />
+    <Node Id="Write" Bounds="664.51,907.48,406.806666666667,365.76" Group="Expanded" />
+    <Node Id="Write&lt;IntraPredictionUnit&gt;" Bounds="684.51,1227.28,164.87,25.96" />
+    <Node Id="Write&lt;coding_quadtree&gt;" Bounds="897.056666666667,947.48,154.26,25.96" Label="Write&lt;coding_quadtree&gt;" />
+    <Node Id="Write&lt;coding_tree_unit&gt;" Bounds="1052.46,40,162.906666666667,25.96" Label="Encode&lt;coding_tree_unit&gt;" />
+    <Node Id="Write&lt;coding_unit&gt;" Bounds="910.691666666667,1003.44,126.99,25.96" />
+    <Node Id="Write&lt;mvd_coding&gt;" Bounds="909.393333333333,1115.36,129.586666666667,25.96" />
+    <Node Id="Write&lt;prediction_unit&gt;" Bounds="901.986666666667,1059.4,144.4,25.96" />
+    <Node Id="Write&lt;residual_coding&gt;" Bounds="726.308333333333,1171.32,147.756666666667,25.96" />
+    <Node Id="Write&lt;transform_tree&gt;" Bounds="729.01,1059.4,142.353333333333,25.96" />
+    <Node Id="Write&lt;transform_unit&gt;" Bounds="729.13,1115.36,142.113333333333,25.96" />
+    <Node Id="XGetComponentBits()" Bounds="171.376666666667,737.58,133.073333333333,25.96" Label="xGetComponentBits()" />
+  </Nodes>
+  <Links>
+    <Link Source="Analyse" Target="Analyse&lt;IntraPredictionUnit&gt;" Category="Contains" />
+    <Link Source="Analyse" Target="Analyse&lt;coding_unit&gt;" Category="Contains" />
+    <Link Source="Analyse" Target="Analyse&lt;mvd_coding&gt;" Category="Contains" />
+    <Link Source="Analyse" Target="Analysis&lt;prediction_unit&gt;" Category="Contains" />
+    <Link Source="Analyse" Target="Analysis&lt;transform_tree&gt;" Category="Contains" />
+    <Link Source="Analyse&lt;IntraPredictionUnit&gt;" Target="Reconstruct&lt;IntraPredictionUnit&gt;" Bounds="227.402362004617,682.707346296488,292.394593476248,33.4692836249653" />
+    <Link Source="Analyse&lt;IntraPredictionUnit&gt;" Target="Write&lt;IntraPredictionUnit&gt;" Bounds="552.932389281188,354.626855609925,53.0801295613543,304.973329394943" />
+    <Link Source="Analyse&lt;coding_unit&gt;" Target="Reconstruct()" Bounds="450.088327840169,504.700012207031,69.7050038655598,0" />
+    <Link Source="Analyse&lt;coding_unit&gt;" Target="Write&lt;coding_unit&gt;" Bounds="594.810187595758,130.21164029342,152.583287602695,361.508244711449" />
+    <Link Source="Analyse&lt;mvd_coding&gt;" Target="Write&lt;mvd_coding&gt;" Bounds="756.629949730887,242.839533208959,2.92420743737239,248.88035179591" />
+    <Link Source="Analysis&lt;prediction_unit&gt;" Target="Reconstruct&lt;prediction_unit&gt;" Bounds="424.460554327902,575.704882241522,118.510477175862,27.9351433932436" />
+    <Link Source="Analysis&lt;prediction_unit&gt;" Target="Write&lt;prediction_unit&gt;" Bounds="602.586346222365,186.37341280103,146.258546216578,417.266672203839" />
+    <Link Source="Analysis&lt;transform_tree&gt;" Target="Reconstruct&lt;transform_tree&gt;" Bounds="249.770009765625,560.660003662109,270.023326416016,0" />
+    <Link Source="Analysis&lt;transform_tree&gt;" Target="Write&lt;transform_tree&gt;" Bounds="583.184624732985,186.873699582673,13.3484994087704,360.806285422196" />
+    <Link Source="Encode" Target="Encode&lt;coding_quadtree&gt;" Category="Contains" />
+    <Link Source="Encode" Target="Write&lt;coding_tree_unit&gt;" Category="Contains" />
+    <Link Source="Encode&lt;coding_quadtree&gt;" Target="Search&lt;coding_quadtree" Bounds="174.062377490384,70.6241935555878,787.262404974715,477.055810106522" />
+    <Link Source="Encode&lt;coding_quadtree&gt;" Target="Write&lt;coding_quadtree&gt;" Bounds="765.824675144553,74.1798639899474,211.132628711513,473.500139672162" />
+    <Link Source="GetCost&lt;H&gt;()" Target="Reconstruct()" Bounds="208.831515942466,525.634589624552,140.723561510093,265.885410375448" />
+    <Link Source="GetCost&lt;H&gt;()" Target="Write&lt;coding_unit&gt;" Bounds="212.307629992553,128.957823659007,528.108444187075,662.562735475478" />
+    <Link Source="GetCost&lt;H&gt;()" Target="Write&lt;prediction_unit&gt;" Bounds="213.212820284931,184.680784917217,526.01275392921,606.839774217268" />
+    <Link Source="IntraPredictionCost()" Target="SignalIntraPredMode()" Bounds="68.913330078125,1103.33996582031,0,190.900024414063" />
+    <Link Source="IntraPredictionCost()1" Target="IntraPredictionCost()" Bounds="80.0178756713867,763.539978027344,301.028602600098,305.889709472656" />
+    <Link Source="IntraPredictionCost()1" Target="Reconstruct()" Bounds="81.5435906532846,524.130283262538,260.184694300806,267.389686219884" />
+    <Link Source="Measure2::puPredictionError()" Target="Analysis&lt;transform_tree&gt;" Bounds="683.213595900567,526.299494702739,431.733045538235,28.6418483397343" />
+    <Link Source="Measure2::puPredictionError()" Target="XGetComponentBits()" Bounds="255.706527709961,395.760009765625,303.454299926758,335.148376464844" />
+    <Link Source="MotionSearch&lt;Metric&gt;()" Target="Analyse&lt;mvd_coding&gt;" Bounds="198.661339183124,401.719990234375,483.06613165805,88.6669065560691" />
+    <Link Source="MvdCost&lt;Metric&gt;" Target="Measure2::puPredictionError()" Bounds="570.913330078125,83.9400024414063,0,276.859985351563" />
+    <Link Source="Reconstruct" Target="Reconstruct()" Category="Contains" />
+    <Link Source="Reconstruct" Target="Reconstruct&lt;IntraPredictionUnit&gt;" Category="Contains" />
+    <Link Source="Reconstruct" Target="Reconstruct&lt;prediction_unit&gt;" Category="Contains" />
+    <Link Source="Reconstruct" Target="Reconstruct&lt;residual_coding&gt;" Category="Contains" />
+    <Link Source="Reconstruct" Target="Reconstruct&lt;transform_tree&gt;" Category="Contains" />
+    <Link Source="Reconstruct" Target="Reconstruct&lt;transform_unit&gt;" Category="Contains" />
+    <Link Source="Reconstruct()" Target="Reconstruct&lt;prediction_unit&gt;" Bounds="524.651672363281,1001.41998291016,0,21" />
+    <Link Source="Reconstruct()" Target="Reconstruct&lt;transform_tree&gt;" Bounds="373.588531494141,1001.41998291016,102.817230224609,27.6618041992188" />
+    <Link Source="Reconstruct&lt;prediction_unit&gt;" Target="ProcessPredictionUnit()" Bounds="339.66503939155,573.640003662109,19.7433353250915,208.919916915848" />
+    <Link Source="Reconstruct&lt;transform_tree&gt;" Target="Reconstruct&lt;transform_tree&gt;" Bounds="185.016662597656,1038.13708496094,43.5,12.2586669921875" />
+    <Link Source="Reconstruct&lt;transform_tree&gt;" Target="Reconstruct&lt;transform_unit&gt;" Bounds="316.651672363281,1057.38000488281,0,21" />
+    <Link Source="Reconstruct&lt;transform_unit&gt;" Target="Reconstruct&lt;residual_coding&gt;" Bounds="316.651672363281,1113.33996582031,0,21" />
+    <Link Source="Search" Target="GetCostIntra()" Category="Contains" />
+    <Link Source="Search" Target="MotionSearch&lt;Metric&gt;()" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;IntraPredictionUnit&gt;1" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;coding_quadtree" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;coding_unit&gt;" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;mvd_coding&gt;" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;prediction_unit&gt;" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;residual_coding&gt;" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;transform_tree&gt;" Category="Contains" />
+    <Link Source="Search" Target="Search&lt;transform_unit&gt;" Category="Contains" />
+    <Link Source="Search" Target="SearchInterCu()" Category="Contains" />
+    <Link Source="Search&lt;IntraPredictionUnit&gt;1" Target="Analyse&lt;IntraPredictionUnit&gt;" Bounds="319.48857450912,233.840000610352,275.291322728844,418.242320998595" />
+    <Link Source="Search&lt;IntraPredictionUnit&gt;1" Target="Search&lt;transform_tree&gt;" Bounds="997.510803222656,405.760009765625,0,21" />
+    <Link Source="Search&lt;coding_quadtree" Target="Search&lt;coding_quadtree" Bounds="707.565856933594,218.580718994141,43.5,12.3910980224609" />
+    <Link Source="Search&lt;coding_quadtree" Target="Search&lt;coding_unit&gt;" Category="indirect" Bounds="831.510803222656,237.880004882813,0,21" />
+    <Link Source="Search&lt;coding_unit&gt;" Target="GetCostIntra()" Bounds="850.298889160156,293.839996337891,36.0191650390625,24.8843383789063" />
+    <Link Source="Search&lt;coding_unit&gt;" Target="SearchInterCu()" Bounds="831.510803222656,293.839996337891,0,76.9599914550781" />
+    <Link Source="Search&lt;mvd_coding&gt;" Target="MotionSearch&lt;Metric&gt;()" Bounds="815.296203613281,517.679992675781,0.750732421875,21.0057373046875" />
+    <Link Source="Search&lt;prediction_unit&gt;" Target="Analyse&lt;coding_unit&gt;" Bounds="694.306946155581,461.71957657195,114.546586957716,194.168786833251" />
+    <Link Source="Search&lt;prediction_unit&gt;" Target="Analysis&lt;prediction_unit&gt;" Bounds="698.707505712822,461.71957657195,113.000644645374,305.399904752567" />
+    <Link Source="Search&lt;prediction_unit&gt;" Target="ProcessPredictionUnit()" Bounds="820.781299603912,461.71957657195,274.048899688204,832.97238563786" />
+    <Link Source="Search&lt;prediction_unit&gt;" Target="Search&lt;mvd_coding&gt;" Bounds="816.510803222656,461.720001220703,0,21" />
+    <Link Source="Search&lt;transform_tree&gt;" Target="Search&lt;transform_unit&gt;" Bounds="997.510803222656,461.720001220703,0,21" />
+    <Link Source="Search&lt;transform_unit&gt;" Target="Search&lt;residual_coding&gt;" Bounds="997.510803222656,517.679992675781,0,21" />
+    <Link Source="SearchInterCu()" Target="Search&lt;prediction_unit&gt;" Bounds="822.320251464844,405.760009765625,5.7113037109375,21.306884765625" />
+    <Link Source="SearchInterCu()" Target="Search&lt;transform_tree&gt;" Bounds="870.014770507813,405.760009765625,80.4636840820313,27.1249694824219" />
+    <Link Source="Write" Target="Write&lt;IntraPredictionUnit&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;coding_quadtree&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;coding_unit&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;mvd_coding&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;prediction_unit&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;residual_coding&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;transform_tree&gt;" Category="Contains" />
+    <Link Source="Write" Target="Write&lt;transform_unit&gt;" Category="Contains" />
+    <Link Source="Write&lt;coding_quadtree&gt;" Target="Write&lt;coding_quadtree&gt;" Bounds="853.556640625,954.117492675781,43.5,12.4472045898438" />
+    <Link Source="Write&lt;coding_quadtree&gt;" Target="Write&lt;coding_unit&gt;" Bounds="974.186645507813,973.440002441406,0,21" />
+    <Link Source="Write&lt;coding_tree_unit&gt;" Target="Encode&lt;coding_quadtree&gt;" Bounds="1133.91333007813,65.9599990844727,0,21" />
+    <Link Source="Write&lt;coding_unit&gt;" Target="Write&lt;prediction_unit&gt;" Bounds="974.186645507813,1029.40002441406,0,21" />
+    <Link Source="Write&lt;coding_unit&gt;" Target="Write&lt;transform_tree&gt;" Bounds="849.114013671875,1029.40002441406,84.713134765625,27.2445068359375" />
+    <Link Source="Write&lt;prediction_unit&gt;" Target="ProcessPredictionUnit()" Bounds="351.02036959123,177.880054367815,396.852586958224,606.110905307892" />
+    <Link Source="Write&lt;prediction_unit&gt;" Target="Write&lt;mvd_coding&gt;" Bounds="974.186645507813,1085.35998535156,0,21" />
+    <Link Source="Write&lt;transform_tree&gt;" Target="Write&lt;transform_tree&gt;" Bounds="685.510009765625,1065.998046875,43.5,12.5455322265625" />
+    <Link Source="Write&lt;transform_tree&gt;" Target="Write&lt;transform_unit&gt;" Bounds="800.186645507813,1085.35998535156,0,21" />
+    <Link Source="Write&lt;transform_unit&gt;" Target="Write&lt;residual_coding&gt;" Bounds="800.186645507813,1141.31994628906,0,21" />
+  </Links>
+  <Categories>
+    <Category Id="Contains" Label="Contains" Description="Whether the source of the link contains the target object" CanBeDataDriven="False" CanLinkedNodesBeDataDriven="True" IncomingActionLabel="Contained By" IsContainment="True" OutgoingActionLabel="Contains" />
+    <Category Id="indirect" Label="indirect" IsTag="True" />
+  </Categories>
+  <Properties>
+    <Property Id="Bounds" DataType="System.Windows.Rect" />
+    <Property Id="CanBeDataDriven" Label="CanBeDataDriven" Description="CanBeDataDriven" DataType="System.Boolean" />
+    <Property Id="CanLinkedNodesBeDataDriven" Label="CanLinkedNodesBeDataDriven" Description="CanLinkedNodesBeDataDriven" DataType="System.Boolean" />
+    <Property Id="Expression" DataType="System.String" />
+    <Property Id="GraphDirection" DataType="Microsoft.VisualStudio.Diagrams.Layout.LayoutOrientation" />
+    <Property Id="Group" Label="Group" Description="Display the node as a group" DataType="Microsoft.VisualStudio.GraphModel.GraphGroupStyle" />
+    <Property Id="GroupLabel" DataType="System.String" />
+    <Property Id="IncomingActionLabel" Label="IncomingActionLabel" Description="IncomingActionLabel" DataType="System.String" />
+    <Property Id="IsContainment" DataType="System.Boolean" />
+    <Property Id="IsEnabled" DataType="System.Boolean" />
+    <Property Id="IsTag" DataType="System.Boolean" />
+    <Property Id="Label" Label="Label" Description="Displayable label of an Annotatable object" DataType="System.String" />
+    <Property Id="Layout" DataType="System.String" />
+    <Property Id="OutgoingActionLabel" Label="OutgoingActionLabel" Description="OutgoingActionLabel" DataType="System.String" />
+    <Property Id="TargetType" DataType="System.Type" />
+    <Property Id="Value" DataType="System.String" />
+    <Property Id="ValueLabel" DataType="System.String" />
+  </Properties>
+  <Styles>
+    <Style TargetType="Link" GroupLabel="indirect" ValueLabel="True">
+      <Condition Expression="HasCategory('indirect')" />
+      <Setter Property="Stroke" Value="#FF3D3F7B" />
+    </Style>
+    <Style TargetType="Node" GroupLabel="Comment" ValueLabel="Has comment">
+      <Condition Expression="HasCategory('Comment')" />
+      <Setter Property="Background" Value="#FFFFFACD" />
+      <Setter Property="Stroke" Value="#FFE5C365" />
+      <Setter Property="StrokeThickness" Value="1" />
+      <Setter Property="NodeRadius" Value="2" />
+      <Setter Property="MaxWidth" Value="250" />
+    </Style>
+  </Styles>
+</DirectedGraph>

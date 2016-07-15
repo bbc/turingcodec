@@ -1,0 +1,71 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<DirectedGraph GraphDirection="TopToBottom" Layout="Sugiyama" xmlns="http://schemas.microsoft.com/vs/2009/dgml">
+  <Nodes>
+    <Node Id="&lt;Analysis&gt;" Category="Callee" Bounds="31.5683333333334,129.5675,78.8633333333333,25.96" />
+    <Node Id="&lt;NodeAnalysis&gt;" Category="Callee" Bounds="155.25,259.135,111.5,25.96" Label="&lt;Node Analysis&gt;" />
+    <Node Id="&lt;NodeErrorAnalysis&gt;" Bounds="127.796666666667,201.4875,140.406666666667,25.96" Label="&lt;Node Error Analysis&gt;" />
+    <Node Id="Decode" Bounds="63.6966666666667,259.135,60.6066666666666,25.96" />
+    <Node Id="IntraPred" Category="Callee" Bounds="162.458333333333,71.9200000000001,81.0833333333334,25.96" Label="PredictIntra" />
+    <Node Id="Measure" Bounds="352.253333333333,316.7825,65.4933333333333,25.96" />
+    <Node Id="Node" Category="Callee" Bounds="173,129.5675,50,25.96" />
+    <Node Id="Operator()" Category="Callee" Bounds="445,0,50,25.96" Label="Caller" />
+    <Node Id="Operator(Callee)" Bounds="217.048333333333,432.0775,51.9033333333333,25.96" Label="Callee" />
+    <Node Id="Parse1" Category="Callee" Bounds="186,316.7825,50,25.96" Label="Parse" />
+    <Node Id="Search" Bounds="266.368333333333,316.7825,55.2633333333333,25.96" />
+    <Node Id="State" Category="Callee" Bounds="274.411666666667,71.9200000000001,55.1766666666667,25.96" Label="Vanilla" />
+    <Node Id="Syntax1" Category="Callee" Bounds="215.675,374.43,54.6500000000001,25.96" Label="Syntax" />
+    <Node Id="Tree" Category="Callee" Bounds="299.115,201.4875,107.77,25.96" Label="&lt;Error Analysis&gt;" />
+    <Node Id="Verify" Category="Callee" Bounds="296.813333333333,259.135,50.3733333333332,25.96" />
+  </Nodes>
+  <Links>
+    <Link Source="&lt;Analysis&gt;" Target="Parse1" Category="Callee" Bounds="33,155.527496337891,144.11572265625,168.748077392578" />
+    <Link Source="&lt;NodeAnalysis&gt;" Target="Parse1" Category="Callee" Bounds="211,285.095001220703,0,22.6875" />
+    <Link Source="&lt;NodeErrorAnalysis&gt;" Target="Verify" Bounds="225.920028686523,227.447494506836,63.1535797119141,29.3600616455078" />
+    <Link Source="Decode" Target="Parse1" Bounds="120.343902587891,285.095001220703,58.3230590820313,28.736572265625" />
+    <Link Source="IntraPred" Target="Syntax1" Bounds="1,90.6849670410156,205.738174438477,292.406005859375" />
+    <Link Source="Measure" Target="Syntax1" Bounds="278.478759765625,342.402160644531,75.3866577148438,30.6045837402344" />
+    <Link Source="Node" Target="&lt;NodeAnalysis&gt;" Category="Callee" Bounds="97,151.448486328125,76,105.457885742188" />
+    <Link Source="Node" Target="&lt;NodeErrorAnalysis&gt;" Bounds="198,155.527496337891,0,36.9600067138672" />
+    <Link Source="Operator()" Target="IntraPred" Bounds="251.851196289063,19.3986778259277,193.148803710938,51.6625862121582" Label="transform_unit" LabelBounds="329.94,40.96,77.0600000000002,15.96" />
+    <Link Source="Operator()" Target="Measure" Bounds="426.64794921875,21.3040733337402,151.35205078125,302.238468170166" Label="coding_unit..." LabelBounds="508.263333333333,170.5275,69.7366666666667,15.96" />
+    <Link Source="Operator()" Target="Search" Bounds="330.261627197266,25.9599990844727,139.738372802734,292.362022399902" Label="coding_quadtree..." LabelBounds="372.993333333333,170.5275,97.0066666666667,15.96" />
+    <Link Source="Operator()" Target="State" Category="Callee" Bounds="338.289306640625,25.9599990844727,120.160095214844,49.3446807861328" />
+    <Link Source="Parse1" Target="Syntax1" Category="Callee" Bounds="218.205169677734,342.742492675781,13.2216339111328,23.8185729980469" />
+    <Link Source="Search" Target="Syntax1" Bounds="260.446685791016,342.742492675781,22.070068359375,24.94677734375" />
+    <Link Source="State" Target="&lt;Analysis&gt;" Category="Callee" Bounds="119.218795776367,94.1375732421875,155.192855834961,37.7321166992188" />
+    <Link Source="State" Target="Decode" Bounds="75.4952392578125,93.287223815918,198.916412353516,157.250877380371" />
+    <Link Source="State" Target="Node" Category="Callee" Bounds="228.936172485352,97.879997253418,49.6470184326172,27.5194931030273" />
+    <Link Source="State" Target="Tree" Bounds="302,97.879997253418,25.2363891601563,98.4203720092773" />
+    <Link Source="State" Target="Verify" Category="Callee" Bounds="316.410339355469,97.879997253418,109.778900146484,165.806282043457" Label="" LabelBounds="338.800415413205,167.619296201569,0,15.96" />
+    <Link Source="Syntax1" Target="Operator(Callee)" Bounds="243,400.390014648438,0,22.6875" />
+    <Link Source="Tree" Target="Verify" Category="Callee" Bounds="333.242553710938,227.447494506836,12.7774353027344,23.7609100341797" />
+    <Link Source="Verify" Target="Parse1" Category="Callee" Bounds="242.802429199219,284.540222167969,55.2728576660156,28.7057800292969" />
+  </Links>
+  <Categories>
+    <Category Id="Callee" Label="Callee" IsTag="True" />
+  </Categories>
+  <Properties>
+    <Property Id="Bounds" DataType="System.Windows.Rect" />
+    <Property Id="Expression" DataType="System.String" />
+    <Property Id="GraphDirection" DataType="Microsoft.VisualStudio.Diagrams.Layout.LayoutOrientation" />
+    <Property Id="GroupLabel" DataType="System.String" />
+    <Property Id="IsEnabled" DataType="System.Boolean" />
+    <Property Id="IsTag" DataType="System.Boolean" />
+    <Property Id="Label" Label="Label" Description="Displayable label of an Annotatable object" DataType="System.String" />
+    <Property Id="LabelBounds" DataType="System.Windows.Rect" />
+    <Property Id="Layout" DataType="System.String" />
+    <Property Id="TargetType" DataType="System.Type" />
+    <Property Id="Value" DataType="System.String" />
+    <Property Id="ValueLabel" DataType="System.String" />
+  </Properties>
+  <Styles>
+    <Style TargetType="Node" GroupLabel="Comment" ValueLabel="Has comment">
+      <Condition Expression="HasCategory('Comment')" />
+      <Setter Property="Background" Value="#FFFFFACD" />
+      <Setter Property="Stroke" Value="#FFE5C365" />
+      <Setter Property="StrokeThickness" Value="1" />
+      <Setter Property="NodeRadius" Value="2" />
+      <Setter Property="MaxWidth" Value="250" />
+    </Style>
+  </Styles>
+</DirectedGraph>

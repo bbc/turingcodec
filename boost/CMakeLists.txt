@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 2.8)
+project(boost)
+add_subdirectory (libs/program_options/src)
+add_subdirectory (libs/filesystem/src)
+add_subdirectory (libs/system/src)
+add_subdirectory (libs/timer/src)
+add_subdirectory (libs/chrono/src)
