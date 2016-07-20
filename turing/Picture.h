@@ -59,20 +59,20 @@ struct Raster
     }
 
     bool operator==(const Raster<Sample> &other) const
-	{
+    {
         return this->p == other.p && this->stride == other.stride;
-	}
+    }
 
     Raster<Sample> offset(int x, int y)
-	{
+    {
         return Raster<Sample>(*this, x, y);
-	}
+    }
 
     Raster const &operator +=(MotionVector const &mv)
-	{
+    {
         this->p += mv[0] + mv[1] * this->stride;
         return *this;
-	}
+    }
 
     Raster operator +(MotionVector const &mv) const
     {
@@ -219,6 +219,7 @@ struct PictureWrapper
     virtual ~PictureWrapper() { }
     int sampleSize = 0;
     int fieldTB = 0; /* 0 = FRAME, 1 = TOP, 2 = BOTTOM */
+    int64_t pts;
 };
 
 template <typename Sample>

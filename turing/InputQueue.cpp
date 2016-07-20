@@ -26,44 +26,63 @@ For more information, contact us at info @ turingcodec.org.
 
 namespace {
 
-    struct Piece
+struct Piece
+{
+    Piece(std::shared_ptr<PictureWrapper> picture)
+        :
+        picture(picture)
     {
-        Piece(std::shared_ptr<PictureWrapper> picture) : picture(picture) { }
-
-        std::shared_ptr<InputQueue::Docket> docket;
-        std::shared_ptr<PictureWrapper> picture;
-        std::shared_ptr<AdaptiveQuantisation> aqInfo;
-
-        bool done() const
-        {
-            return !this->picture;
-        }
-    };
-
-    void addReference(InputQueue::Docket &docket, int ref)
-    {
-        if (ref < 0) docket.references.negative.insert(ref);
-        if (ref > 0) docket.references.positive.insert(ref);
     }
+
+    std::shared_ptr<InputQueue::Docket> docket;
+    std::shared_ptr<PictureWrapper> picture;
+    std::shared_ptr<AdaptiveQuantisation> aqInfo;
+
+    bool done() const
+    {
+        return !this->picture;
+    }
+};
+
+void addReference(InputQueue::Docket &docket, int ref)
+{
+    if (ref < 0) docket.references.negative.insert(ref);
+    if (ref > 0) docket.references.positive.insert(ref);
+}
 
 }
 
 
 struct InputQueue::State
 {
-    State(const boost::program_options::variables_map &vm) :
-        vm(vm),
-        sequenceFront(0),
-        sequenceIdr(0),
-        finish(false)
-        {
-        }
+    State(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange)
+        :
+        maxGopN(maxGopN),
+        maxGopM(maxGopM),
+        fieldCoding(fieldCoding),
+        shotChange(shotChange)
+    {
+    }
 
-    const boost::program_options::variables_map &vm;
+    const int maxGopN;
+    const int maxGopM;
+    const bool fieldCoding;
+    const bool shotChange;
+
     std::deque<Piece> entries;
-    int sequenceFront;
-    int sequenceIdr;
-    bool finish;
+
+    struct Timestamp
+    {
+        int64_t timestamp;
+        size_t sequence;
+    };
+
+    std::deque<Timestamp> timestamps;
+
+    size_t pictureInputCount = 0;
+    int sequenceFront = 0;
+    int sequenceIdr = 0;
+    bool finish = false;
     int gopSize;
 
     void process();
@@ -108,11 +127,14 @@ struct InputQueue::State
 };
 
 
-InputQueue::InputQueue(const boost::program_options::variables_map &vm)
-:
-	        state(new State(vm))
+InputQueue::InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange)
+    :
+    state(new State(maxGopN, maxGopM, fieldCoding, shotChange))
 {
 }
+
+
+InputQueue::~InputQueue() = default;
 
 
 void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, double qpFactor, int ref1, int ref2, int ref3, int ref4)
@@ -140,19 +162,24 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
 
 void InputQueue::State::process()
 {
-
     if (this->entries.empty() || this->entries.front().docket) return;
-    if (this->vm.at("shot-change").as<bool>())
+
+    if (this->shotChange)
     {
         if ((this->sequenceIdr - this->sequenceFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->vm.at("max-gop-n").as<int>()), this->vm.at("field-coding").as<bool>());
+            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->maxGopN), this->fieldCoding);
     }
     else
-        if (this->sequenceIdr - this->sequenceFront < 0) this->sequenceIdr += this->vm.at("max-gop-n").as<int>();
+    {
+        if (this->sequenceIdr - this->sequenceFront < 0)
+            this->sequenceIdr += this->maxGopN;
+    }
 
-    gopSize = this->vm.at("max-gop-m").as<int>();
+    gopSize = this->maxGopM;
 
-    if (gopSize != 1 && gopSize != 8) throw std::runtime_error("max-gop-m must be either 1 or 8");
+    if (gopSize != 1 && gopSize != 8) 
+        throw std::runtime_error("max-gop-m must be either 1 or 8"); // review: still the case?
+
     char lastPicture = 'P';
 
     if (this->finish && int(entries.size()) < gopSize)
@@ -167,7 +194,9 @@ void InputQueue::State::process()
         gopSize = gopSizeIdr;
         lastPicture = 'I';
     }
-    if (int(entries.size()) < gopSize) return;
+
+    if (int(entries.size()) < gopSize) 
+        return;
 
     int max = gopSize;
 
@@ -248,6 +277,20 @@ void InputQueue::append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr
     assert(!this->state->finish);
     this->state->entries.push_back(Piece(picture));
     this->state->entries.back().aqInfo = aqInfo;
+
+    auto &timestamps = this->state->timestamps;
+
+    size_t const reorderDelay = 3; // review: could reduce - this relates to *_max_num_reorder_pics
+
+    if (this->state->pictureInputCount == 1)
+    {
+        // upon the second picture, we know the PTS period
+        auto const period = picture->pts - timestamps.front().timestamp;
+        for (size_t i=0; i<reorderDelay; ++i)
+            timestamps.push_front({ timestamps.front().timestamp - period, i });
+    }
+    timestamps.push_back({ picture->pts, this->state->pictureInputCount + reorderDelay });
+    ++this->state->pictureInputCount;
 }
 
 
@@ -265,18 +308,17 @@ bool InputQueue::eos() const
 
 std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
 {
+    if (this->state->pictureInputCount == 1 && !this->eos())
+        return nullptr;
 
-    int currentGopSize;
     this->state->setShotChangeList(m_shotChangeList);
     this->state->process();
 
-    std::shared_ptr<InputQueue::Docket> docket;
     int isIntraFrame = -1;
     bool encodeIntraFrame = false;
     int size = int(this->state->entries.size() > 8) ? 8 : int(this->state->entries.size());
     for (int i = 0; i < size; ++i)
     {
-        //docket = this->state->entries.at(i).docket;
         if (!this->state->entries.at(i).docket || this->state->entries.at(i).done()) break;
         if (this->state->entries.at(i).docket->sliceType == I)
         {
@@ -285,24 +327,25 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
         }
     }
 
+    std::shared_ptr<InputQueue::Docket> docket;
     for (int i = 0; i < int(this->state->entries.size()); ++i)
     {
         docket = this->state->entries.at(i).docket;
-        if (!docket) break;
+        if (!docket) 
+            break;
 
         bool canEncode = true;
+
         for (int deltaPoc : docket->references.positive)
-        {
-            if (!this->state->entries.at(i + deltaPoc).done()) canEncode = false;
-        }
+            if (!this->state->entries.at(i + deltaPoc).done()) 
+                canEncode = false;
+
         if (encodeIntraFrame && i != isIntraFrame)
-        {
             canEncode = false;
-        }
+
         if (encodeIntraFrame && i == isIntraFrame)
-        {
             canEncode = true;
-        }
+
         if (canEncode)
         {
             docket->picture = this->state->entries.at(i).picture;
@@ -318,6 +361,11 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
         ++this->state->sequenceFront;
     }
 
+    if (docket)
+    {
+        docket->dts = this->state->timestamps.front().timestamp;
+        this->state->timestamps.pop_front();
+    }
+
     return docket;
 }
-

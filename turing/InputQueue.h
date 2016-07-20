@@ -26,16 +26,30 @@ For more information, contact us at info @ turingcodec.org.
 #include "Picture.h"
 #include "EstimateIntraComplexity.h"
 #include "AdaptiveQuantisation.h"
-#include <boost/program_options.hpp>
 #include <memory>
+#include <vector>
+#include <set>
 
 
 struct InputQueue
 {
-    InputQueue(const boost::program_options::variables_map &vm);
+    InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange);
 
-    // Declare, but do not define, copy constructor to pevent object copying
-    InputQueue(const InputQueue&);
+    ~InputQueue();
+
+    void setShotChangeList(std::vector<int>& shotChangeList)
+    {
+        if (shotChangeList.size()) m_shotChangeList.swap(shotChangeList);
+    }
+
+    // Addes an input picture to the queue.
+    void append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr<AdaptiveQuantisation> aqInfo);
+
+    // Called to tell the queue that no more pictures will be appended - this is the end of video input.
+    void endOfInput();
+
+    // Returns true if endOfInput() was previously called
+    bool eos() const;
 
     struct References
     {
@@ -44,7 +58,8 @@ struct InputQueue
         std::set<int> after;
     };
 
-    // Instructions on how to encode a video frame. (consider renaming as Recipe<AccessUnit> ???)
+    // Instructions on how to encode a video frame. 
+    // Review: use StateEncodePicture instead [there is 1:1 relationship]?
     struct Docket
     {
         std::shared_ptr<PictureWrapper> picture;
@@ -57,30 +72,18 @@ struct InputQueue
         double qpFactor;
         int currentGopSize;
         References references;
+        int64_t dts;
     };
-
-    // Addes an input picture to the queue.
-    void append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr<AdaptiveQuantisation> aqInfo);
-
-    // Called to tell the queue that no more pictures will be appended - this is the end of video input.
-    void endOfInput();
-
-    // Returns true if endOfInput() was previously called
-    bool eos() const;
 
     // Retrieves a docket: a packet of work containing a picture and instructions of how to encode it.
     std::shared_ptr<InputQueue::Docket> getDocket();
-    void setShotChangeList(std::vector<int>& shotChangeList) { if (shotChangeList.size()) m_shotChangeList.swap(shotChangeList); };
-
-    // Returns true if getDocket() would return a docket.
-    bool docketAvailable() const;
-
+    
 protected:
-    std::vector<int> m_shotChangeList;
+    std::vector<int> m_shotChangeList; // review: move into State to preserve PIMPL
 
 private:
     struct State;
-    std::shared_ptr<State> state;
+    std::unique_ptr<State> state;
 };
 
 #endif

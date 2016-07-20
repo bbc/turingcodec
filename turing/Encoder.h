@@ -52,10 +52,17 @@ struct Encoder
     // Writes bitstream headers (i.e. SPS, PPS, etc.)
     void headers(std::vector<uint8_t> &bitstream);
 
+    struct PictureMetadata
+    {
+        int64_t pts;
+        int64_t dts;
+        bool keyframe;
+    };
+
     // Synchronous, deterministic frame encode function.
     // Returns true if new encoded bitstream generated.
     // Call with pictureWrapper empty to flush at end of sequence.
-    bool encodePicture(std::shared_ptr<PictureWrapper> pictureWrapper, std::vector<uint8_t> &bitstream);
+    bool encodePicture(std::shared_ptr<PictureWrapper> pictureWrapper, std::vector<uint8_t> &bitstream, PictureMetadata &metadata);
 
     void parseInputRes();
 
@@ -69,8 +76,8 @@ struct Encoder
     int externalBitDepth;
     boost::timer::cpu_timer cpuTimer;
     boost::timer::cpu_timer frameCpuTimer;
-    size_t frameCount;
-    size_t byteCount;
+    size_t frameCount = 0;
+    size_t byteCount = 0;
     double frameRate;
     std::vector<int> m_shotChangeList;
 

@@ -62,127 +62,128 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
 
     po::options_description optionsInput("Input options");
     optionsInput.add_options()
-		        ("input-res", po::value<std::string>()->required(), "video frame resolution <width>x<height>")
-		        ("seek", po::value<size_t>(0), "number of initial frames to be omitted before encoding starts")
-		        ("frames", po::value<size_t>()->required(), "number of frames to encode")
-		        ("frame-rate", po::value<double>()->required(), "sequence frame rate") // <review - this needs to be a rational number for, e.g. 30000/1001 framerates
-		        ("bit-depth", po::value<int>()->default_value(8), "video bit depth (of both input YUV and output stream)");
+                ("input-res", po::value<std::string>()->required(), "video frame resolution <width>x<height>")
+                ("seek", po::value<size_t>(0), "number of initial frames to be omitted before encoding starts")
+                ("frames", po::value<size_t>()->required(), "number of frames to encode")
+                ("frame-rate", po::value<double>()->required(), "sequence frame rate") // <review - this needs to be a rational number for, e.g. 30000/1001 framerates
+                ("bit-depth", po::value<int>()->default_value(8), "video bit depth (of both input YUV and output stream)");
     options.add(optionsInput);
 
     po::options_description optionsOutput("Output options");
     optionsOutput.add_options()
-		        ("output-file,o", po::value<std::string>(&outputFilename), "output file name")
-		        ("dump-pictures", po::value<std::string>(), "reconstructed YUV file name (separate fields if field-coding is enabled)")
-		        ("dump-frames", po::value<std::string>(), "reconstructed YUV file name (interleaved frames if field-coding is enabled)")
-		        ("hash", po::value<int>(), "Decoded picture hash: 0 = MD5 sum, 1 = CRC, 2 = Check sum")
-		        ("atc-sei", po::value<int>()->default_value(-1), "Alternative transfer characteristics SEI message: --atc-sei ptc (preferred transfer characteristics)");
+                ("output-file,o", po::value<std::string>(&outputFilename), "output file name")
+                ("dump-pictures", po::value<std::string>(), "reconstructed YUV file name (separate fields if field-coding is enabled)")
+                ("dump-frames", po::value<std::string>(), "reconstructed YUV file name (interleaved frames if field-coding is enabled)")
+                ("hash", po::value<int>(), "Decoded picture hash: 0 = MD5 sum, 1 = CRC, 2 = Check sum")
+                ("atc-sei", po::value<int>()->default_value(-1), "Alternative transfer characteristics SEI message: --atc-sei ptc (preferred transfer characteristics)");
     options.add(optionsOutput);
 
     po::options_description optionsRate("Rate control options");
     optionsRate.add_options()
-		        ("qp", po::value<int>()->default_value(26), "quantization parameter")
-		        ("aq", po::bool_switch()->default_value(false), "TM5-like adaptive quantisation based on psycho-visual model")
-		        // review: consider replacing aq-depth with aq-size - this is more consistent with other options
-		        ("aq-depth", po::value<int>()->default_value(3), "maximum depth at which adaptive quantisation can be performed")
-		        ("aq-range", po::value<int>()->default_value(6), "maximum range at which the qp can vary during adaptive quantisation")
-		        // review: consider replacing dqp-depth with dqp-size - this is more consistent with other options
-		        ("dqp-depth", po::value<int>()->default_value(-1), "cu depth where QP can be varied")
-		        ("bitrate", po::value<int>(), "cbr rate control based on lambda-rate model");
+                ("qp", po::value<int>()->default_value(26), "quantization parameter")
+                ("aq", po::bool_switch()->default_value(false), "TM5-like adaptive quantisation based on psycho-visual model")
+                // review: consider replacing aq-depth with aq-size - this is more consistent with other options
+                ("aq-depth", po::value<int>()->default_value(3), "maximum depth at which adaptive quantisation can be performed")
+                ("aq-range", po::value<int>()->default_value(6), "maximum range at which the qp can vary during adaptive quantisation")
+                // review: consider replacing dqp-depth with dqp-size - this is more consistent with other options
+                ("dqp-depth", po::value<int>()->default_value(-1), "cu depth where QP can be varied")
+                ("bitrate", po::value<int>(), "cbr rate control based on lambda-rate model");
     options.add(optionsRate);
 
     po::options_description optionsStructure("Structure options");
     optionsStructure.add_options()
-		        ("shot-change", po::bool_switch()->default_value(false), "enable shot change detection")
-		        ("field-coding", po::bool_switch()->default_value(false), "enable field coding")
-		        ("max-gop-n", po::value<int>()->default_value(250), "maximum intra picture interval")
-		        ("max-gop-m", po::value<int>()->default_value(8), "maximum anchor picture interval (1 or 8)")
-		        ("wpp", po::bool_switch()->default_value(true), "enable wave-front parallel processing (default enabled)")
-		        ("ctu", po::value<int>()->default_value(64), "CTU size in luma pixels")
-		        ("min-cu", po::value<int>()->default_value(8), "minimum CU size in luma pixels");
+        ("shot-change", po::bool_switch()->default_value(false), "enable shot change detection")
+        ("field-coding", po::bool_switch()->default_value(false), "enable field coding")
+        ("max-gop-n", po::value<int>()->default_value(250), "maximum intra picture interval")
+        ("max-gop-m", po::value<int>()->default_value(8), "maximum anchor picture interval (1 or 8)")
+        ("wpp", po::bool_switch()->default_value(true), "enable wave-front parallel processing (default enabled)")
+        ("ctu", po::value<int>()->default_value(64), "CTU size in luma pixels")
+        ("min-cu", po::value<int>()->default_value(8), "minimum CU size in luma pixels")
+        ("repeat-headers", po::bool_switch(), "emit VPS/SPS/PPS on every keyframe (default first keyframe only)");
     options.add(optionsStructure);
 
     po::options_description optionsTools("Coding tool options");
     optionsTools.add_options()
-		        ("deblock", po::bool_switch()->default_value(true), "enable deblocking filter")
-		        ("strong-intra-smoothing", po::bool_switch(), "enable strong intra smoothing")
-		        ("rqt", po::bool_switch(), "enable one level of rqt (inter coding only)")
-		        ("amp", po::bool_switch(), "enable asymmetric motion partitions")
-		        ("smp", po::bool_switch()->default_value(false), "enable symmetric motion partitions")
-		        ("rdoq", po::bool_switch(), "enable rate distortion optimised quantisation")
-		        ("max-num-merge-cand", po::value<int>()->default_value(5), "maximum number of merge candidates tested")
-		        ("sdh", po::bool_switch(), "enable sign data hiding, only with --rdoq")
-		        ("tskip", po::bool_switch(), "enable transform skip");
+                ("deblock", po::bool_switch()->default_value(true), "enable deblocking filter")
+                ("strong-intra-smoothing", po::bool_switch(), "enable strong intra smoothing")
+                ("rqt", po::bool_switch(), "enable one level of rqt (inter coding only)")
+                ("amp", po::bool_switch(), "enable asymmetric motion partitions")
+                ("smp", po::bool_switch()->default_value(false), "enable symmetric motion partitions")
+                ("rdoq", po::bool_switch(), "enable rate distortion optimised quantisation")
+                ("max-num-merge-cand", po::value<int>()->default_value(5), "maximum number of merge candidates tested")
+                ("sdh", po::bool_switch(), "enable sign data hiding, only with --rdoq")
+                ("tskip", po::bool_switch(), "enable transform skip");
     options.add(optionsTools);
 
     po::options_description optionsPerformance("Performance options");
     optionsPerformance.add_options()
-		        ("speed", po::value<Speed::Type>()->default_value(Speed::slow), "speed / efficiency tradeoff (one of "
+                ("speed", po::value<Speed::Type>()->default_value(Speed::slow), "speed / efficiency tradeoff (one of "
 #define X(name) " " #name
-		                ENCODER_SPEED_PRESETS_XMACRO
+                        ENCODER_SPEED_PRESETS_XMACRO
 #undef X
-		                ")")
-		                ("fdm", po::bool_switch(), "fast decision for merge")
-		                ("fdam", po::bool_switch(), "fast decision for all modes")
-		                ("ecu", po::bool_switch(), "enable early cu termination")
-		                ("esd", po::bool_switch(), "enable early skip detection")
-		                ("cfm", po::bool_switch(), "enable coding flag mode")
-		                ("met", po::bool_switch(), "enable multiple early termination for motion estimation")
-		                ("aps", po::bool_switch(), "enable adaptive partition selection")
-		                ("rcudepth", po::bool_switch(), "enable rcu-depth algorithm");
+                        ")")
+                        ("fdm", po::bool_switch(), "fast decision for merge")
+                        ("fdam", po::bool_switch(), "fast decision for all modes")
+                        ("ecu", po::bool_switch(), "enable early cu termination")
+                        ("esd", po::bool_switch(), "enable early skip detection")
+                        ("cfm", po::bool_switch(), "enable coding flag mode")
+                        ("met", po::bool_switch(), "enable multiple early termination for motion estimation")
+                        ("aps", po::bool_switch(), "enable adaptive partition selection")
+                        ("rcudepth", po::bool_switch(), "enable rcu-depth algorithm");
     options.add(optionsPerformance);
 
     po::options_description optionsOptimisation("Optimisation options");
     optionsOptimisation.add_options()
-		        ("threads", po::value<int>()->default_value(0), "size of thread pool (0=auto detect)")
-		        ("concurrent-frames", po::value<int>()->default_value(4), "maximum number of pictures that may encode in parallel")
-		        ("no-parallel-processing", po::bool_switch()->default_value(false), "disable parallelisation (wpp, multithreading and encoding of concurrent frames)")
-		        ("asm", po::value<int>()->default_value(1), "enable assembly language optimisations");
+                ("threads", po::value<int>()->default_value(0), "size of thread pool (0=auto detect)")
+                ("concurrent-frames", po::value<int>()->default_value(4), "maximum number of pictures that may encode in parallel")
+                ("no-parallel-processing", po::bool_switch()->default_value(false), "disable parallelisation (wpp, multithreading and encoding of concurrent frames)")
+                ("asm", po::value<int>()->default_value(1), "enable assembly language optimisations");
     options.add(optionsOptimisation);
 
     po::options_description optionsReporting("Reporting");
     optionsReporting.add_options()
-		        ("psnr", "measure PSNR and report")
-		        ("profiler", "profile CPU usage and report")
-		        ("verbosity", po::value<int>()->default_value(1), "output during encoding (0, 1 or 2)")
-		        ("help,h", "display help message");
+                ("psnr", "measure PSNR and report")
+                ("profiler", "profile CPU usage and report")
+                ("verbosity", po::value<int>()->default_value(1), "output during encoding (0, 1 or 2)")
+                ("help,h", "display help message");
     options.add(optionsReporting);
 
     po::options_description optionsVui("Video Usability Information (VUI)");
     optionsVui.add_options()
-		        ("sar", po::value<std::string>(), "sample aspect ratio <w:h>")
-		        ("display-window", po::value<std::string>(), "specify display window <left,right,top,bottom>")
-		        ("overscan", po::value<std::string>(), "indicate whether is appropriate to display the overscan area <show|crop>")
-		        ("video-format", po::value<std::string>(), "indicate the video format <integer|string>")
-		        ("range", po::value<std::string>(), "indicate the video full range <full|limited>")
-		        ("colourprim", po::value<std::string>(), "indicate the colour primaries <interger|string>")
-		        ("transfer-characteristics", po::value<std::string>(), "indicate the transfer function associated with the source material <integer>")
-		        ("colour-matrix", po::value<std::string>(), "indicate the colour matrix used to derive luma and chroma")
-		        ("chroma-loc", po::value<std::string>(), "indicate the location for chroma samples <0..5>");
+                ("sar", po::value<std::string>(), "sample aspect ratio <w:h>")
+                ("display-window", po::value<std::string>(), "specify display window <left,right,top,bottom>")
+                ("overscan", po::value<std::string>(), "indicate whether is appropriate to display the overscan area <show|crop>")
+                ("video-format", po::value<std::string>(), "indicate the video format <integer|string>")
+                ("range", po::value<std::string>(), "indicate the video full range <full|limited>")
+                ("colourprim", po::value<std::string>(), "indicate the colour primaries <interger|string>")
+                ("transfer-characteristics", po::value<std::string>(), "indicate the transfer function associated with the source material <integer>")
+                ("colour-matrix", po::value<std::string>(), "indicate the colour matrix used to derive luma and chroma")
+                ("chroma-loc", po::value<std::string>(), "indicate the location for chroma samples <0..5>");
     options.add(optionsVui);
 
     po::options_description hidden("Hidden options");
     hidden.add_options()
-		        ("no-rqt", po::bool_switch(), "disable one level of rqt")
-		        ("no-strong-intra-smoothing", po::bool_switch(), "disable strong intra smoothing")
-		        ("no-wpp", po::bool_switch(), "disable wpp")
-		        ("no-deblock", po::bool_switch(), "disable deblocking")
-		        ("no-rect", po::bool_switch(), "disable rectangular partitions for inter coding")
-		        ("no-amp", po::bool_switch(), "disable asymmetric motion partition")
-		        ("no-smp", po::bool_switch()->default_value(false), "disable symmetric motion partition")
-		        ("no-fdm", po::bool_switch(), "disabled fast decision for merge")
-		        ("no-fdam", po::bool_switch(), "disabled fast decision for all modes")
-		        ("no-ecu", po::bool_switch(), "disabled early cu termination")
-		        ("no-esd", po::bool_switch(), "disable early skip detection")
-		        ("no-cfm", po::bool_switch(), "disable coding flag mode")
-		        ("no-met", po::bool_switch(), "disable multiple early termination")
-		        ("no-rdoq", po::bool_switch(), "disable rate distortion optimised quantisation")
-		        ("no-rcudepth", po::bool_switch(), "disable rcu-depth algorithm")
-		        ("no-sdh", po::bool_switch(), "disable sign data hiding")
-		        ("no-tskip", po::bool_switch(), "disable transform skip")
-		        ("no-aps", po::bool_switch(), "disable adaptive partition selection")
-		        ("force-16", po::bool_switch(), "force usage of uint16_t sample types internally for 8-bit coding")
-		        ("internal-bit-depth", po::value<int>()->default_value(8), "internal bit depth")
-		        ("input-file", po::value<std::string>(&inputFilename), "input file name");
+                ("no-rqt", po::bool_switch(), "disable one level of rqt")
+                ("no-strong-intra-smoothing", po::bool_switch(), "disable strong intra smoothing")
+                ("no-wpp", po::bool_switch(), "disable wpp")
+                ("no-deblock", po::bool_switch(), "disable deblocking")
+                ("no-rect", po::bool_switch(), "disable rectangular partitions for inter coding")
+                ("no-amp", po::bool_switch(), "disable asymmetric motion partition")
+                ("no-smp", po::bool_switch()->default_value(false), "disable symmetric motion partition")
+                ("no-fdm", po::bool_switch(), "disabled fast decision for merge")
+                ("no-fdam", po::bool_switch(), "disabled fast decision for all modes")
+                ("no-ecu", po::bool_switch(), "disabled early cu termination")
+                ("no-esd", po::bool_switch(), "disable early skip detection")
+                ("no-cfm", po::bool_switch(), "disable coding flag mode")
+                ("no-met", po::bool_switch(), "disable multiple early termination")
+                ("no-rdoq", po::bool_switch(), "disable rate distortion optimised quantisation")
+                ("no-rcudepth", po::bool_switch(), "disable rcu-depth algorithm")
+                ("no-sdh", po::bool_switch(), "disable sign data hiding")
+                ("no-tskip", po::bool_switch(), "disable transform skip")
+                ("no-aps", po::bool_switch(), "disable adaptive partition selection")
+                ("force-16", po::bool_switch(), "force usage of uint16_t sample types internally for 8-bit coding")
+                ("internal-bit-depth", po::value<int>()->default_value(8), "internal bit depth")
+                ("input-file", po::value<std::string>(&inputFilename), "input file name");
 
     po::options_description all;
     all.add(options).add(hidden);
@@ -239,11 +240,6 @@ struct turing_encoder
         if (rv) throw std::runtime_error("parseEncodeOptions failed"); // review, error handling
 
         this->encoder.reset(new Encoder(this->vm));
-
-        const bool progress = vm["verbosity"].as<int>() == 1;
-
-        std::vector<uint8_t> headerData;
-        this->headers();
     }
 
     size_t bytesPerSample() const
@@ -297,6 +293,8 @@ struct turing_encoder
 
             bool b = false;
 
+            Encoder::PictureMetadata metadata;
+
             for (int field = 0; field < (fieldCoding ? 2 : 1); ++field)
             {
                 std::shared_ptr<PictureWrapper> pictureWrapper;
@@ -345,34 +343,39 @@ struct turing_encoder
                     pictureWrapper = pictureWrap;
                 }
 
-                std::vector<uint8_t> temp;
+                pictureWrapper->pts = picture->pts;
 
-                b |= this->encoder->encodePicture(pictureWrapper, temp);
+                std::vector<uint8_t> temp;
+                b |= this->encoder->encodePicture(pictureWrapper, temp, metadata);
 
                 this->bitstream.insert(this->bitstream.end(), temp.begin(), temp.end());
             }
 
             if (b)
             {
-                this->output = {
-                        &this->bitstream.front() ,
-                        static_cast<int>(this->bitstream.size()) };
+                this->output.bitstream.p = &this->bitstream.front();
+                this->output.bitstream.size = static_cast<int>(this->bitstream.size());
+                this->output.pts = metadata.pts;
+                this->output.dts = metadata.dts;
+                this->output.keyframe = metadata.keyframe;
             }
         }
         else
         {
             while (true)
             {
-                bool b = this->encoder->encodePicture(nullptr, this->bitstream);
+                Encoder::PictureMetadata metadata;
+                bool b = this->encoder->encodePicture(nullptr, this->bitstream, metadata);
                 if (b)
                 {
                     if (this->bitstream.empty())
                         continue;
 
-                    this->output = {
-                            &this->bitstream.front() ,
-                            static_cast<int>(this->bitstream.size()) };
-
+                    this->output.bitstream.p = &this->bitstream.front();
+                    this->output.bitstream.size = static_cast<int>(this->bitstream.size());
+                    this->output.pts = metadata.pts;
+                    this->output.dts = metadata.dts;
+                    this->output.keyframe = metadata.keyframe;
                     break;
                 }
                 else
@@ -453,6 +456,13 @@ void turing_destroy_encoder(turing_encoder *encoder)
 }
 
 
+std::ostream &operator<<(std::ostream &o, turing_bitstream const &bitstream)
+{
+    o.write(reinterpret_cast<char *>(bitstream.p), bitstream.size);
+    return o;
+}
+
+
 int encode(int argc, const char* const argv[])
 {
     auto* encoder = turing_create_encoder(turing_encoder_settings{ argc, argv });
@@ -462,8 +472,6 @@ int encode(int argc, const char* const argv[])
         std::cerr << "[turing] failed to create encoder\n";
         return -1;
     }
-
-    auto data = turing_encode_headers(encoder);
 
     ProgressReporter progressReporter(&std::cout, "encoded ");
 
@@ -509,6 +517,8 @@ int encode(int argc, const char* const argv[])
                 encoder->encoder->setShotChangeList(shotChangeList);
             }
 
+            ofs << *turing_encode_headers(encoder);
+
             for (int i = 0; i < nFrames; ++i)
             {
                 std::vector<uint8_t> buffer;
@@ -522,11 +532,12 @@ int encode(int argc, const char* const argv[])
                 picture.image[0].p = &buffer.front();
                 picture.image[1].p = picture.image[0].p + encoder->bytesPerInputFrame() / 6 * 4;
                 picture.image[2].p = picture.image[1].p + encoder->bytesPerInputFrame() / 6;
+                picture.pts = i;
 
                 auto *output = turing_encode_picture(encoder, &picture);
                 if (output->bitstream.size)
                 {
-                    ofs.write(reinterpret_cast<char *>(output->bitstream.p), output->bitstream.size);
+                    ofs << output->bitstream;
                     if(progress)
                     {
                         progressReporter.progress(++nPicturesOutput);
@@ -539,7 +550,7 @@ int encode(int argc, const char* const argv[])
                 auto *output = turing_encode_picture(encoder, 0);
                 if (output->bitstream.size)
                 {
-                    ofs.write(reinterpret_cast<char *>(output->bitstream.p), output->bitstream.size);
+                    ofs << output->bitstream;
                     if(progress)
                     {
                         progressReporter.progress(++nPicturesOutput);

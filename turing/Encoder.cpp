@@ -105,7 +105,6 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         }
     }
 
-
     if (this->vm.count("dump-frames"))
     {
         this->stateEncode.fileOutYuvFrames.open(vm["dump-frames"].as<std::string>(), std::ios::binary);
@@ -171,9 +170,6 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
 
     this->stateEncode.enableProfiler = !!this->vm.count("profiler");
 
-    this->frameCount = 0;
-    this->byteCount = 0;
-
     Handler<Encode<void>, StateEncode> h;
     h.state = &this->stateEncode;
 
@@ -187,6 +183,8 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         this->pictureHeight += minCuSize - 1;
         this->pictureHeight /= minCuSize;
         this->pictureHeight *= minCuSize;
+        // review - allow non-CU-multiple dimensions also for frame coding?
+        // review - is it necessary to set the conformance window accordingly?
     }
 
     this->stateEncode.useRateControl = !!this->vm.count("bitrate");
@@ -195,7 +193,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         int frames = static_cast<int>(this->vm["frames"].as<std::size_t>());
         if(this->vm["field-coding"].as<bool>())
             frames *= 2;
-        this->stateEncode.rateControlEngine = new SequenceController(
+        this->stateEncode.rateControlEngine.reset(new SequenceController(
                 (double)this->vm["bitrate"].as<int>(),
                 40,
                 frames,
@@ -205,8 +203,10 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->pictureWidth,
                 this->vm["ctu"].as<int>(),
                 6,
-                this->vm["qp"].as<int>());
+                this->vm["qp"].as<int>()));
     }
+
+    this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
 
     this->setupPps(h);
     ProfileTierLevel *ptl = this->setupSps(h);
@@ -329,8 +329,8 @@ struct StateHeaders :
     StateSlice,
     StateEncodePictureSei,
     Strps
-    {
-    };
+{
+};
 
 
 void Encoder::headers(std::vector<uint8_t> &bitstream)
@@ -352,8 +352,6 @@ void Encoder::headers(std::vector<uint8_t> &bitstream)
     writeHeaders(h);
 
     bitstream = *stateHeaders.data;
-
-    StateHeaders::insertEp3Bytes(bitstream, 0);
 }
 
 
@@ -376,9 +374,10 @@ static std::string hashToString(std::vector<int> hashElement, int numberOfChar)
 }
 
 
-bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector<uint8_t> &bitstream)
+bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector<uint8_t> &bitstream, Encoder::PictureMetadata &metadata)
 {
-    //std::cout << "  Encoder::encodePicture " << picture.get() << "{\n";
+    //if (picture)
+    //	std::cout << "  Encoder::encodePicture " << picture->pts << "\n";
 
     assert(bitstream.empty());
 
@@ -443,7 +442,6 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
         if (response.eos)
         {
             stateEncode.decodedPicturesFlush((this->bitDepth > 8) ? 16 : 8, (this->externalBitDepth > 8) ? 16 : 8);
-            //std::cout << "  } Encoder::encodePicture false (eos)\n";
             return false;
         }
 
@@ -452,13 +450,20 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
             NalWriter *nalWriter = &*response.picture;
 
             auto const bytes = nalWriter->data->size();
-            //std::cout << "      response " << bytes << " bytes\n";
 
             if (!nalWriter->data->empty())
             {
                 bitstream = *nalWriter->data;
                 nalWriter->data->clear();
             }
+            else
+                assert(false);
+
+            metadata.pts = response.picture->docket->picture->pts;
+            metadata.dts = response.picture->docket->dts;
+            metadata.keyframe = response.keyframe;
+
+            //std::cout << "response keyframe/DTS/PTS " << metadata.keyframe << " " << metadata.dts << " " << metadata.pts << "\n";
 
             std::unique_lock<std::mutex> lock(threadPool->mutex());
             while (!response.picture->reconstructed)
@@ -604,7 +609,7 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
 
         // temporal configuration
         h[sps_max_dec_pic_buffering_minus1()] = 4;
-        h[sps_max_num_reorder_pics()] = 3;
+        h[sps_max_num_reorder_pics()] = 3; // review - could be 2?
         h[sps_temporal_id_nesting_flag()] = 1;
 
         // coding configuration

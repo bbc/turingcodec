@@ -49,6 +49,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "AdaptiveQuantisation.h"
 #include "StateEncode.h"
 #include "RateControl.h"
+#include <boost/program_options.hpp>
 #include <condition_variable>
 #include <deque>
 #include <fstream>
@@ -730,7 +731,7 @@ struct StateEncode :
     ValueHolder<more_rbsp_trailing_data>
     {
         StateEncode(const boost::program_options::variables_map &vm) :
-            InputQueue(vm),
+            InputQueue(vm["max-gop-n"].as<int>(), vm["max-gop-m"].as<int>(), vm["field-coding"].as<bool>(), vm["shot-change"].as<bool>()),
             ThreadPool((vm["no-parallel-processing"].as<bool>())? 1 : vm["threads"].as<int>()),
             StateFunctionTables(true,
 #ifdef VALGRIND_FRIENDLY
@@ -745,15 +746,6 @@ struct StateEncode :
         }
 
         StateEncode(const StateEncode &);
-
-        ~StateEncode()
-        {
-            std::cout << "\n";
-            if(useRateControl)
-            {
-                delete rateControlEngine;
-            }
-        }
 
         static void writePicture(std::ostream &o, StatePicture &statePicture, int bpp)
         {
@@ -887,14 +879,14 @@ struct StateEncode :
         int preferredTransferCharacteristics;
         bool userDataUnregSeiWritten;
         int userDataUnregMsgLen;
+        bool repeatHeaders;
 
         DecodedPictureHash decodedPictureHash;
         std::ofstream fileOutYuvPictures;
         std::ofstream fileOutYuvFrames;
 
-        SequenceController *rateControlEngine;
-
-        std::shared_ptr<PsnrAnalysis> psnrAnalysis;
+        std::unique_ptr<SequenceController> rateControlEngine;
+        std::unique_ptr<PsnrAnalysis> psnrAnalysis;
         bool enableProfiler;
 
         struct Response
@@ -903,6 +895,7 @@ struct StateEncode :
             bool hungry;
             std::shared_ptr<StateEncodePicture> picture;
             bool done;
+            bool keyframe;
         };
 
         // pictures currently being encoded (bitstream order)

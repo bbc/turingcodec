@@ -75,10 +75,11 @@ bool TaskEncodeOutput<H>::blocked()
 }
 
 
-
+// emits an access unit, returns true if it's a keyframe
 template <class H>
-void writeOut(H &h)
+bool writeOut(H &h)
 {
+    StateEncode *stateEncode = h;
     StateEncodePicture *stateEncodePicture = h;
 
     {
@@ -86,23 +87,22 @@ void writeOut(H &h)
         header->populateEntryPoints(stateEncodePicture->substreams);
     }
 
-    const auto nut = h[nal_unit_type()];
-
-    const bool writeParameterSets = isIdr(nut);
+    auto const nut = h[nal_unit_type()];
+    auto const isKeyframe = isIdr(nut) || isBla(nut) || isCra(nut);
+    const bool writeParameterSets = isKeyframe && (stateEncodePicture->sequenceDecodeOrder == 0 || stateEncode->repeatHeaders);
+    
     if (writeParameterSets)
     {
         writeHeaders(h);
     }
     else
     {
-        // zero_byte is required on first NALU in A
+        // zero_byte is required on first NALU in AU
         h(zero_byte()  /* equal to 0x00 */, f(8));
     }
 
     // Alternative transfer characteristics
-    StateEncode *stateEncode = h;
-    bool writeAtcSei = (stateEncode->preferredTransferCharacteristics > -1) &&
-            (isIrap(nut) || h[PicOrderCntVal()] == 0);
+    bool writeAtcSei = (stateEncode->preferredTransferCharacteristics > -1) && (isIrap(nut) || h[PicOrderCntVal()] == 0);
     if (writeAtcSei)
     {
         h[nal_unit_type()] = PREFIX_SEI_NUT;
@@ -188,6 +188,8 @@ void writeOut(H &h)
         h[last_payload_type_byte()] = PayloadTypeOf<decoded_picture_hash>::value;
         h(byte_stream_nal_unit(0));
     }
+
+    return isKeyframe;
 }
 
 
@@ -233,7 +235,7 @@ bool TaskEncodeOutput<H>::run()
             {
                 auto h =  this->h.extend(&*response.picture);
 
-                writeOut(h);
+                response.keyframe = writeOut(h);
 
                 if(stateEncode->useRateControl)
                 {

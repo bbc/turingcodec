@@ -62,6 +62,7 @@ typedef struct turing_encoder_output
     turing_bitstream bitstream;
     int64_t pts;
     int64_t dts;
+    int keyframe;
 } turing_encoder_output;
 
 typedef struct turing_encoder turing_encoder;
@@ -74,6 +75,8 @@ turing_encoder *turing_create_encoder(turing_encoder_settings settings);
 // returned pointer is good until the next encoder call
 turing_bitstream const* turing_encode_headers(turing_encoder *encoder);
 
+// Encode one picture
+// Set 'headers' non-zero to allow encoder to write headers on keyframes
 // returned pointer is good until the next encoder call
 turing_encoder_output const* turing_encode_picture(turing_encoder *encoder, turing_picture *picture);
 
