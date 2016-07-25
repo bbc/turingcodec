@@ -56,7 +56,7 @@ int parseSmokeOptions(po::variables_map &vm, int argc, const char* const argv[],
         {
             cout << "Usage: " << argv[0] << " [options]\n\n";
             cout << options << "\n";
-            return 0;
+            std::exit(EXIT_SUCCESS);
         }
 
         po::notify(vm);

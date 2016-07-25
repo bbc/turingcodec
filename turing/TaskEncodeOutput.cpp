@@ -169,7 +169,9 @@ bool writeOut(H &h)
     size_t rateAfter = (nalWriter->pos()) << 3;
     if(stateEncode->useRateControl)
     {
-        stateEncode->rateControlEngine->setHeaderBits(static_cast<int>(rateAfter - rateBefore), h[slice_type()] == I);
+        StateEncodePicture *stateEncodePicture = h;
+        int currentPictureLevel = stateEncodePicture->docket->sopLevel;
+        stateEncode->rateControlEngine->setHeaderBits(static_cast<int>(rateAfter - rateBefore), h[slice_type()] == I, currentPictureLevel);
     }
 
     {
@@ -247,7 +249,9 @@ bool TaskEncodeOutput<H>::run()
                     if(!isIntra)
                         stateEncode->rateControlEngine->getAveragePictureQpAndLambda(averageQp, averageLambda);
 
-                    stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, h[PicOrderCntVal()]);
+                    StateEncodePicture *stateEncodePicture = h;
+                    int currentPictureLevel = stateEncodePicture->docket->sopLevel;
+                    stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
                 }
 
                 response.done = true;

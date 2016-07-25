@@ -47,7 +47,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "sei/active_parameter_sets.h"
 #include "sei/user_data_unregistered.h"
 #include "AdaptiveQuantisation.h"
-#include "StateEncode.h"
 #include "RateControl.h"
 #include <boost/program_options.hpp>
 #include <condition_variable>
