@@ -71,6 +71,7 @@ struct InputQueue
         int qpOffset;
         double qpFactor;
         int currentGopSize;
+        int sopLevel;
         References references;
         int64_t dts;
     };

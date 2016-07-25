@@ -61,7 +61,7 @@ int psnr(int argc, const char* const argv[], std::ostream &cout, std::ostream &c
             cout << "psnr: \n\n";
             cout << "usage: " << argv[0] << " [options] input-file1 input-file2\n\n";
             cout << options << "\n";
-            return 1;
+            std::exit(EXIT_SUCCESS);
         }
 
         po::notify(vm);

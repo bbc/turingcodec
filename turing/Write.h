@@ -683,6 +683,8 @@ struct Encode<coding_quadtree>
 
                 if(stateEncode->useRateControl)
                 {
+                    StateEncodePicture *stateEncodePicture = h;
+                    int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     bool isIntraSlice = h[slice_type()] == I;
                     stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()]);
                     double bpp = stateEncode->rateControlEngine->getCtuTargetBits(isIntraSlice, h[CtbAddrInRs()]);
@@ -695,14 +697,13 @@ struct Encode<coding_quadtree>
                     }
                     else
                     {
-                        estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()]);
-                        qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()]);
+                        estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()], currentPictureLevel);
+                        qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()], currentPictureLevel);
                     }
 
-                    StateEncode::Response response = stateEncode->responses.front();
-                    response.picture->lambda = estLambda;
-                    response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
-                    response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
+                    stateEncodePicture->lambda = estLambda;
+                    stateEncodePicture->reciprocalLambda.set(1.0 / stateEncodePicture->lambda);
+                    stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / stateEncodePicture->lambda);
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, qp, 0);
                 }
                 else
@@ -786,8 +787,11 @@ struct Encode<coding_quadtree>
             {
                 size_t bytesAfterWriting = writer.pos();
                 int codingBits = ((int)bytesAfterWriting - (int)bytesBeforeWriting) << 3;
+                StateEncodePicture *stateEncodePicture = h;
+                int currentPictureLevel = stateEncodePicture->docket->sopLevel;
+
                 // Update the rate controller engine
-                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()]);
+                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel);
             }
 
             // review: test should pass even if this flag set

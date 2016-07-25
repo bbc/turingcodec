@@ -199,7 +199,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
         {
             cout << "Usage: " << argv[0] << " [options] input-file\n";
             cout << options << "\n";
-            return 1;
+            std::exit(EXIT_SUCCESS);
         }
 
         po::notify(vm);
@@ -517,7 +517,7 @@ int encode(int argc, const char* const argv[])
                 encoder->encoder->setShotChangeList(shotChangeList);
             }
 
-            ofs << *turing_encode_headers(encoder);
+            //ofs << *turing_encode_headers(encoder);
 
             for (int i = 0; i < nFrames; ++i)
             {

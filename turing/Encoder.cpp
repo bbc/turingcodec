@@ -135,6 +135,10 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         }
         this->stateEncode.hashType = HashType(this->vm["hash"].as<int>());
     }
+    else
+    {
+        this->stateEncode.decodedHashSei = false;
+    }
 
     int deltaQpDepth = this->vm.at("dqp-depth").as<int>();
     if (deltaQpDepth > -1)
@@ -204,6 +208,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->vm["ctu"].as<int>(),
                 6,
                 this->vm["qp"].as<int>()));
+        this->stateEncode.concurrentFrames = 1;
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();

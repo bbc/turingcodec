@@ -36,9 +36,11 @@ For more information, contact us at info @ turingcodec.org.
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
-
+#include <../boost/program_options.hpp>
 
 #ifdef __GNUC__
+
+namespace po = boost::program_options;
 
 static void __cpuidex(int cpuInfo[4], int function_id, int subfunction_id)
 {
@@ -154,6 +156,23 @@ void havoc_delete_code(havoc_code code)
 
 int havoc_main(int argc, const char *argv[])
 {
+    po::variables_map vm;
+    po::options_description options("Options");
+
+    options.add_options()
+                ("help,h", "display help message");
+
+    po::store(po::command_line_parser(argc, argv).options(options).run(), vm);
+
+    if(vm.count("help"))
+    {
+        std::cout << "Usage: " << argv[0] << "\n";
+        std::cout << "Performs the following checks:\n";
+        std::cout << "\t1) Retrieve information on the machine's instruction set\n";
+        std::cout << "\t2) Run some basic computations of SSD, transform, etc. and check the results for errors\n";
+        std::exit(EXIT_SUCCESS);
+    }
+
     havoc_instruction_set mask = havoc_instruction_set_support();
 
     printf("havoc self test\n\n");

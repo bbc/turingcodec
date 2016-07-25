@@ -33,10 +33,12 @@ For more information, contact us at info @ turingcodec.org.
 #endif
 
 #include "havoc/havoc.h"
+#include "turing.h"
 
 #include <string>
 #include <vector>
 #include <iostream>
+#include <string>
 
 
 int decode(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
@@ -57,7 +59,7 @@ int help(const char *programName,bool badArguments)
 #ifdef CUSTOM
             CUSTOM
 #else
-            "Turing codec version: " << gitDescribe() << "\n"
+            "Turing codec version: " << std::string(turing_version()) << "\n"
 #endif
             "\n"
             "usage: " << programName << " <command> [<args>]\n"
@@ -145,7 +147,7 @@ int main(int argc, const char *argv[])
 #ifdef COMMAND_VERSION
     if (command == "version")
     {
-        std::cout << gitDescribe();
+        std::cout << std::string(turing_version());
         return 0;
     }
 #endif
