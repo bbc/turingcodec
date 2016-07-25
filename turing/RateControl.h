@@ -331,13 +331,7 @@ private:
                                    {{30, 8, 4, 4, 8, 4, 0, 0}, {25, 7, 4, 4, 7, 4, 0, 0}, {20, 6, 4, 4, 6, 4, 0, 0}, {15, 5, 4, 4, 5, 4, 0, 0}},
                                    {{30, 8, 4, 1, 1, 4, 1, 0}, {25, 7, 4, 1, 1, 4, 1, 0}, {20, 6, 4, 1, 1, 4, 1, 0}, {15, 5, 4, 1, 1, 4, 1, 0}},
                                    {{30, 8, 4, 1, 1, 4, 1, 1}, {25, 7, 4, 1, 1, 4, 1, 1}, {20, 6, 4, 1, 1, 4, 1, 1}, {15, 5, 4, 1, 1, 4, 1, 1}}}; // As in HM
-    int    m_sopPosition2Level[7][8] = {{1, 2, 0, 0, 0, 0, 0, 0},  //[SOP size][SOP position]
-                                        {1, 2, 3, 0, 0, 0, 0, 0},
-                                        {1, 2, 3, 3, 0, 0, 0, 0},
-                                        {1, 2, 3, 3, 2, 0, 0, 0},
-                                        {1, 2, 3, 3, 2, 3, 0, 0},
-                                        {1, 2, 3, 4, 4, 3, 4, 0},
-                                        {1, 2, 3, 4, 4, 3, 4, 4}};
+
     int   *m_frameWeight;
     int    m_totalLevels;
     int    m_baseQp;
@@ -347,7 +341,6 @@ private:
     CtuController     *m_ctuControllerEngine;
     double m_lastCodedPictureLambda;
     int    m_currentCodingBits;
-    int    m_sopId;
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
     int    m_picWidhtInCtbs;
@@ -379,7 +372,6 @@ public:
     m_lastCodedPictureLambda(0.0),
     m_averageBpp(0.0),
     m_currentCodingBits(0),
-    m_sopId(0),
     m_dataStorageEngine(0),
     m_sopControllerEngine(0),
     m_pictureControllerEngine(0),
@@ -418,15 +410,15 @@ public:
 
     void initNewSop();
 
-    void pictureRateAllocation();
+    void pictureRateAllocation(int currentPictureLevel);
 
-    void updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int poc);
+    void updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel);
 
     int getBaseQp() { return m_baseQp; }
 
-    double estimatePictureLambda(bool isIntra);
+    double estimatePictureLambda(bool isIntra, int sopLevel);
 
-    int deriveQpFromLambda(double lambda, bool isIntra);
+    int deriveQpFromLambda(double lambda, bool isIntra, int sopLevel);
 
     void setCodingBits(int codingBits)
     {
@@ -435,16 +427,16 @@ public:
 
     void pictureRateAllocationIntra(EstimateIntraComplexity &icInfo);
 
-    void setHeaderBits(int bits, bool isIntra);
+    void setHeaderBits(int bits, bool isIntra, int sopLevel);
 
     double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
 
-    double getCtuEstLambda(double bpp, int ctbAddrInRs);
+    double getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel);
     void   getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp);
 
-    int    getCtuEstQp(int ctbAddrInRs);
+    int    getCtuEstQp(int ctbAddrInRs, int currentPictureLevel);
 
-    void   updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs);
+    void   updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel);
 
     void   updateValidityFlag(bool flag, int ctuIdx)
     {
@@ -462,11 +454,6 @@ public:
     }
 
     void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
-
-    bool isNewSopNeeded()
-    {
-        return (m_sopId >= m_sopSize) || (m_sopId == 0);
-    }
 
     void setSopSize(int size)
     {

@@ -190,6 +190,16 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 {
     std::string yuvMd5;
 
+    std::string mainArgument(argv[1]);
+
+    if(mainArgument == "--help")
+    {
+        std::cout<<"Performs a signature test whereby the following steps are performed\n";
+        std::cout<<"\t1 Decode the video content in test/ \n";
+        std::cout<<"\t2 Re-encode the decoded sequence and check the MD5 sum\n";
+        std::exit(EXIT_SUCCESS);
+    }
+
     struct Source
     {
         const char *filename;

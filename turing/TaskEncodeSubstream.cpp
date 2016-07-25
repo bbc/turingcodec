@@ -116,15 +116,15 @@ bool TaskEncodeSubstream<Sample>::run()
     StateEncode *stateEncode = h;
     ThreadPool *threadPool = h;
 
-    if(h[cu_qp_delta_enabled_flag()])
+    if(h[cu_qp_delta_enabled_flag()] && (h[CtbAddrInRs()] % h[PicWidthInCtbsY()] == 0))
     {
         static_cast<QpState *>(h)->initInternalMemory(h);
     }
 
     if(stateEncode->useRateControl && h[CtbAddrInRs()] == 0)
     {
-        StateEncode::Response response = stateEncode->responses.front();
-        int sopSize = response.picture->docket->currentGopSize;
+        int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+        int sopSize = this->stateEncodePicture->docket->currentGopSize;
         if(sopSize > 1)
             stateEncode->rateControlEngine->setSopSize(sopSize);
         if(h[slice_type()] == I)
@@ -135,21 +135,21 @@ bool TaskEncodeSubstream<Sample>::run()
         }
         else
         {
-            if(stateEncode->rateControlEngine->isNewSopNeeded())
+            if(currentPictureLevel == 1)
             {
                 // New SOP starts, set the rate budget for GOP and this current picture
                 stateEncode->rateControlEngine->initNewSop();
             }
-            stateEncode->rateControlEngine->pictureRateAllocation();
+            stateEncode->rateControlEngine->pictureRateAllocation(currentPictureLevel);
         }
         // Compute lambda
-        response.picture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I);
+        this->stateEncodePicture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I, currentPictureLevel);
 
         // Derive QP from lambda
-        int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(response.picture->lambda, h[slice_type()] == I);
+        int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(this->stateEncodePicture->lambda, h[slice_type()] == I, currentPictureLevel);
         h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
-        response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
-        response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
+        this->stateEncodePicture->reciprocalLambda.set(1.0 / this->stateEncodePicture->lambda);
+        this->stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / this->stateEncodePicture->lambda);
     }
 
     while (h[CtbAddrInRs()] != this->end)

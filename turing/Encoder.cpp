@@ -135,6 +135,10 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         }
         this->stateEncode.hashType = HashType(this->vm["hash"].as<int>());
     }
+    else
+    {
+        this->stateEncode.decodedHashSei = false;
+    }
 
     int deltaQpDepth = this->vm.at("dqp-depth").as<int>();
     if (deltaQpDepth > -1)
@@ -204,6 +208,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->vm["ctu"].as<int>(),
                 6,
                 this->vm["qp"].as<int>()));
+        this->stateEncode.concurrentFrames = 1;
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
@@ -685,7 +690,7 @@ void Encoder::setShotChangeList(std::vector<int>& shotChangeList)
 
 bool Encoder::writeVui()
 {
-    // Check whether one of the VUI parameters is set, so that VUI writing can be happen
+    // Check whether one of the VUI parameters is set, so that VUI writing can happen
     if (this->vm.count("sar"))                      return true;
     if (this->vm.count("display-window"))           return true;
     if (this->vm.count("overscan"))                 return true;
@@ -695,7 +700,7 @@ bool Encoder::writeVui()
     if (this->vm.count("transfer-characteristics")) return true;
     if (this->vm.count("colour-matrix"))            return true;
     if (this->vm.count("chroma-loc"))               return true;
-    if (this->vm["field-coding"].as<bool>())            return true;
+    if (this->vm["field-coding"].as<bool>())        return true;
     return false;
 }
 

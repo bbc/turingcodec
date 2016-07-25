@@ -76,7 +76,7 @@ cd build/release
 cmake ../../
 ```
 
-Build the TUring codec executable:
+Build the Turing codec executable:
 
 ```
 make

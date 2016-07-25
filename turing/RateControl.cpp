@@ -285,7 +285,6 @@ void SOPController::updateSopController(int bitsSpent)
 int SOPController::allocateRateCurrentPicture(int sequenceLevelFramesLeft, int level)
 {
     int currentPicPosition = m_size - m_framesLeft;
-    assert(m_weight[currentPicPosition] != 0);
     int currentPicRatio    = m_weight[currentPicPosition];
     int sumPicRatio        = 0;
     int headerBits         = getEstimatedHeaderBits(level);
@@ -348,6 +347,7 @@ SequenceController::SequenceController(double targetRate,
 {
     m_targetRate       = targetRate * 1000; // kbps to bps conversion
     m_smoothingWindow  = smoothingWindow;
+    totalFrames        = std::max<int>(totalFrames, frameRate); // Assumes at least one intra period
     m_totalFrames      = totalFrames;
     m_framesLeft       = totalFrames;
     m_frameRate        = frameRate;
@@ -416,7 +416,6 @@ SequenceController::SequenceController(double targetRate,
     pictureIntra.setAlpha(ALPHA_INTRA);
     pictureIntra.setBeta(BETA_INTRA);
 
-    m_sopId = 0;
     m_remainingCostIntra = 0.0;
 }
 
@@ -430,8 +429,6 @@ void SequenceController::initNewSop()
     {
         currentBitsPerPicture = 200; // As in HM RC
     }
-
-    m_sopId = 0;
 
 #if SOP_ADAPTIVE
     if(m_lastCodedPictureLambda < 0.1)
@@ -500,10 +497,8 @@ void SequenceController::initNewSop()
 #endif
 
 }
-void SequenceController::pictureRateAllocation()
+void SequenceController::pictureRateAllocation(int currentPictureLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentPictureLevel = m_sopPosition2Level[m_sopSize-2][m_sopId];
     CodedPicture &codedPictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     codedPictureAtLevel.setLevel(currentPictureLevel);
     int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(m_framesLeft, currentPictureLevel);
@@ -517,14 +512,13 @@ void SequenceController::pictureRateAllocation()
 
 }
 
-void SequenceController::updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int poc)
+void SequenceController::updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel)
 {
     // Update the bit budget and frames to be encoded at sequence and SOP levels
     m_bitsLeft -= bitsSpent;
     m_framesLeft--;
 
-    assert(m_sopId < m_sopSize);
-    int currentPictureLevel = isIntra ? 0 : m_sopPosition2Level[m_sopSize-2][m_sopId];
+    int currentPictureLevel = isIntra ? 0 : sopLevel;
 
     CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
 
@@ -550,15 +544,11 @@ void SequenceController::updateSequenceController(int bitsSpent, int qp, double 
                                                        currentPictureLevel,
                                                        isIntra,
                                                        m_lastCodedPictureLambda);
-
-    if(poc)
-        m_sopId++;
 }
 
-double SequenceController::estimatePictureLambda(bool isIntra)
+double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentPictureLevel = isIntra ? 0 : m_sopPosition2Level[m_sopSize-2][m_sopId];
+    int currentPictureLevel = isIntra ? 0 : sopLevel;
 
     CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
 
@@ -596,12 +586,11 @@ double SequenceController::estimatePictureLambda(bool isIntra)
     return estLambda;
 }
 
-int SequenceController::deriveQpFromLambda(double lambda, bool isIntra)
+int SequenceController::deriveQpFromLambda(double lambda, bool isIntra, int sopLevel)
 {
     int qp = int( 4.2005 * log( lambda ) + 13.7122 + 0.5 );
 
-    assert(m_sopId < m_sopSize);
-    int level = isIntra ? 0 : m_sopPosition2Level[m_sopSize-2][m_sopId];
+    int level = isIntra ? 0 : sopLevel;
 
     int lastLevelQp = NON_VALID_QP;
     int lastPicQp   = NON_VALID_QP;
@@ -702,10 +691,9 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     m_ctusCoded = 0;
 }
 
-void SequenceController::setHeaderBits(int bits, bool isIntra)
+void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentPictureLevel = isIntra ? 0 : m_sopPosition2Level[m_sopSize-2][m_sopId];
+    int currentPictureLevel = isIntra ? 0 : sopLevel;
     CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     pictureAtLevel.setHeaderBits(bits);
 }
@@ -753,17 +741,15 @@ double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
     return bpp;
 }
 
-double SequenceController::getCtuEstLambda(double bpp, int ctbAddrInRs)
+double SequenceController::getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentLevel = m_sopPosition2Level[m_sopSize-2][m_sopId];
-    CodedCtu *codedCtuAtLevel = m_dataStorageEngine->getCodedCtuAtLevel(currentLevel);
+    CodedCtu *codedCtuAtLevel = m_dataStorageEngine->getCodedCtuAtLevel(currentPictureLevel);
     const double alpha = codedCtuAtLevel[ctbAddrInRs].getAlpha();
     const double beta  = codedCtuAtLevel[ctbAddrInRs].getBeta();
 
     double estLambdaCtu = alpha * pow(bpp, beta);
 
-    CodedPicture &currentPicture = m_dataStorageEngine->getPictureAtLevel(currentLevel);
+    CodedPicture &currentPicture = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     const double pictureLambda = currentPicture.getLambda();
 
     double neighbourLambda = NON_VALID_LAMBDA;
@@ -802,13 +788,11 @@ double SequenceController::getCtuEstLambda(double bpp, int ctbAddrInRs)
     return estLambdaCtu;
 }
 
-int SequenceController::getCtuEstQp(int ctbAddrInRs)
+int SequenceController::getCtuEstQp(int ctbAddrInRs, int currentPictureLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentLevel = m_sopPosition2Level[m_sopSize-2][m_sopId];
     const double ctuLambda = m_ctuControllerEngine[ctbAddrInRs].getCtuLambda();
     int ctuEstQp = (int)( 4.2005 * log( ctuLambda ) + 13.7122 + 0.5 );
-    CodedPicture &currentPicture = m_dataStorageEngine->getPictureAtLevel(currentLevel);
+    CodedPicture &currentPicture = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     int pictureQp = currentPicture.getQp();
 
     int neighbourQP = NON_VALID_QP;
@@ -836,10 +820,8 @@ int SequenceController::getCtuEstQp(int ctbAddrInRs)
     return ctuEstQp;
 }
 
-void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs)
+void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel)
 {
-    assert(m_sopId < m_sopSize);
-    int currentLevel = m_sopPosition2Level[m_sopSize-2][m_sopId];
     m_ctuControllerEngine[ctbAddrInRs].setCodedBits(codingBitsCtu);
 
     bool isValidCtu = m_ctuControllerEngine[ctbAddrInRs].getValidityFlag(); // i.e. is not a skipped CTU
@@ -857,7 +839,7 @@ void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, in
         return;
     }
 
-    CodedCtu *codedCtuAtLevel = m_dataStorageEngine->getCodedCtuAtLevel(currentLevel);
+    CodedCtu *codedCtuAtLevel = m_dataStorageEngine->getCodedCtuAtLevel(currentPictureLevel);
     double alpha = codedCtuAtLevel[ctbAddrInRs].getAlpha();
     double beta  = codedCtuAtLevel[ctbAddrInRs].getBeta();
     const double alphaUpdateStep = m_pictureControllerEngine->getAlphaUpdateStep();
@@ -946,9 +928,16 @@ void SequenceController::resetCtuController()
 #if SOP_ADAPTIVE
 void SequenceController::computeEquationCoefficients(double *coefficient, double *exponent, double *lambdaRatio)
 {
+    int    sopPosition2Level[7][8] = {{1, 2, 0, 0, 0, 0, 0, 0},  //[SOP size][SOP position]
+                                        {1, 2, 3, 0, 0, 0, 0, 0},
+                                        {1, 2, 3, 3, 0, 0, 0, 0},
+                                        {1, 2, 3, 3, 2, 0, 0, 0},
+                                        {1, 2, 3, 3, 2, 3, 0, 0},
+                                        {1, 2, 3, 4, 4, 3, 4, 0},
+                                        {1, 2, 3, 4, 4, 3, 4, 4}};
     for ( int sopIdx = 0; sopIdx < m_sopSize; sopIdx++ )
     {
-        int level    = m_sopPosition2Level[m_sopSize-2][sopIdx];
+        int level    = sopPosition2Level[m_sopSize-2][sopIdx];
         CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(level);
         double alpha = pictureAtLevel.getAlpha();
         double beta  = pictureAtLevel.getBeta();
