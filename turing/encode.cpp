@@ -396,7 +396,7 @@ struct turing_encoder
 
 const char *turing_version()
 {
-    return "1.0";
+    return "1.01";
 }
 
 
