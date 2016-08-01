@@ -2,12 +2,12 @@
 #ifndef XBYAK_XBYAK_H_
 #define XBYAK_XBYAK_H_
 /*!
-	@file xbyak.h
-	@brief Xbyak ; JIT assembler for x86(IA32)/x64 by C++
-	@author herumi
-	@url https://github.com/herumi/xbyak, http://homepage1.nifty.com/herumi/soft/xbyak_e.html
-	@note modified new BSD license
-	http://opensource.org/licenses/BSD-3-Clause
+    @file xbyak.h
+    @brief Xbyak ; JIT assembler for x86(IA32)/x64 by C++
+    @author herumi
+    @url https://github.com/herumi/xbyak, http://homepage1.nifty.com/herumi/soft/xbyak_e.html
+    @note modified new BSD license
+    http://opensource.org/licenses/BSD-3-Clause
  */
 #ifndef XBYAK_NO_OP_NAMES
 #if not +0 // trick to detect whether 'not' is operator or not
@@ -178,7 +178,7 @@ namespace Xbyak {
         }
         operator int() const { return err_; }
         const char *what() const throw()
-	        {
+            {
             static const char *errTbl[] = {
                     "none",
                     "bad addressing",
@@ -217,7 +217,7 @@ namespace Xbyak {
             };
             assert((size_t)err_ < sizeof(errTbl) / sizeof(*errTbl));
             return errTbl[err_];
-	        }
+            }
     };
 
     inline const char *ConvertErrorToString(Error err)
@@ -278,7 +278,7 @@ namespace Xbyak {
     } // inner
 
     /*
-	custom allocator
+    custom allocator
      */
     struct Allocator {
         virtual uint8 *alloc(size_t size) { return reinterpret_cast<uint8*>(AlignedMalloc(size, inner::ALIGN_PAGE_SIZE)); }
@@ -584,9 +584,9 @@ namespace Xbyak {
             return *this;
         }
         bool operator==(const RegExp& rhs) const
-	        {
+            {
             return base_ == rhs.base_ && index_ == rhs.index_ && disp_ == rhs.disp_;
-	        }
+            }
         const SReg& getBase() const { return base_; }
         const SReg& getIndex() const { return index_; }
         int getScale() const { return scale_; }
@@ -603,8 +603,8 @@ namespace Xbyak {
         friend RegExp operator+(const RegExp& a, const RegExp& b);
         friend RegExp operator-(const RegExp& e, size_t disp);
         /*
-		[base_ + index_ * scale_ + disp_]
-		base : Reg32e, index : Reg32e(w/o esp), Xmm, Ymm
+        [base_ + index_ * scale_ + disp_]
+        base : Reg32e, index : Reg32e(w/o esp), Xmm, Ymm
          */
         size_t disp_;
         int scale_;
@@ -684,7 +684,7 @@ namespace Xbyak {
         size_t size_;
 
         /*
-		allocate new memory and copy old data to the new area
+        allocate new memory and copy old data to the new area
          */
         void growMemory()
         {
@@ -697,7 +697,7 @@ namespace Xbyak {
             maxSize_ = newSize;
         }
         /*
-		calc jmp address for AutoGrow mode
+        calc jmp address for AutoGrow mode
          */
         void calcJmpAddress()
         {
@@ -791,9 +791,9 @@ namespace Xbyak {
             }
         }
         /*
-		@param offset [in] offset from top
-		@param disp [in] offset from the next of jmp
-		@param size [in] write size(1, 2, 4, 8)
+        @param offset [in] offset from top
+        @param disp [in] offset from the next of jmp
+        @param size [in] write size(1, 2, 4, 8)
          */
         void rewrite(size_t offset, uint64 disp, size_t size)
         {
@@ -810,11 +810,11 @@ namespace Xbyak {
         }
         bool isAutoGrow() const { return type_ == AUTO_GROW; }
         /**
-		change exec permission of memory
-		@param addr [in] buffer address
-		@param size [in] buffer size
-		@param canExec [in] true(enable to exec), false(disable to exec)
-		@return true(success), false(failure)
+        change exec permission of memory
+        @param addr [in] buffer address
+        @param size [in] buffer size
+        @param canExec [in] true(enable to exec), false(disable to exec)
+        @return true(success), false(failure)
          */
         static inline bool protect(const void *addr, size_t size, bool canExec)
         {
@@ -832,10 +832,10 @@ namespace Xbyak {
 #endif
         }
         /**
-		get aligned memory pointer
-		@param addr [in] address
-		@param alingedSize [in] power of two
-		@return aligned addr by alingedSize
+        get aligned memory pointer
+        @param addr [in] address
+        @param alingedSize [in] power of two
+        @return aligned addr by alingedSize
          */
         static inline uint8 *getAlignedAddress(uint8 *addr, size_t alignedSize = 16)
         {
@@ -893,10 +893,10 @@ namespace Xbyak {
         void setLabel(const Label* label) { label_ = label; }
         const Label* getLabel() const { return label_; }
         bool operator==(const Address& rhs) const
-	        {
+            {
             return getBit() == rhs.getBit() && size_ == rhs.size_ && rex_ == rhs.rex_ && disp_ == rhs.disp_ && label_ == rhs.label_ && isOnlyDisp_ == rhs.isOnlyDisp_
                     && is64bitDisp_ == rhs.is64bitDisp_ && is32bit_ == rhs.is32bit_ && isVsib_ == rhs.isVsib_ && isYMM_ == rhs.isYMM_;
-	        }
+            }
         bool operator!=(const Address& rhs) const { return !operator==(rhs); }
     };
 
@@ -1708,10 +1708,10 @@ namespace Xbyak {
         void L(const std::string& label) { labelMgr_.defineSlabel(label); }
         void L(const Label& label) { labelMgr_.defineClabel(label); }
         /*
-		assign src to dst
-		require
-		dst : does not used by L()
-		src : used by L()
+        assign src to dst
+        require
+        dst : does not used by L()
+        src : used by L()
          */
         void assignL(Label& dst, const Label& src) { labelMgr_.assign(dst, src); }
         void inLocalLabel() { labelMgr_.enterLocal(); }
@@ -1872,7 +1872,7 @@ namespace Xbyak {
         }
     private:
         /*
-		mov(r, imm) = db(imm, mov_imm(r, imm))
+        mov(r, imm) = db(imm, mov_imm(r, imm))
          */
         int mov_imm(const Reg& reg, size_t imm)
         {
@@ -1976,8 +1976,8 @@ namespace Xbyak {
         void movbe(const Reg& reg, const Address& addr) { opModM(addr, reg, 0x0F, 0x38, 0xF0); }
         void movbe(const Address& addr, const Reg& reg) { opModM(addr, reg, 0x0F, 0x38, 0xF1); }
         /*
-		put address of label to buffer
-		@note the put size is 4(32-bit), 8(64-bit)
+        put address of label to buffer
+        @note the put size is 4(32-bit), 8(64-bit)
          */
         void putL(std::string label) { putL_inner(label); }
         void putL(const Label& label) { putL_inner(label); }
@@ -2178,8 +2178,8 @@ namespace Xbyak {
         }
         bool hasUndefinedLabel() const { return labelMgr_.hasUndefSlabel() || labelMgr_.hasUndefClabel(); }
         /*
-		MUST call ready() to complete generating code if you use AutoGrow mode.
-		It is not necessary for the other mode if hasUndefinedLabel() is true.
+        MUST call ready() to complete generating code if you use AutoGrow mode.
+        It is not necessary for the other mode if hasUndefinedLabel() is true.
          */
         void ready()
         {

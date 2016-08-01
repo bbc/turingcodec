@@ -28,28 +28,29 @@ For more information, contact us at info @ turingcodec.org.
 #include "hadamard.h"
 #include "havoc.h"
 #include "Jit.h"
+#include <stdint.h>
+#include <type_traits>
+#include <string>
 #ifdef WIN32
 #include <Windows.h>
 #endif
-#include <stdint.h>
-#include <type_traits>
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
-#ifdef __GNUC__
 
+#ifdef __GNUC__
 
 static void __cpuidex(int cpuInfo[4], int function_id, int subfunction_id)
 {
-    __asm__ __volatile__ ( "cpuid" :
-           "=a" ((cpuInfo)[0]),
-           "=b" ((cpuInfo)[1]),
-           "=c" ((cpuInfo)[2]),
-           "=d" ((cpuInfo)[3])
-           :
-           "0" (function_id),
-           "2" (subfunction_id) );
+    __asm__ __volatile__("cpuid" :
+    "=a" ((cpuInfo)[0]),
+        "=b" ((cpuInfo)[1]),
+        "=c" ((cpuInfo)[2]),
+        "=d" ((cpuInfo)[3])
+        :
+        "0" (function_id),
+        "2" (subfunction_id));
 }
 
 
@@ -57,10 +58,10 @@ static uint64_t _xgetbv(uint32_t index)
 {
     uint32_t eax, edx;
     __asm__ __volatile__("xgetbv" :
-         "=a" (eax),
-         "=d" (edx)
-         :
-         "c" (index) );
+    "=a" (eax),
+        "=d" (edx)
+        :
+        "c" (index));
 
     return ((uint64_t)edx << 32) | eax;
 }
@@ -134,7 +135,7 @@ void havoc_print_instruction_set_support(FILE *f, havoc_instruction_set mask)
 #define X(value, name, description) fprintf(f, "[%c] " #name " (" description ")\n", ((1 << value) & mask) ? 'x' : ' ');
     HAVOC_INSTRUCTION_SET_XMACRO
 #undef X
-    fprintf(f, "\n");
+        fprintf(f, "\n");
 }
 
 
@@ -152,27 +153,32 @@ void havoc_delete_code(havoc_code code)
 }
 
 
+extern "C" int do_measure_speed;
+
+
 int havoc_main(int argc, const char *argv[])
 {
-    std::string mainArgument(argv[1]);
-    if(mainArgument == "--help")
+    std::cout << "HAVOC [Handcoded Assembly for VideO Codecs] self test";
+    std::cout << "Performs the following checks:\n";
+    std::cout << "\t1) Retrieve information on the machine's instruction set\n";
+    std::cout << "\t2) Run some basic computations of SSD, transform, etc. and check the results for errors\n";
+    std::cout << "";
+
+    if (argc == 2)
     {
-        std::cout << "Usage: " << argv[0] << "\n";
-        std::cout << "Performs the following checks:\n";
-        std::cout << "\t1) Retrieve information on the machine's instruction set\n";
-        std::cout << "\t2) Run some basic computations of SSD, transform, etc. and check the results for errors\n";
-        std::exit(EXIT_SUCCESS);
+        if (argv[1] != std::string("--no-measure-speed"))
+        {
+            std::cout << "Usage: " << argv[0] << "[--no-measure-speed]\n";
+            return -1;
+        }
+        do_measure_speed = 0;
     }
 
     havoc_instruction_set mask = havoc_instruction_set_support();
 
-    printf("havoc self test\n\n");
-
 #ifdef WIN32
     if (!SetProcessAffinityMask(GetCurrentProcess(), 1))
-    {
-        printf("** SetProcessAffinityMask() failed **\n\n");
-    }
+        std::cout << "** SetProcessAffinityMask() failed **\n\n";
 #endif
 
     havoc_print_instruction_set_support(stdout, mask);
