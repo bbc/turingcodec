@@ -150,6 +150,11 @@ struct Speed
         return *this >= medium;
     }
 
+    bool useSaoSlow() const
+    {
+        return *this < medium;
+    }
+
     int  setMaxNumMergeCand() const
     {
         return (*this <= medium) ? 5 : 2;

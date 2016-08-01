@@ -590,7 +590,7 @@ namespace LoopFilter
                 {
                     int qpy = h[QpY()];
 
-                    if(std::is_same<typename H::Tag, Write<void>>::value && h[cu_qp_delta_enabled_flag()])
+                    if(h[cu_qp_delta_enabled_flag()])
                     {
                         int rowModulo = ((y<<3) & qpState->getMaskCtb()) >> 3;
                         int colModulo = ((x<<3) & qpState->getMaskCtb()) >> 3;
@@ -789,6 +789,24 @@ namespace LoopFilter
             }
         }
 
+        template <typename Sample, class H>
+        void applySaoCTU(H &h, int rx, int ry)
+        {
+            const int nCtbS = 1 << h[CtbLog2SizeY()];
+            ReconstructedPicture2<Sample> *reconstructedPicture = h;
+            auto &recPicture = *reconstructedPicture->picture;
+            auto &saoPicture = *reconstructedPicture->saoPicture;
+
+            if (h[slice_sao_luma_flag()])
+            {
+                filterBlockSao<Sample>(h, recPicture[0], saoPicture[0], rx, ry, nCtbS, nCtbS, 0);
+            }
+            if (h[slice_sao_chroma_flag()])
+            {
+                filterBlockSao<Sample>(h, recPicture[1], saoPicture[1], rx, ry, nCtbS / h[SubWidthC()], nCtbS / h[SubHeightC()], 1);
+                filterBlockSao<Sample>(h, recPicture[2], saoPicture[2], rx, ry, nCtbS / h[SubWidthC()], nCtbS / h[SubHeightC()], 2);
+            }
+        }
 
         template <class H>
         void applySao(H &h, Raster<uint8_t> recPictureL, Raster<uint8_t> recPictureCb, Raster<uint8_t> recPictureCr)

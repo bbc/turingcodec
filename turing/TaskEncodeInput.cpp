@@ -24,6 +24,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "Write.h"
 #include "TaskEncodeSubstream.h"
 #include "TaskDeblock.h"
+#include "TaskSao.h"
 #include "SyntaxNal.hpp"
 #include "SyntaxRbsp.hpp"
 
@@ -71,6 +72,13 @@ void setupSliceHeader(H &h, const InputQueue::Docket *docket)
 
     // review: this needs to be set with appropriate logic. E.g. set to 1 when mvd_l1_zero_flag is set on the first reference picture.
     h[collocated_from_l0_flag()] = 0;
+
+    if (h[sample_adaptive_offset_enabled_flag()])
+    {
+        h[slice_sao_luma_flag()] = true;
+        if (h[ChromaArrayType()] != 0)
+            h[slice_sao_chroma_flag()] = true;
+    }
 
     if (docket->poc)
     {
@@ -146,6 +154,8 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
     auto *p = new ReconstructedPicture2<Sample>;
     ReconstructedPicture2<Sample> *reconstructedPicture = h;
     p->picture = reconstructedPicture->picture;
+    p->saoPicture = reconstructedPicture->saoPicture;
+    p->deblockPicture = reconstructedPicture->deblockPicture;
     response.picture->reconstructedPicture.reset(p);
 
     // Allocate various picture memories
@@ -174,6 +184,7 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
     // Enqueue first encoding task and deblocking tasks for theadpool execution
     threadPool->add(newTaskDeblock(h, response.picture, 0, nCtusInFirstSubstream));
+    threadPool->add(newTaskSao(h, response.picture, 0, nCtusInFirstSubstream));
     threadPool->add(*new TaskEncodeSubstream<Sample>(h, response.picture, 0, nCtusInFirstSubstream));
 }
 

@@ -22,6 +22,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "TaskEncodeOutput.h"
 #include "TaskEncodeSubstream.h"
 #include "TaskDeblock.h"
+#include "TaskSao.h"
 #include "Encoder.h"
 #include "Write.h"
 #include "Syntax.h"
@@ -85,6 +86,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
     this->stateEncode.sdh = this->booleanSwitchSetting("sdh", speed.useSdh()) && this->stateEncode.rdoq;
     this->stateEncode.tskip = this->booleanSwitchSetting("tskip", speed.useTSkip());
     this->stateEncode.aps = this->booleanSwitchSetting("aps", speed.useAps());
+    this->stateEncode.saoslow = this->booleanSwitchSetting("sao-slow-mode", speed.useSaoSlow());
     this->stateEncode.verbosity = this->vm["verbosity"].as<int>();
     this->stateEncode.gopM = std::min(this->vm["max-gop-m"].as<int>(), this->vm["max-gop-n"].as<int>());
     this->stateEncode.maxnummergecand = (this->vm["max-num-merge-cand"].defaulted()) ? (speed.setMaxNumMergeCand()) : this->vm["max-num-merge-cand"].as<int>();
@@ -286,6 +288,8 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
 
     cout << " smp=" << (!!this->stateEncode.smp ? "1" : (!!this->stateEncode.nosmp ? "0" : (!!static_cast<Speed &>(this->stateEncode).useSmp(6) ? "1" : "restricted")));
     cout << " deblock=" << !!(this->vm.at("deblock").as<bool>() && !this->vm.at("no-deblock").as<bool>());
+    cout << " sao=" << !!(this->vm.at("sao").as<bool>() && !this->vm.at("no-sao").as<bool>());
+    cout << " sao-slow-mode=" << this->stateEncode.saoslow;
     cout << " rcudepth=" << this->stateEncode.rcudepth;
     cout << " wpp=" << wpp;
     cout << " sdh=" << this->stateEncode.sdh;
@@ -632,6 +636,7 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         }
         h[strong_intra_smoothing_enabled_flag()] = this->booleanSwitchSetting("strong-intra-smoothing", true);
         h[amp_enabled_flag()] = this->stateEncode.amp;
+        h[sample_adaptive_offset_enabled_flag()] = !!(this->vm.at("sao").as<bool>() && !this->vm.at("no-sao").as<bool>());
         h[sps_temporal_mvp_enabled_flag()] = 1;
         if (writeVui())
             setupVui(h);

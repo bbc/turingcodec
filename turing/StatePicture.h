@@ -59,6 +59,8 @@ struct ReconstructedPicture2 :
     {
         typedef T Sample;
         std::shared_ptr<Picture<T>> picture;
+        std::shared_ptr<Picture<T>> saoPicture;
+        std::shared_ptr<Picture<T>> deblockPicture;
         ThreePlanes<T> conformanceWindow;
     };
 
@@ -170,6 +172,28 @@ struct Access<ReconstructedPicture, S, typename std::enable_if<std::is_base_of<R
     static Type get(ReconstructedPicture, ReconstructedPicture2<Sample> &s)
     {
         return *s.picture;
+    }
+};
+
+template <class S>
+struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+{
+    typedef typename S::Sample Sample;
+    typedef Picture<Sample> &Type;
+    static Type get(SaoPicture, ReconstructedPicture2<Sample> &s)
+    {
+        return *s.saoPicture;
+    }
+};
+
+template <class S>
+struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+{
+    typedef typename S::Sample Sample;
+    typedef Picture<Sample> &Type;
+    static Type get(DeblockPicture, ReconstructedPicture2<Sample> &s)
+    {
+        return *s.deblockPicture;
     }
 };
 

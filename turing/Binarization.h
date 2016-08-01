@@ -121,6 +121,162 @@ struct Write<Element<split_cu_flag, ae>>
     }
 };
 
+// sao( )
+template <>
+struct Write<Element<sao_type_idx_luma, ae>>
+{
+    template <class H> static void go(Element<sao_type_idx_luma, ae> fun, H &h)
+    {
+        //coding_quadtree cqt = *static_cast<coding_quadtree *>(h);
+        const int rx = h[xCtb()] >> h[CtbLog2SizeY()];
+        const int ry = h[yCtb()] >> h[CtbLog2SizeY()];
+
+        const int synVal = h[SaoTypeIdx(0, rx, ry)];
+        const int binVal0 = (synVal == 0 ? 0 : 1);
+        h(EncodeDecision<sao_type_idx_luma>(binVal0, 0));
+        if (binVal0 != 0)
+        {
+            const int binVal1 = synVal - 1;
+            h(EncodeBypass<sao_type_idx_luma>(binVal1));
+        }
+    }
+};
+
+template <>
+struct Write<Element<sao_type_idx_chroma, ae>>
+{
+    template <class H> static void go(Element<sao_type_idx_chroma, ae> fun, H &h)
+    {
+        //coding_quadtree cqt = *static_cast<coding_quadtree *>(h);
+        const int rx = h[xCtb()] >> h[CtbLog2SizeY()];
+        const int ry = h[yCtb()] >> h[CtbLog2SizeY()];
+
+        const int synVal = h[SaoTypeIdx(1, rx, ry)];
+        const int binVal0 = (synVal == 0 ? 0 : 1);
+        h(EncodeDecision<sao_type_idx_chroma>(binVal0, 0));
+        if (binVal0 != 0)
+        {
+            const int binVal1 = synVal - 1;
+            h(EncodeBypass<sao_type_idx_chroma>(binVal1));
+        }
+    }
+};
+
+template <>
+struct Write<Element<sao_offset_abs, ae>>
+{
+    template <class H> static void go(Element<sao_offset_abs, ae> fun, H &h)
+    {
+        const int bitDepth = fun.v.cIdx ? h[BitDepthC()] : h[BitDepthY()];
+        const int cMax = (1 << (std::min(bitDepth, 10) - 5)) - 1;
+
+        int synVal = h[fun.v];
+        int binVal = synVal;
+        for (int loop = 0; loop < cMax; loop++)
+        {
+            int currBin = (binVal == 0 ? 0 : 1);
+            h(EncodeBypass<sao_offset_abs>(currBin));
+            if (!binVal) break;
+            binVal -= 1;
+        }
+    }
+};
+
+template <>
+struct Write<Element<sao_eo_class_luma, ae>> // FL, cMax=3 | Bypass
+{
+    template <class H> static void go(Element<sao_eo_class_luma, ae> fun, H &h)
+    {
+        const int rx = h[xCtb()] >> h[CtbLog2SizeY()];
+        const int ry = h[yCtb()] >> h[CtbLog2SizeY()];
+        const int synVal = h[SaoEoClass(0, rx, ry)];// h[fun.v]; //GetValueForWrite<rem_intra_luma_pred_mode, H>::get(fun.v, h);
+        int fl = 2;
+        for (int binIdx = 0; binIdx < fl; binIdx++)
+        {
+            int binValue = 1 << (fl - 1 - binIdx);
+            binValue &= synVal;
+            binValue >>= (fl - 1 - binIdx);
+            h(EncodeBypass<sao_eo_class_luma>(binValue));
+        }
+
+        //int binVal0 = synVal <= 2 ? 1 : 0;
+        //h(EncodeBypass<sao_eo_class_luma>(binVal0));
+        //int binVal1 = (synVal == 3 || synVal == 1)? 1 : 0;
+        //h(EncodeBypass<sao_eo_class_luma>(binVal1));
+    }
+};
+
+template <>
+struct Write<Element<sao_eo_class_chroma, ae>> // FL, cMax=3 | Bypass
+{
+    template <class H> static void go(Element<sao_eo_class_chroma, ae> fun, H &h)
+    {
+        const int rx = h[xCtb()] >> h[CtbLog2SizeY()];
+        const int ry = h[yCtb()] >> h[CtbLog2SizeY()];
+        const int synVal = h[SaoEoClass(1, rx, ry)];// h[fun.v]; //GetValueForWrite<rem_intra_luma_pred_mode, H>::get(fun.v, h);
+        int fl = 2;
+        for (int binIdx = 0; binIdx < fl; binIdx++)
+        {
+            int binValue = 1 << (fl - 1 - binIdx);
+            binValue &= synVal;
+            binValue >>= (fl - 1 - binIdx);
+            h(EncodeBypass<sao_eo_class_chroma>(binValue));
+        }
+        //int binVal0 = synVal <= 2 ? 1 : 0;
+        //h(EncodeBypass<sao_eo_class_chroma>(binVal0));
+        //int binVal1 = (synVal == 3 || synVal == 1) ? 1 : 0;
+        //h(EncodeBypass<sao_eo_class_chroma>(binVal1));
+    }
+};
+
+template <>
+struct Write<Element<sao_band_position, ae>> // FL, cMax=31 | Bypass
+{
+    template <class H> static void go(Element<sao_band_position, ae> fun, H &h)
+    {
+        const int synVal = h[fun.v];//GetValueForWrite<sao_band_position, H>::get(fun.v, h);
+
+        h(EncodeBypass<sao_band_position>((synVal & 0x10) ? 1 : 0));
+        h(EncodeBypass<sao_band_position>((synVal & 0x08) ? 1 : 0));
+        h(EncodeBypass<sao_band_position>((synVal & 0x04) ? 1 : 0));
+        h(EncodeBypass<sao_band_position>((synVal & 0x02) ? 1 : 0));
+        h(EncodeBypass<sao_band_position>((synVal & 0x01) ? 1 : 0));
+    }
+};
+
+
+template <>
+struct Write<Element<sao_offset_sign, ae>> // FL, cMax=1 | Bypass
+{
+    template <class H> static void go(Element<sao_offset_sign, ae> fun, H &h)
+    {
+        const int synVal = h[fun.v]; //GetValueForWrite<rem_intra_luma_pred_mode, H>::get(fun.v, h);
+        int binVal0 = synVal == 1 ? 1 : 0;
+        h(EncodeBypass<sao_offset_sign>(binVal0));
+    }
+};
+
+template <>
+struct Write<Element<sao_merge_left_flag, ae>> // FL, cMax=1 | Bypass
+{
+    template <class H> static void go(Element<sao_merge_left_flag, ae> fun, H &h)
+    {
+        const int synVal = h[fun.v];
+        int binVal0 = synVal == 1 ? 1 : 0;
+        h(EncodeDecision<sao_merge_left_flag>(binVal0, 0));
+    }
+};
+
+template <>
+struct Write<Element<sao_merge_up_flag, ae>> // FL, cMax=1 | Bypass
+{
+    template <class H> static void go(Element<sao_merge_up_flag, ae> fun, H &h)
+    {
+        const int synVal = h[fun.v];
+        int binVal0 = synVal == 1 ? 1 : 0;
+        h(EncodeDecision<sao_merge_up_flag>(binVal0, 0));
+    }
+};
 
 // coding_unit( )
 

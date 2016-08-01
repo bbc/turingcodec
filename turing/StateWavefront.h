@@ -69,6 +69,7 @@ struct StateWavefront
     {
         this->encoded = WavefrontStatus(h[PicWidthInCtbsY()], h[PicHeightInCtbsY()]);
         this->deblocked = WavefrontStatus(h[PicWidthInCtbsY()], h[PicHeightInCtbsY()]);
+        this->saoed = WavefrontStatus(h[PicWidthInCtbsY()], h[PicHeightInCtbsY()]);
 
         this->nSubstreamsUnfinished = h[entropy_coding_sync_enabled_flag()] ? h[PicHeightInCtbsY()] : 1;
         this->encodingDone = false;
@@ -76,6 +77,8 @@ struct StateWavefront
 
     WavefrontStatus encoded;
     WavefrontStatus deblocked;
+    WavefrontStatus saoed;
+
     int nSubstreamsUnfinished;
     bool encodingDone;
 };

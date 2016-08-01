@@ -138,7 +138,6 @@ bool writeOut(H &h)
 
     if (stateEncode->fieldcoding)
     {
-        // typedef typename Accessor<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
         PictureWrapper picturewrapper = *static_cast<StateEncodePicture *>(h)->docket->picture;
 
         // active_parameter_sets

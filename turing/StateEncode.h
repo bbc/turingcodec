@@ -849,6 +849,7 @@ struct StateEncode :
         }
         bool scd;
         bool fieldcoding;
+        bool saoslow;
         bool amp;
         bool smp;
         bool nosmp;

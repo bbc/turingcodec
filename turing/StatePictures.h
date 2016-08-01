@@ -185,6 +185,18 @@ struct SetupReconstructedPicture
     template <class H> static void go(Picture &dp, H &h) { };
 };
 
+template <class Picture, class Enable = void>
+struct SetupSaoPicture
+{
+    template <class H> static void go(Picture &dp, H &h) { };
+};
+
+template <class Picture, class Enable = void>
+struct SetupDeblockPicture
+{
+    template <class H> static void go(Picture &dp, H &h) { };
+};
+
 template <class Picture>
 struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
 {
@@ -198,10 +210,41 @@ struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_o
     }
 };
 
+template <class Picture>
+struct SetupSaoPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
+{
+    typedef typename Picture::Sample Sample;
+
+    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    {
+        const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
+        ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
+        dp.saoPicture.reset(picture);
+    }
+};
+
+template <class Picture>
+struct SetupDeblockPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
+{
+    typedef typename Picture::Sample Sample;
+
+    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    {
+        const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
+        ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
+        dp.deblockPicture.reset(picture);
+    }
+};
+
 template <class Picture, class H>
 void setupReconstructedPicture(Picture &dp, H &h)
 {
     SetupReconstructedPicture<Picture>::go(dp, h);
+    if (h[sample_adaptive_offset_enabled_flag()])
+    {
+        SetupSaoPicture<Picture>::go(dp, h);
+        SetupDeblockPicture<Picture>::go(dp, h);
+    }
 };
 
 template <class Picture> struct GeneratePicture

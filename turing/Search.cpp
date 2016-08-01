@@ -576,6 +576,71 @@ void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtr
 #endif
 };
 
+template <class H>
+void Search<sao>::go(const sao &s, H &h)
+{
+    const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
+    const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
+    auto h2 = h.template change<EstimateRate<void>>();
+    if (s.rx > 0)
+    {
+        const bool leftCtbInSliceSeg = h[CtbAddrInRs()] > h[SliceAddrRs()];
+        const bool leftCtbInTile = h[TileId(h[CtbAddrInTs()])] == h[TileId(h[CtbAddrRsToTs(h[CtbAddrInRs()] - 1)])];
+        if (leftCtbInSliceSeg && leftCtbInTile)
+            h2(sao_merge_left_flag(), ae(v));
+    }
+    if (s.ry > 0 && !h2[sao_merge_left_flag()])
+    {
+        const bool upCtbInSliceSeg = (h[CtbAddrInRs()] - h[PicWidthInCtbsY()]) >= h[SliceAddrRs()];
+        const bool upCtbInTile = h[TileId(h[CtbAddrInTs()])] == h[TileId(h[CtbAddrRsToTs(h[CtbAddrInRs()] - h[PicWidthInCtbsY()])])];
+        if (upCtbInSliceSeg && upCtbInTile)
+            h2(sao_merge_up_flag(), ae(v));
+    }
+    if (!h2[sao_merge_up_flag()] && !h2[sao_merge_left_flag()])
+    {
+        if (h2[slice_sao_luma_flag()])
+        {
+
+            h2(sao_type_idx_luma(), ae(v));
+            if (h2[SaoTypeIdx(0, s.rx, s.ry)] != 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    h2(sao_offset_abs(0, s.rx, s.ry, i), ae(v));
+                if (h2[SaoTypeIdx(0, s.rx, s.ry)] == 1)
+                {
+                    for (int i = 0; i < 4; i++)
+                        if (h2[sao_offset_abs(0, s.rx, s.ry, i)] != 0)
+                            h2(sao_offset_sign(0, s.rx, s.ry, i), ae(v));
+                    h2(sao_band_position(0, s.rx, s.ry), ae(v));
+                }
+                else
+                {
+                    h2(sao_eo_class_luma(), ae(v));
+                }
+            }
+        }
+        if (h2[slice_sao_chroma_flag()])
+        {
+            h2(sao_type_idx_chroma(), ae(v));
+            if (h2[SaoTypeIdx(1, s.rx, s.ry)] != 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    h2(sao_offset_abs(1, s.rx, s.ry, i), ae(v));
+                if (h2[SaoTypeIdx(1, s.rx, s.ry)] == 1)
+                {
+                    for (int i = 0; i < 4; i++)
+                        if (h2[sao_offset_abs(1, s.rx, s.ry, i)] != 0)
+                            h2(sao_offset_sign(1, s.rx, s.ry, i), ae(v));
+                    h2(sao_band_position(1, s.rx, s.ry), ae(v));
+                }
+                else
+                {
+                    h2(sao_eo_class_chroma(), ae(v));
+                }
+            }
+        }
+    }
+}
 
 template <class H>
 void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
@@ -2359,3 +2424,5 @@ template void Search<coding_quadtree>::go<Handler<Search<Mode<0>>, Candidate<uin
 template void Search<coding_quadtree>::go<Handler<Search<Mode<0>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<0>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> &);
 template void Search<coding_quadtree>::go<Handler<Search<Mode<1>>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<1>>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> &);
 template void Search<coding_quadtree>::go<Handler<Search<Mode<1>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<1>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> &);
+template void Search<sao>::go<Handler<Search<void>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> >(sao const&, Handler<Search<void>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode>&);
+template void Search<sao>::go<Handler<Search<void>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(sao const&, Handler<Search<void>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode>&);
