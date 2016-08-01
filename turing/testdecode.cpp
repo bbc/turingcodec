@@ -123,50 +123,10 @@ void decodeStream(boost::filesystem::path bitstream, boost::filesystem::path md5
 
 bool blacklisted(boost::filesystem::path path)
 {
-    // review: investigate these and remove the blacklist
-    // these fail decoding or md5 check - may be due to failure parsing md5 file, or a genuine decoder failures
+    // review: decoder currently supports Main, Main10 and Main 4:2:2 10 profiles only - these streams do not fall within these profiles
     const char *blacklist[] = {
-        "MAXBINS_A_TI_5",
-        "MAXBINS_B_TI_5",
-        "MAXBINS_C_TI_5",
-        "CIP_C_Panasonic_2",
-        "PICSIZE_D_Bossen_1",
-        "SDH_A_Orange_4",
-        "LS_B_Orange_4",
-        "TSKIP_A_MS_3",
-        "DBLK_G_VIXS_2",
-        "PICSIZE_A_Bossen_1",
-        "PICSIZE_B_Bossen_1",
-        "PICSIZE_C_Bossen_1",
-        "CIP_A_Panasonic_3",
-        "TMVP_A_MS_3",
-        "ENTP_A_Qualcomm_1",
-        "WP_A_Toshiba_3",
-        "DBLK_D_VIXS_2",
-        "TILES_A_Cisco_2",
-        "AMP_E_Hisilicon_3",
-        "LS_A_Orange_2",
-        "ENTP_C_Qualcomm_1",
-        "IPRED_B_Nokia_3",
-        "AMP_D_Hisilicon_3",
-        "OPFLAG_C_Qualcomm_1",
-        "WP_A_MAIN10_Toshiba_3",
-        "ENTP_B_Qualcomm_1",
-        "POC_A_Bossen_3",
-        "MAXBINS_B_TI_4",
-        "DBLK_E_VIXS_2",
-        "OPFLAG_B_Qualcomm_1",
-        "AMP_F_Hisilicon_3",
-        "NoOutPrior_A_Qualcomm_1",
-        "DBLK_F_VIXS_2",
-        "TILES_B_Cisco_1",
-        "IPRED_C_Mitsubishi_3",
-        "NoOutPrior_B_Qualcomm_1",
         "TSCTX_10bit_I_RExt_SHARP_1",
-        "GENERAL_8b_400_RExt_Sony_1",
         "PERSIST_RPARAM_A_RExt_Sony_2",
-        "TSUNEQBD_A_MAIN10_Technicolor_2",
-        "GENERAL_12b_400_RExt_Sony_1",
         "SAO_A_RExt_MediaTek_1",
         "CCP_12bit_RExt_QCOM",
         "QMATRIX_A_RExt_Sony_1",
@@ -180,12 +140,14 @@ bool blacklisted(boost::filesystem::path path)
         "EXTPREC_MAIN_444_16_INTRA_12BIT_RExt_Sony_1",
         "EXTPREC_MAIN_444_16_INTRA_8BIT_RExt_Sony_1",
         "EXTPREC_MAIN_444_16_INTRA_10BIT_RExt_Sony_1",
+        "EXTPREC_MAIN_444_16_INTRA_16BIT_RExt_Sony_1",
         "GENERAL_16b_444_RExt_Sony_1",
         "GENERAL_16b_400_RExt_Sony_1",
-        "GENERAL_12b_444_RExt_Sony_1"
-        "GENERAL_8b_444_RExt_Sony_1",
+        "GENERAL_12b_444_RExt_Sony_1",
+        "GENERAL_8b_400_RExt_Sony_1",
         "GENERAL_8b_444_RExt_Sony_1",
         "GENERAL_10b_444_RExt_Sony_1",
+        "GENERAL_12b_400_RExt_Sony_1",
         "GENERAL_12b_422_RExt_Sony_1",
         "GENERAL_12b_420_RExt_Sony_1",
         "GENERAL_12b_444_RExt_Sony_1",
@@ -203,7 +165,6 @@ bool blacklisted(boost::filesystem::path path)
         "ExplicitRdpcm_A_BBC_1",
         "CCP_10bit_RExt_QCOM",
         "WAVETILES_RExt_Sony_1",
-        "EXTPREC_MAIN_444_16_INTRA_16BIT_RExt_Sony_1",
         0};
 
     for (const char **p = blacklist; *p; ++p)
@@ -237,15 +198,15 @@ void decodeStreamsInFolder(boost::filesystem::path folder, std::ostream &cout, s
                 base.remove_filename();
                 base /= i->path().stem();
 
-                auto md5 = base.string() + ".md5";
+                auto md5 = base.string() + ".yuv.md5";
                 if (!boost::filesystem::exists(md5))
                     md5 = base.string() + "_yuv.md5";
-                if (!boost::filesystem::exists(md5))
-                    md5 = base.string() + ".yuv.md5";
                 if (!boost::filesystem::exists(md5))
                     md5 = base.string() + "_3.yuv.md5";
                 if (!boost::filesystem::exists(md5))
                     md5 = i->path().string() + ".yuv.md5";
+                if (!boost::filesystem::exists(md5))
+                    md5 = base.string() + ".md5";
                 if (!boost::filesystem::exists(md5))
                     md5 = base.string() + "_md5.txt";
                 if (!boost::filesystem::exists(md5))

@@ -228,10 +228,10 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 
     static const Test tests[] =
     {
-	{ "03e9f1b8", "7e5882e3", "caminandes2", "" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --asm 0" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --threads 1" },
+        { "03e9f1b8", "7e5882e3", "caminandes2", "" },
+        { "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10" },
+        { "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --asm 0" },
+        { "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --threads 1" },
     };
 
     auto mismatchCount = 0;

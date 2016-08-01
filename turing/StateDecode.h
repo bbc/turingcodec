@@ -111,8 +111,25 @@ struct StateDec :
                 if (vm.count("md5") != 0)
                 {
                     std::ifstream i(vm["md5"].as<std::string>());
-                    if (!i) throw std::runtime_error("could not read md5 digest file");
-                    i >> this->md5Expected;
+                    while (i)
+                    {
+                        std::string s;
+                        std::getline(i, s);
+                        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+                        if (s.length() >= 3 && s.substr(0, 3) == "md5")
+                        {
+                            if (s.find("yuv") == std::string::npos)
+                                continue;
+                            s = s.substr(s.find(" = ") + 3, 32);
+                        }
+                        if (s.length() >= 16 && s[0] != '#')
+                        {
+                            this->md5Expected = s.substr(0, 32);
+                            break;
+                        }
+                    }
+                    if (this->md5Expected.length() != 32) 
+                        throw std::runtime_error("could not read md5 digest file");
                     md5_init(&this->md5Sum);
                 }
             }
