@@ -741,7 +741,6 @@ struct StateEncode :
             ? havoc_instruction_set_support() : havoc_instruction_set(HAVOC_C_OPT | HAVOC_C_REF)),
             userDataUnregSeiWritten(false)
         {
-            std::cout << "\n";
         }
 
         StateEncode(const StateEncode &);

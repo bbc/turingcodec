@@ -33,7 +33,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "havoc/havoc.h"
 
 
-// State comprising tables of pointers for optimised functions.
+ // State comprising tables of pointers for optimised functions.
 struct StateFunctionTables :
     HavocTablePredUni<uint16_t>,
     HavocTablePredBi<uint16_t>,
@@ -58,44 +58,48 @@ struct StateFunctionTables :
     havoc_table_hadamard_satd<uint16_t>, // encode only
     havoc::TableSubtractBi<uint8_t>, // encode only
     havoc::TableSubtractBi<uint16_t> // encode only
+{
+    StateFunctionTables(bool encoder, havoc_instruction_set mask = havoc_instruction_set_support()) 
+        :
+        instruction_set_support(mask)
     {
-        StateFunctionTables(bool encoder, havoc_instruction_set mask = havoc_instruction_set_support()) :
-            instruction_set_support(mask)
-            {
-                this->code = havoc_new_code(mask, 8000000);
-                havocPopulatePredUni<uint8_t>(this, this->code);
-                havocPopulatePredUni<uint16_t>(this, this->code);
-                havocPopulatePredBi<uint8_t>(this, this->code);
-                havocPopulatePredBi<uint16_t>(this, this->code);
-                havoc_populate_quantize_inverse(this, this->code);
-                havoc_populate_quantize(this, this->code);
-                havoc_populate_quantize_reconstruct(this, this->code);
-                havoc_populate_inverse_transform(this, this->code, encoder ? 1 : 0);
-                havoc_populate_inverse_transform_add<uint8_t>(this, this->code, encoder ? 1 : 0);
-                havoc_populate_inverse_transform_add<uint16_t>(this, this->code, encoder ? 1 : 0);
-                havoc_populate_pred_intra(this, this->code);
-                havoc_populate_transform<8>(this, this->code); // encode
-                havoc_populate_transform<10>(this, this->code); // encode
-                havoc_populate_ssd<uint8_t>(this, this->code); // encode
-                havoc_populate_ssd<uint16_t>(this, this->code); // encode
-                havoc_populate_sad<uint8_t>(this, this->code); // encode
-                havoc_populate_sad<uint16_t>(this, this->code); // encode
-                havoc_populate_sad_multiref<uint8_t>(this, this->code); // encode
-                havoc_populate_sad_multiref<uint16_t>(this, this->code); // encode
-                havoc_populate_hadamard_satd<uint8_t>(this, this->code); // encode
-                havoc_populate_hadamard_satd<uint16_t>(this, this->code); // encode
-                havoc::populateSubtractBi<uint8_t>(this, this->code); // encode
-                havoc::populateSubtractBi<uint16_t>(this, this->code); // encode
-            }
+        this->code = havoc_new_code(mask, 8000000);
+        this->code2 = havoc_new_code(havoc_instruction_set(HAVOC_C_OPT | HAVOC_C_REF), 8000000);
+        havocPopulatePredUni<uint8_t>(this, this->code);
+        havocPopulatePredUni<uint16_t>(this, this->code);
+        havocPopulatePredBi<uint8_t>(this, this->code);
+        havocPopulatePredBi<uint16_t>(this, this->code);
+        havoc_populate_quantize_inverse(this, this->code);
+        havoc_populate_quantize(this, this->code);
+        havoc_populate_quantize_reconstruct(this, this->code);
+        havoc_populate_inverse_transform(this, this->code, encoder ? 1 : 0);
+        havoc_populate_inverse_transform_add<uint8_t>(this, this->code, encoder ? 1 : 0);
+        havoc_populate_inverse_transform_add<uint16_t>(this, this->code, encoder ? 1 : 0);
+        havoc_populate_pred_intra(this, this->code);
+        havoc_populate_transform<8>(this, this->code); // encode
+        havoc_populate_transform<10>(this, this->code); // encode
+        havoc_populate_ssd<uint8_t>(this, this->code); // encode
+        havoc_populate_ssd<uint16_t>(this, this->code); // encode
+        havoc_populate_sad<uint8_t>(this, this->code); // encode
+        havoc_populate_sad<uint16_t>(this, this->code); // encode
+        havoc_populate_sad_multiref<uint8_t>(this, this->code); // encode
+        havoc_populate_sad_multiref<uint16_t>(this, this->code); // encode
+        havoc_populate_hadamard_satd<uint8_t>(this, this->code); // encode
+        havoc_populate_hadamard_satd<uint16_t>(this, this->code); // encode
+        havoc::populateSubtractBi<uint8_t>(this, this->code); // encode
+        havoc::populateSubtractBi<uint16_t>(this, this->code); // encode
+    }
 
-        ~StateFunctionTables()
-        {
-            havoc_delete_code(this->code);
-        }
+    ~StateFunctionTables()
+    {
+        havoc_delete_code(this->code);
+        havoc_delete_code(this->code2);
+    }
 
-        havoc_code code;
+    havoc_code code;
+    havoc_code code2;
 
-        havoc_instruction_set const instruction_set_support;
-    };
+    havoc_instruction_set const instruction_set_support;
+};
 
 #endif

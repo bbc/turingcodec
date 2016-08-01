@@ -26,7 +26,7 @@ For more information, contact us at info @ turingcodec.org.
 #define COMMAND_DECODE
 #define COMMAND_ENCODE
 #define COMMAND_PSNR
-#define COMMAND_SMOKE
+#define COMMAND_TESTDECODE
 #define COMMAND_HAVOC
 #define COMMAND_SIGNATURE
 #define COMMAND_VERSION
@@ -43,7 +43,7 @@ For more information, contact us at info @ turingcodec.org.
 
 int decode(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
 int psnr(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
-int smoke(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
+int testdecode(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
 int encode(int argc, const char* const argv[]);
 int signature(int argc, const char* const argv[], std::ostream &cout, std::ostream &cerr);
 
@@ -74,8 +74,8 @@ int help(const char *programName,bool badArguments)
 #ifdef COMMAND_PSNR
             "   psnr       Report PSNR between two YUV files\n"
 #endif
-#ifdef COMMAND_SMOKE
-            "   smoke      Run a minimal set of tests\n"
+#ifdef COMMAND_TESTDECODE
+            "   testdecode Test that decoding conformance streams produces correct output\n"
 #endif
 #ifdef COMMAND_SIGNATURE
             "   signature  Checks encoder integrity against expected outputs\n"
@@ -127,22 +127,28 @@ int main(int argc, const char *argv[])
     argv = &arguments[1];
 
 #ifdef COMMAND_ENCODE
-    if (command == "encode") return encode(argc, argv);
+    if (command == "encode")
+        return encode(argc, argv);
 #endif
 #ifdef COMMAND_DECODE
-    if (command == "decode") return decode(argc, argv, std::cout, std::cerr);
+    if (command == "decode")
+        return decode(argc, argv, std::cout, std::cerr);
 #endif
 #ifdef COMMAND_PSNR
-    if (command == "psnr") return psnr(argc, argv, std::cout, std::cerr);
+    if (command == "psnr")
+        return psnr(argc, argv, std::cout, std::cerr);
 #endif
-#ifdef COMMAND_SMOKE
-    if (command == "smoke") return smoke(argc, argv, std::cout, std::cerr);
+#ifdef COMMAND_TESTDECODE
+    if (command == "testdecode")
+        return testdecode(argc, argv, std::cout, std::cerr);
 #endif
 #ifdef COMMAND_HAVOC
-    if (command == "havoc") return havoc_main(argc, argv);
+    if (command == "havoc")
+        return havoc_main(argc, argv);
 #endif
 #ifdef COMMAND_SIGNATURE
-    if (command == "signature") return signature(argc, argv, std::cout, std::cerr);
+    if (command == "signature")
+        return signature(argc, argv, std::cout, std::cerr);
 #endif
 #ifdef COMMAND_VERSION
     if (command == "version")
