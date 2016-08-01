@@ -16,13 +16,15 @@ GNU General Public License for more details.
 Commercial support and intellectual property rights for
 the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
- */
+*/
 
 #include "havoc_test.h"
 
 
+int do_measure_speed = 1;
 
-int havoc_count_average_cycles(
+
+int havoc_test_run(
     void *boundRef, void *boundTest,
     havoc_bound_invoke *f,
     havoc_bound_mismatch *m,
@@ -33,7 +35,12 @@ int havoc_count_average_cycles(
     havoc_timestamp sum = 0;
     int warmup = 100;
     int count = 0;
-    while (count < iterations)
+    if (!do_measure_speed)
+    {
+        // not measuring time, just checking for mismatch
+        f(boundTest, 1);
+    }
+    else while (count < iterations)
     {
         const havoc_timestamp start = havoc_get_timestamp();
         f(boundTest, 4);
@@ -66,11 +73,13 @@ int havoc_count_average_cycles(
         }
     }
 
+    printf(" %s", havoc_instruction_set_as_text(set));
+
+    if (do_measure_speed)
     {
         const int average = (int)((sum + count / 2) / count);
 
-        printf(" %s:", havoc_instruction_set_as_text(set));
-        printf("%d", average);
+        printf(":%d", average);
         if (*first_result != 0.0)
         {
             printf("(x%.2f)", *first_result / average);
@@ -120,7 +129,7 @@ int havoc_test(
             havoc_code code_test = havoc_new_code(set & mask, 100000000);
             if (get(test, code_test))
             {
-                error_count += havoc_count_average_cycles(ref, test, invoke, mismatch, &first_result, set, iterations);
+                error_count += havoc_test_run(ref, test, invoke, mismatch, &first_result, set, iterations);
             }
             havoc_delete_code(code_test);
         }
