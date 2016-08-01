@@ -401,10 +401,10 @@ struct InverseTransformAdd :
         Jit::Function
         {
             InverseTransformAdd(Jit::Buffer *buffer, int trType, int log2TrafoSize)
-		        :
-		            Jit::Function(buffer, Jit::CountArguments<havoc_inverse_transform_add<uint8_t>>::value),
-		            trType(trType),
-		            log2TrafoSize(log2TrafoSize)
+                :
+                    Jit::Function(buffer, Jit::CountArguments<havoc_inverse_transform_add<uint8_t>>::value),
+                    trType(trType),
+                    log2TrafoSize(log2TrafoSize)
             {
                 if (log2TrafoSize == 4 && (this->isa() & HAVOC_AVX2))
                     this->buildSinglePass(4, 16, 512 + 512 + 512);
@@ -3399,8 +3399,8 @@ struct InverseTransformAdd :
                     Jit::Function
                     {
                         ForwardDct16x16(Jit::Buffer *buffer)
-		        :
-		            Jit::Function(buffer, 3)
+                :
+                    Jit::Function(buffer, 3)
                         {
                             this->buildSinglePass(1, 16, 32 + 2 * 2 * 16*16);
                         }

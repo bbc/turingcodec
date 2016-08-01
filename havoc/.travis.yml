@@ -1,26 +1,19 @@
-language: c
-
-sudo: false
+language: generic
 
 addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test
     packages:
-      - gcc-4.8
-      - g++-4.8
+      - g++-5
 
 cache:
   directories:
     - $HOME/sde-external-7.31.0-2015-09-25-lin
 
 before_script:
-  - export CXX=g++-4.8 CC=gcc-4.8
   - cp get-intel-sde $HOME
   - pushd $HOME
-  - wget --no-check-certificate http://www.cmake.org/files/v3.3/cmake-3.3.2-Linux-x86_64.tar.gz
-      && tar -xzf cmake-3.3.2-Linux-x86_64.tar.gz
-      && export PATH=$HOME/cmake-3.3.2-Linux-x86_64/bin:$PATH;
   - if [ -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then echo "using cached SDE"; fi
   - if [ ! -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then wget http://pypi.python.org/packages/source/m/mechanize/mechanize-0.2.5.tar.gz; fi
   - if [ ! -f "sde-external-7.31.0-2015-09-25-lin/sde64" ]; then tar xf mechanize-0.2.5.tar.gz && mv mechanize-0.2.5 mechanize; fi
@@ -30,9 +23,10 @@ before_script:
   - popd
 
 script:
-  - cd test
-  - cmake .
+  - mkdir build
+  - cd build
+  - cmake -DCMAKE_CXX_COMPILER=g++-5 -DCMAKE_C_COMPILER=gcc-5 ..
   - make
-  - sde64 -nhm -- ./src/bin/hevcasm
-  - sde64 -hsw -- ./src/bin/hevcasm
+  - sde64 -nhm -- ./havoc-exe --no-measure-speed
+  - sde64 -hsw -- ./havoc-exe --no-measure-speed
 

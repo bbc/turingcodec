@@ -39,16 +39,16 @@ int parseDecodeOptions(po::variables_map &vm, int argc, const char* const argv[]
 {
     po::options_description options("Options");
     options.add_options()
-		        ("output-file,o", po::value<std::string>(), "reconstructed YUV file name")
-		        ("8-bit,8", po::bool_switch(), "round output samples and write an 8-bit YUV file")
-		        ("frames", po::value<size_t>(), "number of frames to decode")
-		        ("no-progress", "suppress progress reporting to stderr")
-		        ("help,h", "display help message");
+                ("output-file,o", po::value<std::string>(), "reconstructed YUV file name")
+                ("8-bit,8", po::bool_switch(), "round output samples and write an 8-bit YUV file")
+                ("frames", po::value<size_t>(), "number of frames to decode")
+                ("no-progress", "suppress progress reporting to stderr")
+                ("help,h", "display help message");
 
     po::options_description hidden("Hidden options");
     hidden.add_options()
-		        ("input-file", po::value<std::string>(), "input bitstream file name")
-		        ("md5", po::value<std::string>(), "file containing expected yuv output md5");
+                ("input-file", po::value<std::string>(), "input bitstream file name")
+                ("md5", po::value<std::string>(), "file containing expected yuv output md5");
 
     po::options_description all;
     all.add(options).add(hidden);
@@ -101,7 +101,7 @@ int decode(int argc, const char* const argv[], std::ostream &cout, std::ostream 
 
     try
     {
-        StateDecode stateDecode(vm, nPictures);
+        StateDecode stateDecode(vm, cout, cerr, nPictures);
 
         Handler<Decode<void>, StateDecode> h;
         h.state = &stateDecode;

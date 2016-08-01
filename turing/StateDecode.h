@@ -83,7 +83,7 @@ struct StateDec :
         StateDec,
         StateFunctionTables
         {
-            StateDecode(const boost::program_options::variables_map &vm, size_t maxPictures = 0)
+            StateDecode(const boost::program_options::variables_map &vm, std::ostream &cout, std::ostream &cerr, int maxPictures = 0)
             :
 #ifdef VALGRIND_FRIENDLY
             StateFunctionTables(false, havoc_instruction_set(HAVOC_C_OPT | HAVOC_C_REF)),
@@ -95,7 +95,7 @@ struct StateDec :
             ifs(getOptionParameter(vm, "input-file"), std::ios_base::binary),
             maxPictures(maxPictures),
             n(0),
-            progressReporter(vm.count("no-progress") ? 0 : &std::cerr, "decoded", "pictures", maxPictures)
+            progressReporter(vm.count("no-progress") ? 0 : &cerr, "decoded", "pictures", maxPictures)
             {
                 if (!this->ifs)
                 {

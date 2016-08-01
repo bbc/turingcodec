@@ -31,198 +31,198 @@ For more information, contact us at info @ turingcodec.org.
 template <typename Sample>
 struct SadSse2 :
     Jit::Function
+{
+    SadSse2(Jit::Buffer *buffer, int width, int height) :
+        Jit::Function(buffer, Jit::CountArguments<havoc_sad<uint8_t>>::value),
+        width(width),
+        height(height)
     {
-        SadSse2(Jit::Buffer *buffer, int width, int height) :
-            Jit::Function(buffer, Jit::CountArguments<havoc_sad<uint8_t>>::value),
-            width(width),
-            height(height)
+        this->build();
+    }
+
+    int width, height;
+
+    template <class A, class B>
+    void sad(A const &a, B const &b)
+    {
+        if (sizeof(Sample) == 2)
         {
-            this->build();
+            psubw(a, b);
+            pabsw(a, a);
+        }
+        else
+            psadbw(a, b);
+    }
+
+    void assemble() override
+    {
+        int widthBytes = width * sizeof(Sample);
+
+        if ((widthBytes % 16) && widthBytes != 8) return;
+
+        auto &src = arg64(0);
+        auto &stride_src = arg64(1);
+        auto &ref = arg64(2);
+        auto &stride_ref = arg64(3);
+
+        if (sizeof(Sample) == 2)
+        {
+            shl(stride_src, 1);
+            shl(stride_ref, 1);
         }
 
-        int width, height;
+        auto &n = reg64(4);
 
-        template <class A, class B>
-        void sad(A const &a, B const &b)
+        const Xbyak::Reg64 *stride_ref_x3 = widthBytes == 16 ? &reg64(5) : 0;
+        const Xbyak::Reg64 *stride_src_x3 = widthBytes == 16 ? &reg64(6) : 0;
+
+        if (widthBytes == 8)
         {
-            if (sizeof(Sample) == 2)
-            {
-                psubw(a, b);
-                pabsw(a, a);
-            }
-            else
-                psadbw(a, b);
+            mov(n, height / 2);
+        }
+        else if (widthBytes == 16)
+        {
+            mov(n, height / 4);
+            lea(*stride_ref_x3, ptr[stride_ref + stride_ref * 2]);
+            lea(*stride_src_x3, ptr[stride_src + stride_src * 2]);
+        }
+        else if (widthBytes == 32)
+        {
+            mov(n, height / 2);
+        }
+        else
+        {
+            mov(n, height);
         }
 
-        void assemble() override
-                {
-            int widthBytes = width * sizeof(Sample);
+        auto &xmm0 = regXmm(0);
+        auto &xmm1 = regXmm(1);
+        auto &xmm2 = regXmm(2);
+        auto &xmm3 = regXmm(3);
+        auto &xmm4 = regXmm(4);
+        auto &xmm5 = regXmm(5);
 
-            if ((widthBytes % 16) && widthBytes != 8) return;
+        pxor(xmm0, xmm0);
+        pxor(xmm5, xmm5);
 
-            auto &src = arg64(0);
-            auto &stride_src = arg64(1);
-            auto &ref = arg64(2);
-            auto &stride_ref = arg64(3);
-
-            if (sizeof(Sample) == 2)
-            {
-                shl(stride_src, 1);
-                shl(stride_ref, 1);
-            }
-
-            auto &n = reg64(4);
-
-            const Xbyak::Reg64 *stride_ref_x3 = widthBytes == 16 ? &reg64(5) : 0;
-            const Xbyak::Reg64 *stride_src_x3 = widthBytes == 16 ? &reg64(6) : 0;
-
+        L("loop");
+        {
             if (widthBytes == 8)
             {
-                mov(n, height / 2);
+                movq(xmm1, ptr[ref]);
+                movhps(xmm1, ptr[ref + stride_ref]);
+                movq(xmm2, ptr[src]);
+                movhps(xmm2, ptr[src + stride_src]);
+                sad(xmm1, xmm2);
+
+                lea(ref, ptr[ref + stride_ref * 2]);
+                if (sizeof(Sample) == 2)
+                {
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                }
+                paddd(xmm0, xmm1);
+                lea(src, ptr[src + stride_src * 2]);
             }
             else if (widthBytes == 16)
             {
-                mov(n, height / 4);
-                lea(*stride_ref_x3, ptr[stride_ref + stride_ref * 2]);
-                lea(*stride_src_x3, ptr[stride_src + stride_src * 2]);
+                movdqu(xmm1, ptr[ref]);
+                movdqu(xmm2, ptr[ref + stride_ref]);
+                movdqu(xmm3, ptr[ref + stride_ref * 2]);
+                movdqu(xmm4, ptr[ref + *stride_ref_x3]);
+
+                sad(xmm1, ptr[src]);
+                sad(xmm2, ptr[src + stride_src]);
+                sad(xmm3, ptr[src + stride_src * 2]);
+                sad(xmm4, ptr[src + *stride_src_x3]);
+
+                lea(src, ptr[src + stride_src * 4]);
+                paddd(xmm1, xmm2);
+                lea(ref, ptr[ref + stride_ref * 4]);
+                paddd(xmm3, xmm4);
+                if (sizeof(Sample) == 2)
+                {
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm3, xmm5);
+                    phaddw(xmm3, xmm5);
+                    phaddw(xmm3, xmm5);
+                }
+                paddd(xmm0, xmm1);
+                paddd(xmm0, xmm3);
             }
             else if (widthBytes == 32)
             {
-                mov(n, height / 2);
+                movdqu(xmm1, ptr[ref]);
+                movdqu(xmm2, ptr[ref + 16]);
+                movdqu(xmm3, ptr[ref + stride_ref]);
+                movdqu(xmm4, ptr[ref + stride_ref + 16]);
+
+                sad(xmm1, ptr[src]);
+                sad(xmm2, ptr[src + 16]);
+                sad(xmm3, ptr[src + stride_src]);
+                sad(xmm4, ptr[src + stride_src + 16]);
+
+                lea(src, ptr[src + stride_src * 2]);
+                paddd(xmm1, xmm2);
+                lea(ref, ptr[ref + stride_ref * 2]);
+                paddd(xmm3, xmm4);
+                if (sizeof(Sample) == 2)
+                {
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm1, xmm5);
+                    phaddw(xmm3, xmm5);
+                    phaddw(xmm3, xmm5);
+                    phaddw(xmm3, xmm5);
+                }
+                paddd(xmm0, xmm1);
+                paddd(xmm0, xmm3);
             }
             else
             {
-                mov(n, height);
-            }
-
-            auto &xmm0 = regXmm(0);
-            auto &xmm1 = regXmm(1);
-            auto &xmm2 = regXmm(2);
-            auto &xmm3 = regXmm(3);
-            auto &xmm4 = regXmm(4);
-            auto &xmm5 = regXmm(5);
-
-            pxor(xmm0, xmm0);
-            pxor(xmm5, xmm5);
-
-            L("loop");
-            {
-                if (widthBytes == 8)
+                for (int dx = 0; dx < widthBytes; dx += 64)
                 {
-                    movq(xmm1, ptr[ref]);
-                    movhps(xmm1, ptr[ref + stride_ref]);
-                    movq(xmm2, ptr[src]);
-                    movhps(xmm2, ptr[src + stride_src]);
-                    sad(xmm1, xmm2);
-
-                    lea(ref, ptr[ref + stride_ref * 2]);
-                    if (sizeof(Sample) == 2)
-                    {
-                        phaddw(xmm1, xmm5);
-                        phaddw(xmm1, xmm5);
-                        phaddw(xmm1, xmm5);
-                    }
-                    paddd(xmm0, xmm1);
-                    lea(src, ptr[src + stride_src * 2]);
-                }
-                else if (widthBytes == 16)
-                {
-                    movdqu(xmm1, ptr[ref]);
-                    movdqu(xmm2, ptr[ref + stride_ref]);
-                    movdqu(xmm3, ptr[ref + stride_ref * 2]);
-                    movdqu(xmm4, ptr[ref + *stride_ref_x3]);
-
-                    sad(xmm1, ptr[src]);
-                    sad(xmm2, ptr[src + stride_src]);
-                    sad(xmm3, ptr[src + stride_src * 2]);
-                    sad(xmm4, ptr[src + *stride_src_x3]);
-
-                    lea(src, ptr[src + stride_src * 4]);
+                    movdqu(xmm1, ptr[ref + dx]);
+                    movdqu(xmm2, ptr[ref + dx + 16]);
+                    if (widthBytes - dx > 32) movdqu(xmm3, ptr[ref + dx + 32]);
+                    if (widthBytes - dx > 48) movdqu(xmm4, ptr[ref + dx + 48]);
+                    sad(xmm1, ptr[src + dx + 0]);
+                    sad(xmm2, ptr[src + dx + 16]);
+                    if (widthBytes - dx > 32) sad(xmm3, ptr[src + dx + 32]);
+                    if (widthBytes - dx > 48) sad(xmm4, ptr[src + dx + 48]);
                     paddd(xmm1, xmm2);
-                    lea(ref, ptr[ref + stride_ref * 4]);
-                    paddd(xmm3, xmm4);
+
+                    if (widthBytes > 48) paddd(xmm3, xmm4);
                     if (sizeof(Sample) == 2)
                     {
                         phaddw(xmm1, xmm5);
                         phaddw(xmm1, xmm5);
                         phaddw(xmm1, xmm5);
-                        phaddw(xmm3, xmm5);
-                        phaddw(xmm3, xmm5);
-                        phaddw(xmm3, xmm5);
+                        if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
+                        if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
+                        if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
                     }
                     paddd(xmm0, xmm1);
-                    paddd(xmm0, xmm3);
+                    if (widthBytes - dx > 32) paddd(xmm0, xmm3);
                 }
-                else if (widthBytes == 32)
-                {
-                    movdqu(xmm1, ptr[ref]);
-                    movdqu(xmm2, ptr[ref + 16]);
-                    movdqu(xmm3, ptr[ref + stride_ref]);
-                    movdqu(xmm4, ptr[ref + stride_ref + 16]);
-
-                    sad(xmm1, ptr[src]);
-                    sad(xmm2, ptr[src + 16]);
-                    sad(xmm3, ptr[src + stride_src]);
-                    sad(xmm4, ptr[src + stride_src + 16]);
-
-                    lea(src, ptr[src + stride_src * 2]);
-                    paddd(xmm1, xmm2);
-                    lea(ref, ptr[ref + stride_ref * 2]);
-                    paddd(xmm3, xmm4);
-                    if (sizeof(Sample) == 2)
-                    {
-                        phaddw(xmm1, xmm5);
-                        phaddw(xmm1, xmm5);
-                        phaddw(xmm1, xmm5);
-                        phaddw(xmm3, xmm5);
-                        phaddw(xmm3, xmm5);
-                        phaddw(xmm3, xmm5);
-                    }
-                    paddd(xmm0, xmm1);
-                    paddd(xmm0, xmm3);
-                }
-                else
-                {
-                    for (int dx = 0; dx < widthBytes; dx += 64)
-                    {
-                        movdqu(xmm1, ptr[ref + dx]);
-                        movdqu(xmm2, ptr[ref + dx + 16]);
-                        if (widthBytes - dx > 32) movdqu(xmm3, ptr[ref + dx + 32]);
-                        if (widthBytes - dx > 48) movdqu(xmm4, ptr[ref + dx + 48]);
-                        sad(xmm1, ptr[src + dx + 0]);
-                        sad(xmm2, ptr[src + dx + 16]);
-                        if (widthBytes - dx > 32) sad(xmm3, ptr[src + dx + 32]);
-                        if (widthBytes - dx > 48) sad(xmm4, ptr[src + dx + 48]);
-                        paddd(xmm1, xmm2);
-
-                        if (widthBytes > 48) paddd(xmm3, xmm4);
-                        if (sizeof(Sample) == 2)
-                        {
-                            phaddw(xmm1, xmm5);
-                            phaddw(xmm1, xmm5);
-                            phaddw(xmm1, xmm5);
-                            if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
-                            if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
-                            if (widthBytes - dx > 32) phaddw(xmm3, xmm5);
-                        }
-                        paddd(xmm0, xmm1);
-                        if (widthBytes - dx > 32) paddd(xmm0, xmm3);
-                    }
-                    add(ref, stride_ref);
-                    add(src, stride_src);
-                }
+                add(ref, stride_ref);
+                add(src, stride_src);
             }
-            dec(n);
-            jg("loop");
+        }
+        dec(n);
+        jg("loop");
 
-            movhlps(xmm1, xmm0);
-            paddd(xmm0, xmm1);
-            movd(eax, xmm0);
+        movhlps(xmm1, xmm0);
+        paddd(xmm0, xmm1);
+        movd(eax, xmm0);
 
-            if (sizeof(Sample) == 2)
-                shr(eax, 2); // 10-bit - divide SAD by 4
-                }
-    };
+        if (sizeof(Sample) == 2)
+            shr(eax, 2); // 10-bit - divide SAD by 4
+    }
+};
 
 template <typename Sample>
 static int havoc_sad_c_opt_4(const Sample *src, intptr_t stride_src, const Sample *ref, intptr_t stride_ref, uint32_t rect)
@@ -455,7 +455,7 @@ havoc_sad<Sample>* get_sad(int width, int height, havoc_code code)
     auto &buffer = *reinterpret_cast<Jit::Buffer *>(code.implementation);
 
     if ((sizeof(Sample) == 1 && buffer.isa & HAVOC_SSE2) ||
-            (sizeof(Sample) == 2 && buffer.isa & HAVOC_SSSE3))
+        (sizeof(Sample) == 2 && buffer.isa & HAVOC_SSSE3))
     {
 #define X(w, h) \
         { \
@@ -467,7 +467,7 @@ havoc_sad<Sample>* get_sad(int width, int height, havoc_code code)
             } \
         }
 
-                        X_HEVC_PU_SIZES;
+        X_HEVC_PU_SIZES;
 #undef X
     }
 
@@ -547,422 +547,422 @@ static void havoc_sad_multiref_4_c_ref(const Sample *src, intptr_t stride_src, c
 template <typename Sample>
 struct Sad4Avx2 :
     Jit::Function
-    {
-        Sad4Avx2(Jit::Buffer *buffer, int width, int height) :
+{
+    Sad4Avx2(Jit::Buffer *buffer, int width, int height) :
         Jit::Function(buffer, Jit::CountArguments<havoc_sad_multiref<uint8_t>>::value),
         width(width),
         height(height)
+    {
+        this->build();
+    }
+
+    int width, height;
+
+    Xbyak::Label mask_24_32;
+    Xbyak::Label mask_12_16;
+
+    void data() override
+    {
+        align();
+
+        int widthBytes = width * sizeof(Sample);
+
+        if (widthBytes == 24)
         {
-            this->build();
+            L(mask_24_32);
+            db({ 0xff }, 24);
+            db({ 0 }, 8);
         }
 
-        int width, height;
-
-        Xbyak::Label mask_24_32;
-        Xbyak::Label mask_12_16;
-
-        void data() override
+        if (widthBytes == 12)
         {
-            align();
+            L(mask_12_16);
+            db({ 0xff }, 12);
+            db({ 0 }, 4);
+            db({ 0xff }, 12);
+            db({ 0 }, 4);
+        }
+    }
 
-            int widthBytes = width * sizeof(Sample);
+    template <class A, class B>
+    void sad(A const &a, B const &b)
+    {
+        if (sizeof(Sample) == 2)
+        {
+            vpsubw(a, b);
+            vpabsw(a, a);
+            vphaddw(a, ymm9);
+            vpunpcklwd(a, ymm9);
+            vphaddd(a, ymm9);
+            vpunpckldq(a, ymm9);
+        }
+        else
+            vpsadbw(a, b);
+    }
 
-            if (widthBytes == 24)
-            {
-                L(mask_24_32);
-                db({ 0xff }, 24);
-                db({ 0 }, 8);
-            }
+    void assemble() override
+    {
+        auto &src = arg64(0);
+        auto &src_stride = arg64(1);
+        auto &ref = arg64(2);
+        auto &ref_stride = arg64(3);
+        auto &sads = arg64(4);
+        auto &rect = arg64(5);
 
-            if (widthBytes == 12)
-            {
-                L(mask_12_16);
-                db({ 0xff }, 12);
-                db({ 0 }, 4);
-                db({ 0xff }, 12);
-                db({ 0 }, 4);
-            }
+        if (sizeof(Sample) == 2)
+        {
+            shl(src_stride, 1);
+            shl(ref_stride, 1);
         }
 
-        template <class A, class B>
-        void sad(A const &a, B const &b)
+        auto &xmm0 = regXmm(0);
+        auto &xmm1 = regXmm(1);
+        auto &xmm2 = regXmm(2);
+        auto &xmm3 = regXmm(3);
+        auto &xmm4 = regXmm(4);
+        auto &xmm5 = regXmm(5);
+        auto &xmm6 = regXmm(6);
+        auto &xmm7 = regXmm(7);
+        auto &xmm8 = regXmm(8);
+        auto *xmm9 = sizeof(Sample) == 2 ? &regXmm(9) : (Xbyak::Xmm const *)0;
+
+        int widthBytes = width * sizeof(Sample);
+
+        if (widthBytes == 8)
         {
-            if (sizeof(Sample) == 2)
+            auto &ref0 = reg64(6);
+            auto &ref1 = reg64(7);
+            auto &ref2 = reg64(8);
+            auto &ref3 = ref;
+
+            mov(ref0, ptr[ref]);
+            mov(ref1, ptr[ref + 0x8]);
+            mov(ref2, ptr[ref + 0x10]);
+            mov(ref3, ptr[ref + 0x18]);
+
+            and (rect, 0xff);
+            auto &n = rect;
+            shr(n, 1);
+
+            vmovq(xmm4, ptr[src]);
+            vmovq(xmm0, ptr[ref0]);
+            vmovq(xmm1, ptr[ref1]);
+            vmovq(xmm2, ptr[ref2]);
+            vmovq(xmm3, ptr[ref3]);
+
+            sub(ref1, ref0);
+            sub(ref2, ref0);
+            sub(ref3, ref0);
+            lea(ref0, ptr[ref0 + ref_stride]);
+
+            vmovhps(xmm4, ptr[src + src_stride]);
+            vmovhps(xmm0, ptr[ref0]);
+            vmovhps(xmm1, ptr[ref1 + ref0]);
+            vmovhps(xmm2, ptr[ref2 + ref0]);
+            vmovhps(xmm3, ptr[ref3 + ref0]);
+
+            lea(ref0, ptr[ref0 + ref_stride]);
+            lea(src, ptr[src + src_stride * 2]);
+
+            sad(xmm0, xmm4);
+            sad(xmm1, xmm4);
+            sad(xmm2, xmm4);
+            sad(xmm3, xmm4);
+
+            dec(n);
+
+            L("loop");
             {
-                vpsubw(a, b);
-                vpabsw(a, a);
-                vphaddw(a, ymm9);
-                vpunpcklwd(a, ymm9);
-                vphaddd(a, ymm9);
-                vpunpckldq(a, ymm9);
-            }
-            else
-                vpsadbw(a, b);
-        }
-
-        void assemble() override
-        {
-            auto &src = arg64(0);
-            auto &src_stride = arg64(1);
-            auto &ref = arg64(2);
-            auto &ref_stride = arg64(3);
-            auto &sads = arg64(4);
-            auto &rect = arg64(5);
-
-            if (sizeof(Sample) == 2)
-            {
-                shl(src_stride, 1);
-                shl(ref_stride, 1);
-            }
-
-            auto &xmm0 = regXmm(0);
-            auto &xmm1 = regXmm(1);
-            auto &xmm2 = regXmm(2);
-            auto &xmm3 = regXmm(3);
-            auto &xmm4 = regXmm(4);
-            auto &xmm5 = regXmm(5);
-            auto &xmm6 = regXmm(6);
-            auto &xmm7 = regXmm(7);
-            auto &xmm8 = regXmm(8);
-            auto *xmm9 = sizeof(Sample) == 2 ? &regXmm(9) : (Xbyak::Xmm const *)0;
-
-            int widthBytes = width * sizeof(Sample);
-
-            if (widthBytes == 8)
-            {
-                auto &ref0 = reg64(6);
-                auto &ref1 = reg64(7);
-                auto &ref2 = reg64(8);
-                auto &ref3 = ref;
-
-                mov(ref0, ptr[ref]);
-                mov(ref1, ptr[ref + 0x8]);
-                mov(ref2, ptr[ref + 0x10]);
-                mov(ref3, ptr[ref + 0x18]);
-
-                and (rect, 0xff);
-                auto &n = rect;
-                shr(n, 1);
-
                 vmovq(xmm4, ptr[src]);
-                vmovq(xmm0, ptr[ref0]);
-                vmovq(xmm1, ptr[ref1]);
-                vmovq(xmm2, ptr[ref2]);
-                vmovq(xmm3, ptr[ref3]);
+                vmovq(xmm5, ptr[ref0]);
+                vmovq(xmm6, ptr[ref1 + ref0]);
+                vmovq(xmm7, ptr[ref2 + ref0]);
+                vmovq(xmm8, ptr[ref3 + ref0]);
 
-                sub(ref1, ref0);
-                sub(ref2, ref0);
-                sub(ref3, ref0);
                 lea(ref0, ptr[ref0 + ref_stride]);
 
                 vmovhps(xmm4, ptr[src + src_stride]);
-                vmovhps(xmm0, ptr[ref0]);
-                vmovhps(xmm1, ptr[ref1 + ref0]);
-                vmovhps(xmm2, ptr[ref2 + ref0]);
-                vmovhps(xmm3, ptr[ref3 + ref0]);
+                vmovhps(xmm5, ptr[ref0]);
+                vmovhps(xmm6, ptr[ref1 + ref0]);
+                vmovhps(xmm7, ptr[ref2 + ref0]);
+                vmovhps(xmm8, ptr[ref3 + ref0]);
 
                 lea(ref0, ptr[ref0 + ref_stride]);
                 lea(src, ptr[src + src_stride * 2]);
 
-                sad(xmm0, xmm4);
-                sad(xmm1, xmm4);
-                sad(xmm2, xmm4);
-                sad(xmm3, xmm4);
+                sad(xmm5, xmm4);
+                sad(xmm6, xmm4);
+                sad(xmm7, xmm4);
+                sad(xmm8, xmm4);
 
-                dec(n);
-
-                L("loop");
-                {
-                    vmovq(xmm4, ptr[src]);
-                    vmovq(xmm5, ptr[ref0]);
-                    vmovq(xmm6, ptr[ref1 + ref0]);
-                    vmovq(xmm7, ptr[ref2 + ref0]);
-                    vmovq(xmm8, ptr[ref3 + ref0]);
-
-                    lea(ref0, ptr[ref0 + ref_stride]);
-
-                    vmovhps(xmm4, ptr[src + src_stride]);
-                    vmovhps(xmm5, ptr[ref0]);
-                    vmovhps(xmm6, ptr[ref1 + ref0]);
-                    vmovhps(xmm7, ptr[ref2 + ref0]);
-                    vmovhps(xmm8, ptr[ref3 + ref0]);
-
-                    lea(ref0, ptr[ref0 + ref_stride]);
-                    lea(src, ptr[src + src_stride * 2]);
-
-                    sad(xmm5, xmm4);
-                    sad(xmm6, xmm4);
-                    sad(xmm7, xmm4);
-                    sad(xmm8, xmm4);
-
-                    vpaddd(xmm0, xmm5);
-                    vpaddd(xmm1, xmm6);
-                    vpaddd(xmm2, xmm7);
-                    vpaddd(xmm3, xmm8);
-                }
-                dec(n);
-                jg("loop");
-
-                vpslldq(xmm1, 4);
-                vpslldq(xmm3, 4);
-                vpor(xmm0, xmm1);
-                vpor(xmm2, xmm3);
-                vmovdqa(xmm1, xmm0);
-                vmovdqa(xmm3, xmm2);
-                vpunpcklqdq(xmm0, xmm2);
-                vpunpckhqdq(xmm1, xmm3);
-                vpaddd(xmm0, xmm1);
-                if (sizeof(Sample) == 2)
-                    vpsrld(xmm0, 2);
-                vmovdqu(ptr[sads], xmm0);
+                vpaddd(xmm0, xmm5);
+                vpaddd(xmm1, xmm6);
+                vpaddd(xmm2, xmm7);
+                vpaddd(xmm3, xmm8);
             }
-            else if (widthBytes == 4)
+            dec(n);
+            jg("loop");
+
+            vpslldq(xmm1, 4);
+            vpslldq(xmm3, 4);
+            vpor(xmm0, xmm1);
+            vpor(xmm2, xmm3);
+            vmovdqa(xmm1, xmm0);
+            vmovdqa(xmm3, xmm2);
+            vpunpcklqdq(xmm0, xmm2);
+            vpunpckhqdq(xmm1, xmm3);
+            vpaddd(xmm0, xmm1);
+            if (sizeof(Sample) == 2)
+                vpsrld(xmm0, 2);
+            vmovdqu(ptr[sads], xmm0);
+        }
+        else if (widthBytes == 4)
+        {
+            auto &ref0 = reg64(6);
+            auto &ref1 = reg64(7);
+            auto &ref2 = reg64(8);
+            auto &ref3 = ref;
+
+            mov(ref0, ptr[ref]);
+            mov(ref1, ptr[ref + 0x8]);
+            mov(ref2, ptr[ref + 0x10]);
+            mov(ref3, ptr[ref + 0x18]);
+
+            vpxor(xmm0, xmm0);
+            vpxor(xmm1, xmm1);
+            vpxor(xmm2, xmm2);
+            vpxor(xmm3, xmm3);
+
+            sub(ref1, ref0);
+            sub(ref2, ref0);
+            sub(ref3, ref0);
+
+            and (rect, 0xFF);
+            auto &n = rect;
+            shr(n, 1);
+
+            L("loop");
             {
-                auto &ref0 = reg64(6);
-                auto &ref1 = reg64(7);
-                auto &ref2 = reg64(8);
-                auto &ref3 = ref;
+                vmovd(xmm4, ptr[src]);
+                vmovd(xmm5, ptr[ref0]);
+                vmovd(xmm6, ptr[ref1 + ref0]);
+                vmovd(xmm7, ptr[ref2 + ref0]);
+                vmovd(xmm8, ptr[ref3 + ref0]);
+                lea(ref0, ptr[ref0 + ref_stride]);
+                vpunpckldq(xmm4, ptr[src + src_stride]);
+                vpunpckldq(xmm5, ptr[ref0]);
+                vpunpckldq(xmm6, ptr[ref1 + ref0]);
+                vpunpckldq(xmm7, ptr[ref2 + ref0]);
+                vpunpckldq(xmm8, ptr[ref3 + ref0]);
+                lea(ref0, ptr[ref0 + ref_stride]);
+                lea(src, ptr[src + src_stride * 2]);
+                sad(xmm5, xmm4);
+                sad(xmm6, xmm4);
+                sad(xmm7, xmm4);
+                sad(xmm8, xmm4);
+                vpunpckldq(xmm5, xmm6);
+                vpunpckldq(xmm7, xmm8);
+                vpaddd(xmm0, xmm5);
+                vpaddd(xmm2, xmm7);
+            }
+            dec(n);
+            jg("loop");
 
-                mov(ref0, ptr[ref]);
-                mov(ref1, ptr[ref + 0x8]);
-                mov(ref2, ptr[ref + 0x10]);
-                mov(ref3, ptr[ref + 0x18]);
+            vpslldq(xmm1, xmm1, 4);
+            vpslldq(xmm3, xmm3, 4);
+            vpor(xmm0, xmm1);
+            vpor(xmm2, xmm3);
+            vmovdqa(xmm1, xmm0);
+            vmovdqa(xmm3, xmm2);
+            vpunpcklqdq(xmm0, xmm2);
+            vpunpckhqdq(xmm1, xmm3);
+            vpaddd(xmm0, xmm1);
+            if (sizeof(Sample) == 2)
+                vpsrld(xmm0, 2);
+            vmovdqu(ptr[sads], xmm0);
+        }
+        else/* if (widthBytes == 32 || widthBytes == 48 || widthBytes == 64)*/
+        {
+            auto &r0 = arg64(0);
+            auto &r1 = arg64(1);
+            auto &r2 = arg64(2);
+            auto &r3 = arg64(3);
+            auto &r4 = arg64(4);
+            auto &r5 = arg64(5);
 
-                vpxor(xmm0, xmm0);
-                vpxor(xmm1, xmm1);
-                vpxor(xmm2, xmm2);
-                vpxor(xmm3, xmm3);
+            auto &r6 = reg64(6);
+            auto &r7 = reg64(7);
+            auto &r8 = reg64(8);
 
-                sub(ref1, ref0);
-                sub(ref2, ref0);
-                sub(ref3, ref0);
+            mov(r6, r1); //stride_src
+            mov(r7, r3); // stride_ref
 
-                and (rect, 0xFF);
-                auto &n = rect;
+            and (rect, 0xFF);
+            auto &n = rect;
+
+            if (widthBytes <= 16)
+            {
                 shr(n, 1);
-
-                L("loop");
-                {
-                    vmovd(xmm4, ptr[src]);
-                    vmovd(xmm5, ptr[ref0]);
-                    vmovd(xmm6, ptr[ref1 + ref0]);
-                    vmovd(xmm7, ptr[ref2 + ref0]);
-                    vmovd(xmm8, ptr[ref3 + ref0]);
-                    lea(ref0, ptr[ref0 + ref_stride]);
-                    vpunpckldq(xmm4, ptr[src + src_stride]);
-                    vpunpckldq(xmm5, ptr[ref0]);
-                    vpunpckldq(xmm6, ptr[ref1 + ref0]);
-                    vpunpckldq(xmm7, ptr[ref2 + ref0]);
-                    vpunpckldq(xmm8, ptr[ref3 + ref0]);
-                    lea(ref0, ptr[ref0 + ref_stride]);
-                    lea(src, ptr[src + src_stride * 2]);
-                    sad(xmm5, xmm4);
-                    sad(xmm6, xmm4);
-                    sad(xmm7, xmm4);
-                    sad(xmm8, xmm4);
-                    vpunpckldq(xmm5, xmm6);
-                    vpunpckldq(xmm7, xmm8);
-                    vpaddd(xmm0, xmm5);
-                    vpaddd(xmm2, xmm7);
-                }
-                dec(n);
-                jg("loop");
-
-                vpslldq(xmm1, xmm1, 4);
-                vpslldq(xmm3, xmm3, 4);
-                vpor(xmm0, xmm1);
-                vpor(xmm2, xmm3);
-                vmovdqa(xmm1, xmm0);
-                vmovdqa(xmm3, xmm2);
-                vpunpcklqdq(xmm0, xmm2);
-                vpunpckhqdq(xmm1, xmm3);
-                vpaddd(xmm0, xmm1);
-                if (sizeof(Sample) == 2)
-                    vpsrld(xmm0, 2);
-                vmovdqu(ptr[sads], xmm0);
             }
-            else/* if (widthBytes == 32 || widthBytes == 48 || widthBytes == 64)*/
+
+            mov(r8, r4); // sad[]
+
+            mov(r1, ptr[ref + 0 * 8]);
+            mov(r3, ptr[ref + 2 * 8]);
+            mov(r4, ptr[ref + 3 * 8]);
+            mov(r2, ptr[ref + 1 * 8]);
+
+            vpxor(ymm5, ymm5);
+            vpxor(ymm6, ymm6);
+            vpxor(ymm7, ymm7);
+            vpxor(ymm8, ymm8);
+            if (sizeof(Sample) == 2) vpxor(ymm9, ymm9);
+
+            L("loop");
             {
-                auto &r0 = arg64(0);
-                auto &r1 = arg64(1);
-                auto &r2 = arg64(2);
-                auto &r3 = arg64(3);
-                auto &r4 = arg64(4);
-                auto &r5 = arg64(5);
-
-                auto &r6 = reg64(6);
-                auto &r7 = reg64(7);
-                auto &r8 = reg64(8);
-
-                mov(r6, r1); //stride_src
-                mov(r7, r3); // stride_ref
-
-                and (rect, 0xFF);
-                auto &n = rect;
-
                 if (widthBytes <= 16)
                 {
-                    shr(n, 1);
+                    vmovdqu(xmm0, ptr[r0]);
+                    vmovdqu(xmm1, ptr[r1]);
+                    vmovdqu(xmm2, ptr[r2]);
+                    vmovdqu(xmm3, ptr[r3]);
+                    vmovdqu(xmm4, ptr[r4]);
+
+                    vinserti128(ymm0, ymm0, ptr[r0 + r6], 1);
+                    vinserti128(ymm1, ymm1, ptr[r1 + r7], 1);
+                    vinserti128(ymm2, ymm2, ptr[r2 + r7], 1);
+                    vinserti128(ymm3, ymm3, ptr[r3 + r7], 1);
+                    vinserti128(ymm4, ymm4, ptr[r4 + r7], 1);
+
+                    if (widthBytes == 12)
+                    {
+                        vpand(ymm0, ptr[rip + mask_12_16]);
+                        vpand(ymm1, ptr[rip + mask_12_16]);
+                        vpand(ymm2, ptr[rip + mask_12_16]);
+                        vpand(ymm3, ptr[rip + mask_12_16]);
+                        vpand(ymm4, ptr[rip + mask_12_16]);
+                    }
+                }
+                else
+                {
+                    vmovdqu(ymm0, ptr[r0]);
+                    vmovdqu(ymm1, ptr[r1]);
+                    vmovdqu(ymm2, ptr[r2]);
+                    vmovdqu(ymm3, ptr[r3]);
+                    vmovdqu(ymm4, ptr[r4]);
                 }
 
-                mov(r8, r4); // sad[]
+                sad(ymm1, ymm0);
+                sad(ymm2, ymm0);
+                sad(ymm3, ymm0);
+                sad(ymm4, ymm0);
 
-                mov(r1, ptr[ref + 0 * 8]);
-                mov(r3, ptr[ref + 2 * 8]);
-                mov(r4, ptr[ref + 3 * 8]);
-                mov(r2, ptr[ref + 1 * 8]);
-
-                vpxor(ymm5, ymm5);
-                vpxor(ymm6, ymm6);
-                vpxor(ymm7, ymm7);
-                vpxor(ymm8, ymm8);
-                if (sizeof(Sample) == 2) vpxor(ymm9, ymm9);
-
-                L("loop");
+                if (widthBytes == 24)
                 {
-                    if (widthBytes <= 16)
+                    vpand(ymm1, ptr[rip + mask_24_32]);
+                    vpand(ymm2, ptr[rip + mask_24_32]);
+                    vpand(ymm3, ptr[rip + mask_24_32]);
+                    vpand(ymm4, ptr[rip + mask_24_32]);
+                }
+
+                vpaddd(ymm5, ymm1);
+                vpaddd(ymm6, ymm2);
+                vpaddd(ymm7, ymm3);
+                vpaddd(ymm8, ymm4);
+
+                for (int i = 1; i < (widthBytes + 31) / 32; ++i)
+                {
+                    vmovdqu(ymm0, ptr[r0 + 32 * i]);
+                    vmovdqu(ymm1, ptr[r1 + 32 * i]);
+                    vmovdqu(ymm2, ptr[r2 + 32 * i]);
+                    vmovdqu(ymm3, ptr[r3 + 32 * i]);
+                    vmovdqu(ymm4, ptr[r4 + 32 * i]);
+
+                    if (widthBytes == 48)
                     {
-                        vmovdqu(xmm0, ptr[r0]);
-                        vmovdqu(xmm1, ptr[r1]);
-                        vmovdqu(xmm2, ptr[r2]);
-                        vmovdqu(xmm3, ptr[r3]);
-                        vmovdqu(xmm4, ptr[r4]);
-
-                        vinserti128(ymm0, ymm0, ptr[r0 + r6], 1);
-                        vinserti128(ymm1, ymm1, ptr[r1 + r7], 1);
-                        vinserti128(ymm2, ymm2, ptr[r2 + r7], 1);
-                        vinserti128(ymm3, ymm3, ptr[r3 + r7], 1);
-                        vinserti128(ymm4, ymm4, ptr[r4 + r7], 1);
-
-                        if (widthBytes == 12)
-                        {
-                            vpand(ymm0, ptr[rip + mask_12_16]);
-                            vpand(ymm1, ptr[rip + mask_12_16]);
-                            vpand(ymm2, ptr[rip + mask_12_16]);
-                            vpand(ymm3, ptr[rip + mask_12_16]);
-                            vpand(ymm4, ptr[rip + mask_12_16]);
-                        }
+                        sad(xmm1, xmm0);
+                        sad(xmm2, xmm0);
+                        sad(xmm3, xmm0);
+                        sad(xmm4, xmm0);
                     }
                     else
                     {
-                        vmovdqu(ymm0, ptr[r0]);
-                        vmovdqu(ymm1, ptr[r1]);
-                        vmovdqu(ymm2, ptr[r2]);
-                        vmovdqu(ymm3, ptr[r3]);
-                        vmovdqu(ymm4, ptr[r4]);
-                    }
-
-                    sad(ymm1, ymm0);
-                    sad(ymm2, ymm0);
-                    sad(ymm3, ymm0);
-                    sad(ymm4, ymm0);
-
-                    if (widthBytes == 24)
-                    {
-                        vpand(ymm1, ptr[rip + mask_24_32]);
-                        vpand(ymm2, ptr[rip + mask_24_32]);
-                        vpand(ymm3, ptr[rip + mask_24_32]);
-                        vpand(ymm4, ptr[rip + mask_24_32]);
+                        sad(ymm1, ymm0);
+                        sad(ymm2, ymm0);
+                        sad(ymm3, ymm0);
+                        sad(ymm4, ymm0);
                     }
 
                     vpaddd(ymm5, ymm1);
                     vpaddd(ymm6, ymm2);
                     vpaddd(ymm7, ymm3);
                     vpaddd(ymm8, ymm4);
-
-                    for (int i = 1; i < (widthBytes + 31) / 32; ++i)
-                    {
-                        vmovdqu(ymm0, ptr[r0 + 32 * i]);
-                        vmovdqu(ymm1, ptr[r1 + 32 * i]);
-                        vmovdqu(ymm2, ptr[r2 + 32 * i]);
-                        vmovdqu(ymm3, ptr[r3 + 32 * i]);
-                        vmovdqu(ymm4, ptr[r4 + 32 * i]);
-
-                        if (widthBytes == 48)
-                        {
-                            sad(xmm1, xmm0);
-                            sad(xmm2, xmm0);
-                            sad(xmm3, xmm0);
-                            sad(xmm4, xmm0);
-                        }
-                        else
-                        {
-                            sad(ymm1, ymm0);
-                            sad(ymm2, ymm0);
-                            sad(ymm3, ymm0);
-                            sad(ymm4, ymm0);
-                        }
-
-                        vpaddd(ymm5, ymm1);
-                        vpaddd(ymm6, ymm2);
-                        vpaddd(ymm7, ymm3);
-                        vpaddd(ymm8, ymm4);
-                    }
-
-                    if (widthBytes <= 16)
-                    {
-                        lea(r0, ptr[r0 + r6 * 2]);
-                        lea(r1, ptr[r1 + r7 * 2]);
-                        lea(r2, ptr[r2 + r7 * 2]);
-                        lea(r3, ptr[r3 + r7 * 2]);
-                        lea(r4, ptr[r4 + r7 * 2]);
-                    }
-                    else
-                    {
-                        lea(r0, ptr[r0 + r6]);
-                        lea(r1, ptr[r1 + r7]);
-                        lea(r2, ptr[r2 + r7]);
-                        lea(r3, ptr[r3 + r7]);
-                        lea(r4, ptr[r4 + r7]);
-                    }
                 }
-                dec(n);
-                jg("loop");
 
-                vextracti128(xmm0, ymm5, 1);
-                vextracti128(xmm1, ymm6, 1);
-                vextracti128(xmm2, ymm7, 1);
-                vextracti128(xmm3, ymm8, 1);
-
-                vpaddd(xmm5, xmm0);
-                vpaddd(xmm6, xmm1);
-                vpaddd(xmm7, xmm2);
-                vpaddd(xmm8, xmm3);
-
-                //; two different ways of achieving the same thing - both seem to take similar number of cycles
-                if (0)
+                if (widthBytes <= 16)
                 {
-                    //	pshufd xm0, xm5, ORDER(0, 0, 0, 2)
-                    //	pshufd xm1, xm6, ORDER(0, 0, 0, 2)
-                    //	pshufd xm2, xm7, ORDER(0, 0, 0, 2)
-                    //	pshufd xm3, xm8, ORDER(0, 0, 0, 2)
-                    //	paddd xm5, xm0
-                    //	paddd xm6, xm1
-                    //	paddd xm7, xm2
-                    //	paddd xm8, xm3
-                    //	movd[r8 + 0 * 4], xm5
-                    //	movd[r8 + 1 * 4], xm6
-                    //	movd[r8 + 2 * 4], xm7
-                    //	movd[r8 + 3 * 4], xm8
+                    lea(r0, ptr[r0 + r6 * 2]);
+                    lea(r1, ptr[r1 + r7 * 2]);
+                    lea(r2, ptr[r2 + r7 * 2]);
+                    lea(r3, ptr[r3 + r7 * 2]);
+                    lea(r4, ptr[r4 + r7 * 2]);
                 }
                 else
                 {
-                    vpslldq(xmm6, 4);
-                    vpslldq(xmm8, 4);
-                    vpor(xmm5, xmm6);
-                    vpor(xmm7, xmm8);
-                    vmovdqa(xmm6, xmm5);
-                    vmovdqa(xmm8, xmm7);
-                    vpunpcklqdq(xmm5, xmm7);
-                    vpunpckhqdq(xmm6, xmm8);
-                    vpaddd(xmm5, xmm6);
-                    if (sizeof(Sample) == 2)
-                        vpsrld(xmm5, 2);
-                    vmovdqu(ptr[r8], xmm5);
+                    lea(r0, ptr[r0 + r6]);
+                    lea(r1, ptr[r1 + r7]);
+                    lea(r2, ptr[r2 + r7]);
+                    lea(r3, ptr[r3 + r7]);
+                    lea(r4, ptr[r4 + r7]);
                 }
             }
+            dec(n);
+            jg("loop");
+
+            vextracti128(xmm0, ymm5, 1);
+            vextracti128(xmm1, ymm6, 1);
+            vextracti128(xmm2, ymm7, 1);
+            vextracti128(xmm3, ymm8, 1);
+
+            vpaddd(xmm5, xmm0);
+            vpaddd(xmm6, xmm1);
+            vpaddd(xmm7, xmm2);
+            vpaddd(xmm8, xmm3);
+
+            //; two different ways of achieving the same thing - both seem to take similar number of cycles
+            if (0)
+            {
+                //	pshufd xm0, xm5, ORDER(0, 0, 0, 2)
+                //	pshufd xm1, xm6, ORDER(0, 0, 0, 2)
+                //	pshufd xm2, xm7, ORDER(0, 0, 0, 2)
+                //	pshufd xm3, xm8, ORDER(0, 0, 0, 2)
+                //	paddd xm5, xm0
+                //	paddd xm6, xm1
+                //	paddd xm7, xm2
+                //	paddd xm8, xm3
+                //	movd[r8 + 0 * 4], xm5
+                //	movd[r8 + 1 * 4], xm6
+                //	movd[r8 + 2 * 4], xm7
+                //	movd[r8 + 3 * 4], xm8
+            }
+            else
+            {
+                vpslldq(xmm6, 4);
+                vpslldq(xmm8, 4);
+                vpor(xmm5, xmm6);
+                vpor(xmm7, xmm8);
+                vmovdqa(xmm6, xmm5);
+                vmovdqa(xmm8, xmm7);
+                vpunpcklqdq(xmm5, xmm7);
+                vpunpckhqdq(xmm6, xmm8);
+                vpaddd(xmm5, xmm6);
+                if (sizeof(Sample) == 2)
+                    vpsrld(xmm5, 2);
+                vmovdqu(ptr[r8], xmm5);
+            }
         }
-    };
+    }
+};
 
 #endif
 
@@ -1096,15 +1096,15 @@ int mismatch_sad(void *boundRef, void *boundTest)
 
 
 static const int partitions[][2] = {
-        { 64, 64 },{ 64, 48 },{ 64, 32 },{ 64, 16 },
-        { 48, 64 },
-        { 32, 64 },{ 32, 32 },{ 32, 24 },{ 32, 16 },{ 32, 8 },
-        { 24, 32 },
-        { 16, 64 },{ 16, 32 },{ 16, 16 },{ 16, 12 },{ 16, 8 },{ 16, 4 },
-        { 12, 16 },
-        { 8, 32 },{ 8, 16 },{ 8, 8 },{ 8, 4 },
-        { 4, 8 },
-        { 0, 0 } };
+    { 64, 64 },{ 64, 48 },{ 64, 32 },{ 64, 16 },
+    { 48, 64 },
+    { 32, 64 },{ 32, 32 },{ 32, 24 },{ 32, 16 },{ 32, 8 },
+    { 24, 32 },
+    { 16, 64 },{ 16, 32 },{ 16, 16 },{ 16, 12 },{ 16, 8 },{ 16, 4 },
+    { 12, 16 },
+    { 8, 32 },{ 8, 16 },{ 8, 8 },{ 8, 4 },
+    { 4, 8 },
+    { 0, 0 } };
 
 
 template <typename Sample>
@@ -1148,31 +1148,31 @@ struct BoundsSadMultirefBase
 template <typename Sample>
 struct BoundSadMultiref :
     BoundsSadMultirefBase
+{
+    havoc_sad_multiref<Sample> *f;
+    HAVOC_ALIGN(32, Sample, src[128 * 128]);
+    HAVOC_ALIGN(32, Sample, ref[128 * 128]);
+    const Sample *ref_array[4];
+
+    int init(havoc_code code) override
     {
-        havoc_sad_multiref<Sample> *f;
-        HAVOC_ALIGN(32, Sample, src[128 * 128]);
-        HAVOC_ALIGN(32, Sample, ref[128 * 128]);
-        const Sample *ref_array[4];
+        this->bits = sizeof(Sample) == 2 ? 10 : 8;
 
-        int init(havoc_code code) override
+        auto s = this;
+
+        havoc_table_sad_multiref<Sample> table;
+        havoc_populate_sad_multiref(&table, code);
+        s->f = *havoc_get_sad_multiref(&table, s->ways, s->width, s->height);
+
+        auto &buffer = *reinterpret_cast<Jit::Buffer *>(code.implementation);
+        if (s->f && buffer.isa == HAVOC_C_REF)
         {
-            this->bits = sizeof(Sample) == 2 ? 10 : 8;
-
-            auto s = this;
-
-            havoc_table_sad_multiref<Sample> table;
-            havoc_populate_sad_multiref(&table, code);
-            s->f = *havoc_get_sad_multiref(&table, s->ways, s->width, s->height);
-
-            auto &buffer = *reinterpret_cast<Jit::Buffer *>(code.implementation);
-            if (s->f && buffer.isa == HAVOC_C_REF)
-            {
-                printf("\t%d bits %d-way %dx%d : ", s->bits, s->ways, s->width, s->height);
-            }
-
-            return !!s->f;
+            printf("\t%d bits %d-way %dx%d : ", s->bits, s->ways, s->width, s->height);
         }
-    };
+
+        return !!s->f;
+    }
+};
 
 
 int init_sad_multiref(void *p, havoc_code code)

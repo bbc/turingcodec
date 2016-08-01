@@ -237,6 +237,8 @@ struct turing_encoder
     {
         int rv = parseEncodeOptions(this->vm, settings.argc, settings.argv, std::cout, std::cerr, this->inputFilename, this->outputFilename);
 
+        this->verbosity = this->vm["verbosity"].as<int>();
+
         if (rv) throw std::runtime_error("parseEncodeOptions failed"); // review, error handling
 
         this->encoder.reset(new Encoder(this->vm));
@@ -247,14 +249,19 @@ struct turing_encoder
         return 1 + (this->vm.at("bit-depth").as<int>() > 8 || this->vm.at("internal-bit-depth").as<int>() > 8);
     }
 
+    size_t bytesPerInputSample() const
+    {
+        return 1 + (this->vm.at("bit-depth").as<int>() > 8);
+    }
+
     size_t bytesPerInputPicture() const
     {
-        return this->bytesPerSample() * this->encoder->pictureWidth * this->encoder->pictureHeight * 3 / 2;
+        return this->bytesPerInputSample() * this->encoder->pictureWidth * this->encoder->pictureHeight * 3 / 2;
     }
 
     size_t bytesPerInputFrame() const
     {
-        return this->bytesPerSample() * this->encoder->frameWidth * this->encoder->frameHeight * 3 / 2;
+        return this->bytesPerInputSample() * this->encoder->frameWidth * this->encoder->frameHeight * 3 / 2;
     }
 
     turing_bitstream* headers()
@@ -391,6 +398,7 @@ struct turing_encoder
     std::string inputFilename, outputFilename;
     std::vector<uint8_t> bitstream;
     turing_encoder_output output;
+    int verbosity;
 };
 
 
@@ -402,14 +410,16 @@ const char *turing_version()
 
 turing_encoder *turing_create_encoder(turing_encoder_settings settings)
 {
-    std::cout << "[turing] Project Turing HEVC Encoder Version ("<< turing_version() <<") - hash commit: " << gitDescribe() << "\n";
-    std::cout << "[turing] patents pending / copyright 2016 Project Turing contributors\n";
-
     turing_encoder *encoder = 0;
 
     try
     {
         encoder = new turing_encoder(settings);
+        if (encoder->verbosity)
+        {
+            std::cout << "[turing] Project Turing HEVC Encoder Version (" << turing_version() << ") - hash commit: " << gitDescribe() << "\n";
+            std::cout << "[turing] patents pending / copyright 2016 Project Turing contributors\n";
+        }
     }
     catch (std::exception &e)
     {
@@ -506,7 +516,8 @@ int encode(int argc, const char* const argv[])
         int nPicturesOutput = 0;
 
         {
-            encoder->encoder->printHeader(std::cout, encoder->inputFilename, encoder->outputFilename);
+            if (encoder->vm["verbosity"].as<int>())
+                encoder->encoder->printHeader(std::cout, encoder->inputFilename, encoder->outputFilename);
 
             if (encoder->vm["shot-change"].as<bool>())
             {
@@ -526,9 +537,9 @@ int encode(int argc, const char* const argv[])
                 ifs.read(reinterpret_cast<char *>(&buffer.front()), encoder->bytesPerInputFrame());
 
                 turing_picture picture;
-                picture.image[0].stride = encoder->encoder->frameWidth * encoder->bytesPerSample();
-                picture.image[1].stride = encoder->encoder->frameWidth * encoder->bytesPerSample() / 2;
-                picture.image[2].stride = encoder->encoder->frameWidth * encoder->bytesPerSample() / 2;
+                picture.image[0].stride = encoder->encoder->frameWidth * encoder->bytesPerInputSample();
+                picture.image[1].stride = encoder->encoder->frameWidth * encoder->bytesPerInputSample() / 2;
+                picture.image[2].stride = encoder->encoder->frameWidth * encoder->bytesPerInputSample() / 2;
                 picture.image[0].p = &buffer.front();
                 picture.image[1].p = picture.image[0].p + encoder->bytesPerInputFrame() / 6 * 4;
                 picture.image[2].p = picture.image[1].p + encoder->bytesPerInputFrame() / 6;
@@ -560,7 +571,8 @@ int encode(int argc, const char* const argv[])
                     break;
             }
 
-            encoder->encoder->printFooter(std::cout);
+            if (encoder->vm["verbosity"].as<int>())
+                encoder->encoder->printFooter(std::cout);
         }
     }
     catch (std::exception &e)

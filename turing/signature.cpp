@@ -17,7 +17,7 @@ Commercial support and intellectual property rights for
 the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
-// tests to detect changes in encoder functionality
+ // tests to detect changes in encoder functionality
 
 #include <fstream>
 #include <cassert>
@@ -112,12 +112,13 @@ int runEncode(std::string sourceFolder, std::string sourceFilename, std::string 
     {
         char const *args[] =
         {
-                "decode",
-                "-o", sourceYuvFilename.c_str(),
-                sourceBitstreamPath.c_str()
+            "decode",
+            "-o", sourceYuvFilename.c_str(),
+            sourceBitstreamPath.c_str()
         };
 
-        if (decode(array_size(args), args, cout, cerr))
+        std::ostringstream devNull;
+        if (decode(array_size(args), args, devNull, devNull))
         {
             cerr << "failed to decode " << sourceFilename << "\n";
             return -1;
@@ -129,6 +130,7 @@ int runEncode(std::string sourceFolder, std::string sourceFilename, std::string 
         std::vector<char const *> argv{
             "encode",
             "-o", "encoded.hevc",
+            "--verbosity", "0",
             "--dump-pictures", "encoded.yuv" };
 
         if (!options.empty())
@@ -154,12 +156,13 @@ int runEncode(std::string sourceFolder, std::string sourceFilename, std::string 
     {
         const char *args[] =
         {
-                "decode",
-                "-o", "decoded.yuv",
-                "encoded.hevc"
+            "decode",
+            "-o", "decoded.yuv",
+            "encoded.hevc"
         };
 
-        if (decode(array_size(args), args, cout, cerr))
+        std::ostringstream devNull;
+        if (decode(array_size(args), args, devNull, devNull))
         {
             cerr << "decode failed\n";
             return -1;
@@ -174,14 +177,16 @@ int runEncode(std::string sourceFolder, std::string sourceFilename, std::string 
         return -1;
     }
 
-    if (yuvMd5 != md5Enc)
+    if (yuvMd5 != md5Enc || streamMd5 != md5Stream)
     {
         // encoder output is different than expected
         yuvMd5 = md5Enc;
+        streamMd5 = md5Stream;
         return 1;
     }
 
     yuvMd5 = md5Enc;
+    streamMd5 = md5Stream;
     return 0;
 }
 
@@ -190,18 +195,18 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 {
     std::string yuvMd5;
 
-    std::string mainArgument(argv[1]);
-
-    if(mainArgument == "--help")
+    if (argc != 2)
     {
-        std::cout<<"Performs a signature test whereby the following steps are performed\n";
-        std::cout<<"\t1 Decode the video content in test/ \n";
-        std::cout<<"\t2 Re-encode the decoded sequence and check the MD5 sum\n";
-        std::exit(EXIT_SUCCESS);
+        std::cout << "usage: [command] signature <path-to-source-bitstreams>\n";
+        std::cout << "Performs a signature test whereby the following steps are performed\n";
+        std::cout << "\t1 Decode the video content in test/ \n";
+        std::cout << "\t2 Re-encode the decoded sequence and check the MD5 sum\n\n";
+        return 1;
     }
 
     struct Source
     {
+        const char *shortname;
         const char *filename;
         const char *options;
     };
@@ -210,44 +215,62 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
     {
         const char *streamMd5;
         const char *yuvMd5;
-        Source source;
+        const char *shortname;
         const char *options;
     };
 
-    static const Source caminandes{ "excerpt_(CC)_caminandes.com_640x360.hevc", "--input-res 640x360 --frame-rate 24 --frames 120" };
-    static const Source caminandes2{ "excerpt_(CC)_caminandes.com_640x360.hevc", "--input-res 640x360 --frame-rate 24 --frames 2" };
 
-    static const Test tests[] = {
-            { "57f48098", "978643d0", caminandes, "" },
+    static const Source sources[] = 
+    {
+        {"caminandes", "excerpt_(CC)_caminandes.com_640x360.hevc", "--input-res 640x360 --frame-rate 24 --frames 120" },
+        {"caminandes2", "excerpt_(CC)_caminandes.com_640x360.hevc", "--input-res 640x360 --frame-rate 24 --frames 2" },
+    };
+
+    static const Test tests[] =
+    {
+	{ "03e9f1b8", "7e5882e3", "caminandes2", "" },
+	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10" },
+	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --asm 0" },
+	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --threads 1" },
     };
 
     auto mismatchCount = 0;
 
     for (auto const &test : tests)
     {
-        std::string options = test.source.options;
+        // find source by its shortname
+        const Source *source = 0;
+        for (auto const &s : sources)
+        {
+            if (s.shortname == std::string(test.shortname))
+                source = &s;
+        }
+
+        std::string options = source->options;
         if (*test.options)
         {
             options += " ";
             options += test.options;
         }
 
-        std::string  streamMd5 = test.streamMd5;
-        std::string  yuvMd5 = test.yuvMd5;
+        std::string streamMd5 = test.streamMd5;
+        std::string yuvMd5 = test.yuvMd5;
 
-        int rv = runEncode(argv[1], test.source.filename, options.c_str(), streamMd5, yuvMd5, std::cout, std::cerr);
+        int rv = runEncode(argv[1], source->filename, options.c_str(), streamMd5, yuvMd5, std::cout, std::cerr);
+
+        cout << "{ \"" << streamMd5 << "\", \"" << yuvMd5 << "\", \"" << source->shortname << "\", \"" << test.options << "\" },\n";
 
         if (rv < 0)
         {
-            cerr << "signature test failed: \"" << test.source.filename << "\" " << test.source.options << " " << test.options << "\n";
+            cerr << "signature test failed\n";
             return rv;
         }
 
         if (rv > 0)
         {
-            cout << "signature test mismatch: \"" << test.source.filename << "\" " << test.source.options << " " << test.options << "\n";
-            cout << "YUV expected " << test.streamMd5 << " actual " << streamMd5 << "\n";
-            cout << "YUV expected " << test.yuvMd5 << " actual " << yuvMd5 << "\n";
+            cout << "signature test mismatch\n";
+            cout << "bitstream:  expected " << test.streamMd5 << " actual " << streamMd5 << "\n";
+            cout << "recon YUV:  expected " << test.yuvMd5 << " actual " << yuvMd5 << "\n";
             ++mismatchCount;
         }
     }

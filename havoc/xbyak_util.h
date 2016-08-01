@@ -2,10 +2,10 @@
 #define XBYAK_XBYAK_UTIL_H_
 
 /**
-	utility class and functions for Xbyak
-	Xbyak::util::Clock ; rdtsc timer
-	Xbyak::util::Cpu ; detect CPU
-	@note this header is UNDER CONSTRUCTION!
+    utility class and functions for Xbyak
+    Xbyak::util::Clock ; rdtsc timer
+    Xbyak::util::Cpu ; detect CPU
+    @note this header is UNDER CONSTRUCTION!
  */
 #include "xbyak.h"
 
@@ -17,15 +17,15 @@ static inline __declspec(naked) void __cpuid(int[4], int)
         push	ebx
         push	esi
         mov		eax, dword ptr [esp + 4 * 2 + 8] // eaxIn
-           		                cpuid
-           		                mov		esi, dword ptr [esp + 4 * 2 + 4] // data
-           		                   		                mov		dword ptr [esi], eax
-           		                   		                mov		dword ptr [esi + 4], ebx
-           		                   		                mov		dword ptr [esi + 8], ecx
-           		                   		                mov		dword ptr [esi + 12], edx
-           		                   		                pop		esi
-           		                   		                pop		ebx
-           		                   		                ret
+                                cpuid
+                                mov		esi, dword ptr [esp + 4 * 2 + 4] // data
+                                                        mov		dword ptr [esi], eax
+                                                        mov		dword ptr [esi + 4], ebx
+                                                        mov		dword ptr [esi + 8], ecx
+                                                        mov		dword ptr [esi + 12], edx
+                                                        pop		esi
+                                                        pop		ebx
+                                                        ret
     }
 }
 #else
@@ -55,7 +55,7 @@ extern "C" unsigned __int64 __xgetbv(int);
 namespace Xbyak { namespace util {
 
     /**
-	CPU detection class
+    CPU detection class
      */
     class Cpu {
         uint64 type_;
@@ -341,7 +341,7 @@ namespace Xbyak { namespace util {
         }
         size_t size() const { return n_; }
         /*
-		get tbl[pos, pos + num)
+        get tbl[pos, pos + num)
          */
         Pack sub(size_t pos, size_t num = size_t(-1)) const
         {
@@ -394,20 +394,20 @@ namespace Xbyak { namespace util {
         const Pack& p;
         const Pack& t;
         /*
-		make stack frame
-		@param sf [in] this
-		@param pNum [in] num of function parameter(0 <= pNum <= 4)
-		@param tNum [in] num of temporary register(0 <= tNum <= 10, with UseRCX, UseRDX)
-		@param stackSizeByte [in] local stack size
-		@param makeEpilog [in] automatically call close() if true
+        make stack frame
+        @param sf [in] this
+        @param pNum [in] num of function parameter(0 <= pNum <= 4)
+        @param tNum [in] num of temporary register(0 <= tNum <= 10, with UseRCX, UseRDX)
+        @param stackSizeByte [in] local stack size
+        @param makeEpilog [in] automatically call close() if true
 
-		you can use
-		rax
-		gp0, ..., gp(pNum - 1)
-		gt0, ..., gt(tNum-1)
-		rcx if tNum & UseRCX
-		rdx if tNum & UseRDX
-		rsp[0..stackSizeByte - 1]
+        you can use
+        rax
+        gp0, ..., gp(pNum - 1)
+        gt0, ..., gt(tNum-1)
+        rcx if tNum & UseRCX
+        rdx if tNum & UseRDX
+        rsp[0..stackSizeByte - 1]
          */
         StackFrame(Xbyak::CodeGenerator *code, int pNum, int tNum = 0, int stackSizeByte = 0, bool makeEpilog = true)
         : code_(code)
@@ -458,8 +458,8 @@ namespace Xbyak { namespace util {
             t_.init(tTbl_, tNum_);
         }
         /*
-		make epilog manually
-		@param callRet [in] call ret() if true
+        make epilog manually
+        @param callRet [in] call ret() if true
          */
         void close(bool callRet = true)
         {

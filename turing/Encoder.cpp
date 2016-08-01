@@ -301,7 +301,7 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
 
 void Encoder::printFooter(std::ostream &cout)
 {
-    std::cout << "\n";
+    cout << "\n";
     double frameRate = vm.at("frame-rate").as<double>();
     double bitrate = (double)(this->byteCount * 8) / (double)this->frameCount * frameRate / 1000.0;
     cout << "Encoded " << this->frameCount << (this->frameCount == 1 ? " picture" : " pictures") << " to " << bitrate << " (kbps)\n";
