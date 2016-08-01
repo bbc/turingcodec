@@ -662,7 +662,7 @@ struct Encode<coding_quadtree>
 
 #ifdef _DEBUG
         // review: is it useful to surface these as a hidden command-line option?
-        bool constexpr checkDistortion = true;
+        bool constexpr checkDistortion = false; // Review fix this for 10-bit content
         bool constexpr checkRate = true;
 #else
         bool constexpr checkDistortion = false;

@@ -961,7 +961,7 @@ public :
         bool allowMergeLeft = (rx != 0);
 
         //if sao_slow_mode is used, SAO decisions are applied after deblocking. Deblocking is applied here:
-        if (stateEncode->saoslow && !h[slice_deblocking_filter_disabled_flag()])
+        if (stateEncode->saoslow)
         {
             int xCtb = rx << h[CtbLog2SizeY()];
             int yCtb = ry << h[CtbLog2SizeY()];

@@ -179,6 +179,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
                 ("no-esd", po::bool_switch(), "disable early skip detection")
                 ("no-cfm", po::bool_switch(), "disable coding flag mode")
                 ("no-met", po::bool_switch(), "disable multiple early termination")
+                ("no-sao-slow-mode", po::bool_switch(), "disable slow sao mode")
                 ("no-rdoq", po::bool_switch(), "disable rate distortion optimised quantisation")
                 ("no-rcudepth", po::bool_switch(), "disable rcu-depth algorithm")
                 ("no-sdh", po::bool_switch(), "disable sign data hiding")
@@ -399,7 +400,7 @@ struct turing_encoder
 
 const char *turing_version()
 {
-    return "1.0";
+    return "1.01";
 }
 
 

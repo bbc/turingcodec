@@ -695,7 +695,7 @@ void Encoder::setShotChangeList(std::vector<int>& shotChangeList)
 
 bool Encoder::writeVui()
 {
-    // Check whether one of the VUI parameters is set, so that VUI writing can be happen
+    // Check whether one of the VUI parameters is set, so that VUI writing can happen
     if (this->vm.count("sar"))                      return true;
     if (this->vm.count("display-window"))           return true;
     if (this->vm.count("overscan"))                 return true;
@@ -705,7 +705,7 @@ bool Encoder::writeVui()
     if (this->vm.count("transfer-characteristics")) return true;
     if (this->vm.count("colour-matrix"))            return true;
     if (this->vm.count("chroma-loc"))               return true;
-    if (this->vm["field-coding"].as<bool>())            return true;
+    if (this->vm["field-coding"].as<bool>())        return true;
     return false;
 }
 
