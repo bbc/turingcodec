@@ -756,7 +756,7 @@ void Encoder::setupVui(H &h)
     bool videoSignalTypeInfoFlag = this->vm.count("video-format") ||
             this->vm.count("range") ||
             this->vm.count("colourprim") ||
-            this->vm.count("transfer_characteristics") ||
+            this->vm.count("transfer-characteristics") ||
             this->vm.count("colour-matrix");
     if (videoSignalTypeInfoFlag)
     {
@@ -781,7 +781,7 @@ void Encoder::setupVui(H &h)
             h[video_full_range_flag()] = 0;
 
         bool colourDescriptionPresentFlag = this->vm.count("colourprim") ||
-                this->vm.count("transfer_characteristics") ||
+                this->vm.count("transfer-characteristics") ||
                 this->vm.count("colour-matrix");
         if (colourDescriptionPresentFlag)
         {
