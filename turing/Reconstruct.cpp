@@ -74,51 +74,18 @@ struct ReconstructInter<transform_tree>
             ++stateCodedData->transformTree.p;
         }
 
-        bool checkRQT = stateEncode->rqt && (tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
-                tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
-                tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
-        Candidate<Sample> *candidate = h;
-        if (candidate->noresidual == 1)
-            checkRQT = false;
-
-        if (!checkRQT)
-        {
-            stateCodedData->transformTree.init(cqt->log2CbSize - tt.log2TrafoSize, tt.blkIdx);
-            if (tt.log2TrafoSize > h[MaxTbLog2SizeY()])
-            {
-                stateCodedData->transformTree.word0().split_transform_flag = 1;
-            }
-            else if (h[IntraSplitFlag()] == 1 && tt.trafoDepth == 0)
-            {
-                stateCodedData->transformTree.word0().split_transform_flag = 1;
-            }
-            else if (h[interSplitFlag()] == 1)
-            {
-                stateCodedData->transformTree.word0().split_transform_flag = 1;
-            }
-            else
-            {
-                stateCodedData->transformTree.word0().split_transform_flag = 0;
-            }
-        }
-        else if (tt.trafoDepth == 0)
-        {
-            int tf = stateCodedData->transformTree.word0().split_transform_flag;
-            stateCodedData->transformTree.init(cqt->log2CbSize - tt.log2TrafoSize, tt.blkIdx);
-            stateCodedData->transformTree.word0().split_transform_flag = tf;
-        }
-        else
-        {
-            stateCodedData->transformTree.init(cqt->log2CbSize - tt.log2TrafoSize, tt.blkIdx);
-            stateCodedData->transformTree.word0().split_transform_flag = 0;
-        }
-
-
-        //stateCodedData->transformTree.word0().split_transform_flag = 1;
 
         stateCodedData->transformTreeAncestry[tt.trafoDepth] = stateCodedData->transformTree;
+        bool inferTransformDepth = !(tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
+            tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
+            tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
 
-        h[split_transform_flag()] = infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h);
+        Candidate<Sample> *candidate = h;
+        stateCodedData->transformTree.init(cqt->log2CbSize - tt.log2TrafoSize, tt.blkIdx);
+        stateCodedData->transformTreeAncestry[tt.trafoDepth] = stateCodedData->transformTree;
+        stateCodedData->transformTree.word0().split_transform_flag = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : ((tt.trafoDepth < candidate->rqtdepth) && !candidate->noresidual);
+        h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : ((tt.trafoDepth < candidate->rqtdepth) && !candidate->noresidual);
+
         Syntax<transform_tree>::go(tt, h);
 
         {
@@ -780,7 +747,7 @@ template <class Cbf> struct ReconstructInterBlock
         {
             cbf = 0;
         }
-        auto recSamplesPiece = candidate->stateReconstructionCache->components[rc.cIdx].get(stateEncodeSubstream->interPieces[rc.cIdx][1]);
+        auto recSamplesPiece = candidate->stateReconstructionCache->components[rc.cIdx].get(stateEncodeSubstream->interPieces[rc.cIdx][1 + candidate->rqtdepth]);
         auto recSamples = recSamplesPiece.offset((rc.x0 - cqt->x0) >> (rc.cIdx ? 1 : 0), (rc.y0 - cqt->y0) >> (rc.cIdx ? 1 : 0));
         auto recSamplesBackup = recSamples;
 
@@ -1222,220 +1189,123 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
 
     auto r = h.template change<ReconstructInter<void>>();
 
-    //RQT happens here:
-    bool checkRQT = stateEncode->rqt && (tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
-            tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
-            tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
-
     Candidate<Sample> *candidate = h;
-    if (candidate->noresidual == 1)
-        checkRQT = false;
+    bool inferTransformDepth = !(tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
+        tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
+        tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
+    
+    bool checkRQT = !inferTransformDepth && !candidate->noresidual;
+
     if (!checkRQT)
     {
-        auto contextsCostBefore = *static_cast<ContextsAndCost *>(h);
+        candidate->rqtdepth = 0;
         r(tt);
-        *static_cast<ContextsAndCost *>(h) = contextsCostBefore;
     }
     else
     {
-        auto m = h.template change<EstimateRate<void>>();
-        Picture<Sample> backupReconstructed(64, 64, 1, 0, 0, 32);
-        Picture<Sample> backupPredicted(64, 64, 1, 0, 0, 32);
-        CodedData::Type* backupCodedDataBefore = NULL;
-        CodedData::Type* backupCodedDataAfter = NULL;
-
+        StateCodedData *stateCodedData = h;
         Candidate<Sample> *candidate = h;
-        CodedData::Type *orgsrc = stateCodedData->codedCu.p;
-        CodedData::Type *orgsrcend = stateCodedData->codedDataAfter;
-        CodedData::Type *srcB = orgsrc;
-        CodedData::Type *srcBEnd = orgsrcend;
-        int index = 0;
-        while (srcB != srcBEnd)
-        {
-            index++; *srcB++;
-        }
-        backupCodedDataBefore = new CodedData::Type[index];
-
+        CodedData::Type backupCodedData[3 * (8 * 8 * 8 + 64 * 64) / 2];
+        int lengthBackup = 0, distscale = 4;
         int32_t backupssd[6];
-        //backup contexts and costs:
-        auto contextsCostBefore = *static_cast<ContextsAndCost *>(h);
-        // backup CodedData:
+        bool cbfZero = false;
+        auto m = h.template change<EstimateRate<void>>();
 
-        StateCodedData backupBefore = *stateCodedData;
+        auto backupContextsAndCostBefore = *static_cast<ContextsAndCost *>(candidate);
+        auto backupCuWord0Before = candidate->codedCu.word0().raw;
 
-        srcB = orgsrc;
-        srcBEnd = orgsrcend;
-        CodedData::Type* backupCodedDataBP = backupCodedDataBefore;
-        while (srcB != srcBEnd)
-        {
-            *backupCodedDataBP++ = *srcB++;
-        }
-
-        //Set transform split flag to 1:
-
-        stateCodedData->transformTree.word0().split_transform_flag = 1;
-        //descend transform tree to perform decisions and compute residuals:
+        //descend transform tree to perform decisions:
+        candidate->rqtdepth = 1;
         r(tt);
-
-        StateCodedData backup1 = *stateCodedData;
-        CodedData::Type *orgsrcAfter = stateCodedData->codedCu.p;//codedDataBefore;
-        CodedData::Type *orgsrcendAfter = stateCodedData->residual.p;//codedDataAfter;
-        CodedData::Type *src = orgsrcAfter;
-        CodedData::Type *srcEnd = orgsrcendAfter;
-        index = 0;
-        while (src != srcEnd)
+        auto backupCuWord0One = candidate->codedCu.word0().raw;
+        if (!r[rqt_root_cbf()])
+            cbfZero = true;
+        if (!cbfZero)
         {
-            index++; *src++;
-        }
-        backupCodedDataAfter = new CodedData::Type[index];
-        src = orgsrcAfter;
-        srcEnd = orgsrcendAfter;
-        CodedData::Type* backupCodedDataP = backupCodedDataAfter;
-        while (src != srcEnd)
-        {
-            *backupCodedDataP++ = *src++;
-        }
-
-
-        // compute rates:
-        *static_cast<ContextsAndCost *>(h) = contextsCostBefore;
-        if (m[rqt_root_cbf()]) m(tt);
-        auto contextsCostSplitFlag1 = *static_cast<ContextsAndCost *>(h);
-        contextsCostSplitFlag1.lambdaDistortion += (stateEncodeSubstream->ssd[0] + stateEncodeSubstream->ssd[1] + stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
-        StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
-
-        //backup ssds, prediction, reconstruction and codedData when tf=1:
-        backupssd[0] = stateEncodeSubstream->ssd[0];
-        backupssd[1] = stateEncodeSubstream->ssd[1];
-        backupssd[2] = stateEncodeSubstream->ssd[2];
-        backupssd[3] = stateEncodeSubstream->ssdPrediction[0];
-        backupssd[4] = stateEncodeSubstream->ssdPrediction[1];
-        backupssd[5] = stateEncodeSubstream->ssdPrediction[2];
-
-        for (int cIdx = 0; cIdx < 3; ++cIdx)
-        {
-            int const log2TrafoSize = tt.log2TrafoSize - (cIdx ? 1 : 0);
-            int const nTbS = 1 << log2TrafoSize;
-
-            auto recSamplesP = candidate->stateReconstructionCache->components[cIdx].get(stateEncodeSubstream->interPieces[cIdx][1]);
-            auto backupRecP = backupReconstructed(0, 0, cIdx);
-            for (int y = 0; y < nTbS; ++y)
             {
-                for (int x = 0; x < nTbS; ++x)
+                CodedData::Type *src = stateCodedData->codedPu.p;
+                CodedData::Type *srcend = stateCodedData->codedDataAfter;
+                CodedData::Type *dst = backupCodedData;
+                while (src != srcend)
                 {
-                    backupRecP(x, y) = recSamplesP(x, y);
+                    *dst++ = *src++;
+                    lengthBackup++;
                 }
             }
-        }
-        for (int cIdx = 0; cIdx < 3; ++cIdx)
-        {
-            int const log2TrafoSize = tt.log2TrafoSize - (cIdx ? 1 : 0);
-            int const nTbS = 1 << log2TrafoSize;
+            stateCodedData->transformTree.p = stateCodedData->codedPu.p;
+            stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
 
-            auto predSamplesP = candidate->stateReconstructionCache->components[cIdx].get(stateEncodeSubstream->interPieces[cIdx][0]);
-            auto backupPredP = backupPredicted(0, 0, cIdx);
-            for (int y = 0; y < nTbS; ++y)
+            //descend transform tree to measure rate:
+            if (m[rqt_root_cbf()]) 
+                m(tt);
+
+            auto contextsAndCostOne = *static_cast<ContextsAndCost *>(candidate);
+            contextsAndCostOne.lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
+        
+            // restore everything as it was before trying with depth = 1
+            *static_cast<ContextsAndCost *>(candidate) = backupContextsAndCostBefore;
+            candidate->codedCu.word0().raw = backupCuWord0Before;
+
+            backupssd[0] = stateEncodeSubstream->ssd[0];
+            backupssd[1] = stateEncodeSubstream->ssd[1];
+            backupssd[2] = stateEncodeSubstream->ssd[2];
+            backupssd[3] = stateEncodeSubstream->ssdPrediction[0];
+            backupssd[4] = stateEncodeSubstream->ssdPrediction[1];
+            backupssd[5] = stateEncodeSubstream->ssdPrediction[2];
+
+            stateEncodeSubstream->ssd[0] = 0;
+            stateEncodeSubstream->ssd[1] = 0;
+            stateEncodeSubstream->ssd[2] = 0;
+            stateEncodeSubstream->ssdPrediction[0] = 0;
+            stateEncodeSubstream->ssdPrediction[1] = 0;
+            stateEncodeSubstream->ssdPrediction[2] = 0;
+
+            stateCodedData->transformTree.p = stateCodedData->codedPu.p;
+            stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
+
+            candidate->rqtdepth = 0;
+            r(tt);
+            auto backupCuWord0Zero = candidate->codedCu.word0().raw;
+
+            stateCodedData->transformTree.p = stateCodedData->codedPu.p;
+            stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
+
+            if (m[rqt_root_cbf()])
+                m(tt);
+            candidate->lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
+        
+            if (cbfZero || candidate->cost2() < contextsAndCostOne.cost2())
             {
-                for (int x = 0; x < nTbS; ++x)
-                {
-                    backupPredP(x, y) = predSamplesP(x, y);
-                }
+                candidate->codedCu.word0().raw = backupCuWord0Zero;
+                candidate->rqtdepth = 0;
             }
-        }
-
-        //Restore contexts, cbfs and coded data:
-        stateEncodeSubstream->ssd[0] = 0;
-        stateEncodeSubstream->ssd[1] = 0;
-        stateEncodeSubstream->ssd[2] = 0;
-        stateEncodeSubstream->ssdPrediction[0] = 0;
-        stateEncodeSubstream->ssdPrediction[1] = 0;
-        stateEncodeSubstream->ssdPrediction[2] = 0;
-
-        *stateCodedData = backupBefore;
-        srcB = orgsrc;
-        srcBEnd = orgsrcend;
-        backupCodedDataBP = backupCodedDataBefore;
-        while (srcB != srcBEnd)
-        {
-            *srcB++ = *backupCodedDataBP++;
-        }
-
-        *static_cast<ContextsAndCost *>(h) = contextsCostBefore;
-
-        //Set tf to 0:
-        stateCodedData->transformTree.word0().split_transform_flag = 0;
-        r(tt);
-        StateCodedData backup0 = *stateCodedData;
-        *static_cast<ContextsAndCost *>(h) = contextsCostBefore;
-
-        //*stateCodedData = backupBefore;
-        if (m[rqt_root_cbf()]) m(tt);
-        auto contextsCostSplitFlag0 = *static_cast<ContextsAndCost *>(h);
-        contextsCostSplitFlag0.lambdaDistortion += (stateEncodeSubstream->ssd[0] + stateEncodeSubstream->ssd[1] + stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
-        //auto const backupTuWord0 = stateCodedData->transformTree.word0();
-        if (contextsCostSplitFlag1.cost2() < contextsCostSplitFlag0.cost2())
-        {
-            // split flag 1 is cheaper
-            stateEncodeSubstream->ssd[0] = backupssd[0];
-            stateEncodeSubstream->ssd[1] = backupssd[1];
-            stateEncodeSubstream->ssd[2] = backupssd[2];
-            stateEncodeSubstream->ssdPrediction[0] = backupssd[3];
-            stateEncodeSubstream->ssdPrediction[1] = backupssd[4];
-            stateEncodeSubstream->ssdPrediction[2] = backupssd[5];
-
-            for (int cIdx = 0; cIdx < 3; ++cIdx)
+            else
             {
-                int const log2TrafoSize = tt.log2TrafoSize - (cIdx ? 1 : 0);
-                int const nTbS = 1 << log2TrafoSize;
-
-                auto recSamplesP = candidate->stateReconstructionCache->components[cIdx].get(stateEncodeSubstream->interPieces[cIdx][1]);
-                auto backupRecP = backupReconstructed(0, 0, cIdx);
-
-                for (int y = 0; y < nTbS; ++y)
+                candidate->codedCu.word0().raw = backupCuWord0One;
                 {
-                    for (int x = 0; x < nTbS; ++x)
+                    CodedData::Type *dst = stateCodedData->codedPu.p;
+                    CodedData::Type *src = backupCodedData;
+                    for (int i = 0; i < lengthBackup; i++)
                     {
-                        recSamplesP(x, y) = backupRecP(x, y);
+                        *dst++ = *src++;
                     }
                 }
-            }
-
-            for (int cIdx = 0; cIdx < 3; ++cIdx)
-            {
-                int const log2TrafoSize = tt.log2TrafoSize - (cIdx ? 1 : 0);
-                int const nTbS = 1 << log2TrafoSize;
-
-                auto predSamplesP = candidate->stateReconstructionCache->components[cIdx].get(stateEncodeSubstream->interPieces[cIdx][0]);
-                auto backupPredP = backupPredicted(0, 0, cIdx);
-
-                for (int y = 0; y < nTbS; ++y)
-                {
-                    for (int x = 0; x < nTbS; ++x)
-                    {
-                        predSamplesP(x, y) = backupPredP(x, y);
-                    }
-                }
-            }
-            *stateCodedData = backup1;
-            CodedData::Type *src = orgsrcAfter;
-            CodedData::Type *srcEnd = orgsrcendAfter;
-            CodedData::Type* backupCodedDataP = backupCodedDataAfter;
-            while (src != srcEnd)
-            {
-                *src++ = *backupCodedDataP++;
+                candidate->rqtdepth = 1;
+                stateEncodeSubstream->ssd[0] = backupssd[0];
+                stateEncodeSubstream->ssd[1] = backupssd[1];
+                stateEncodeSubstream->ssd[2] = backupssd[2];
+                stateEncodeSubstream->ssdPrediction[0] = backupssd[3];
+                stateEncodeSubstream->ssdPrediction[1] = backupssd[4];
+                stateEncodeSubstream->ssdPrediction[2] = backupssd[5];
             }
         }
         else
         {
-            *stateCodedData = backup0;
+            candidate->codedCu.word0().raw = backupCuWord0One;
+            candidate->rqtdepth = 0;
         }
-        *static_cast<ContextsAndCost *>(h) = contextsCostBefore;
-        delete[] backupCodedDataBefore;
-        backupCodedDataBefore = NULL;
-        delete[] backupCodedDataAfter;
-        backupCodedDataAfter = NULL;
+        *static_cast<ContextsAndCost *>(candidate) = backupContextsAndCostBefore;
     }
-
     return stateEncodeSubstream->ssd[0] + stateEncodeSubstream->ssd[1] + stateEncodeSubstream->ssd[2];
 }
 
@@ -1444,9 +1314,9 @@ template <> struct ReconstructInter<Element<split_transform_flag, ae>>
 {
     template <class H> static void go(Element<split_transform_flag, ae> e, H &h)
     {
-        StateCodedData *stateCodedData = h;
-        h[e.v] = stateCodedData->transformTree.word0().split_transform_flag;
-        Reconstruct<Element<split_transform_flag, ae>>::go(e, h);
+        //StateCodedData *stateCodedData = h;
+        //h[e.v] = stateCodedData->transformTree.word0().split_transform_flag;
+        //Reconstruct<Element<split_transform_flag, ae>>::go(e, h);
     }
 };
 

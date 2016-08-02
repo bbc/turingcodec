@@ -854,7 +854,9 @@ void searchInterCuPartMode(H &h, coding_quadtree const &cqt, int partMode, Candi
     stateEncodeSubstream->interPieces[0][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].allocateBlock(cqt.log2CbSize, zY);
     stateEncodeSubstream->interPieces[1][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].allocateBlock(cqt.log2CbSize - 1, zC);
     stateEncodeSubstream->interPieces[2][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].allocateBlock(cqt.log2CbSize - 1, zC);
-
+    stateEncodeSubstream->interPieces[0][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].allocateBlock(cqt.log2CbSize, zY);
+    stateEncodeSubstream->interPieces[1][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].allocateBlock(cqt.log2CbSize - 1, zC);
+    stateEncodeSubstream->interPieces[2][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].allocateBlock(cqt.log2CbSize - 1, zC);
     if (partMode < 0)
     {
         contender->StateCodedData::codedCu.word1().merge[stateEncodeSubstream->partIdx] = partMode + h[MaxNumMergeCand()] + 1;
@@ -2209,16 +2211,15 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         stateEncodeSubstream->ssdPrediction[0] = 0;
         stateEncodeSubstream->ssdPrediction[1] = 0;
         stateEncodeSubstream->ssdPrediction[2] = 0;
-
         // encode transform tree, measure distortion (SSD) and create corresponding CodedData
         auto const ssd = reconstructInter(tt, h);
+        int rqtdepth = candidate->rqtdepth;
         candidate->lambdaDistortion += ssd * getReciprocalLambda(h);
         StateCodedData codedDataAfter = *stateCodedData;
 
         // rewind CodedData pointers to start of CU in preparation for measuring rate
         *stateCodedData = codedDataBefore;
         stateCodedData->partIdx = 0;
-
         // review: sort out how snake is positioned / moves through this function
         // cu_skip_flag needs top/left CU neighbours
         // at entry to this function, snake is bottom/right
@@ -2342,14 +2343,38 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         }
 
         candidate->snake = snakePointerBefore;
+        int keep3, flush1, flush2;
+        if (keep == 0)
+        {
+            keep3 = 0;
+            flush1 = 1;
+            flush2 = 2;
 
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][1 - keep]);
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][1 - keep]);
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][1 - keep]);
+        }
+        else if(rqtdepth == 0)
+        {
+            flush1 = 0;
+            keep3 = 1;
+            flush2 = 2;
+        }
+        else if (rqtdepth == 1)
+        {
+            flush1 = 0;
+            flush2 = 1;
+            keep3 = 2;
+        }
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][flush1]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][flush1]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][flush1]);
 
-        candidate->appendPiece(0, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize, 0), uint16_t((*cqt).log2CbSize), stateEncodeSubstream->interPieces[0][keep].i);
-        candidate->appendPiece(1, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 1), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[1][keep].i);
-        candidate->appendPiece(2, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 2), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[2][keep].i);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][flush2]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][flush2]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][flush2]);
+
+
+        candidate->appendPiece(0, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize, 0), uint16_t((*cqt).log2CbSize), stateEncodeSubstream->interPieces[0][keep3].i);
+        candidate->appendPiece(1, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 1), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[1][keep3].i);
+        candidate->appendPiece(2, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 2), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[2][keep3].i);
     }
 };
 

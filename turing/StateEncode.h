@@ -358,6 +358,7 @@ public:
         int check;
         int rcudepthstatus;
         int noresidual;
+        int rqtdepth;
 
         template <class T>
         Candidate<Sample> &operator<<(const T& t)
@@ -498,7 +499,7 @@ struct StateEncodeSubstream :
         // represents state before coding the current CU
         Candidate<Sample> *originalCandidate;
 
-        typename ReconstructionCache<Sample>::Piece interPieces[3/* cIdx */][2 /* cbf */];
+        typename ReconstructionCache<Sample>::Piece interPieces[3/* cIdx */][3 /* cbf */];
 
         IntraReferenceSamples<Sample> filtered[3];
         IntraReferenceSamples<Sample> unfiltered[3];

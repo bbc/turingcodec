@@ -1097,8 +1097,13 @@ struct Write<transform_tree>
         {
             ASSERT(stateCodedData->transformTreeAncestry[tt.trafoDepth - 1].word0().split_transform_flag);
         }
-
-        h[split_transform_flag()] = infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h);
+        bool inferTransformDepth = !((h[current(CuPredMode(tt.x0, tt.y0))] != MODE_INTRA) &&
+            tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
+            tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
+            tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
+        int split = stateCodedData->transformTree.word0().split_transform_flag;
+        
+        h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : split;
 
         //auto p = stateCodedData->transformTree.p;
         Syntax<transform_tree>::go(tt, h);
