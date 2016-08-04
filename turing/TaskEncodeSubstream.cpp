@@ -114,6 +114,7 @@ bool TaskEncodeSubstream<Sample>::run()
 
     StateWavefront *stateWavefront = h;
     StateEncode *stateEncode = h;
+    InputQueue *inputQueue = h;
     ThreadPool *threadPool = h;
 
     if(h[cu_qp_delta_enabled_flag()] && (h[CtbAddrInRs()] % h[PicWidthInCtbsY()] == 0))
@@ -123,12 +124,17 @@ bool TaskEncodeSubstream<Sample>::run()
 
     if(stateEncode->useRateControl && h[CtbAddrInRs()] == 0)
     {
+        bool isShotChange = this->stateEncodePicture->docket->isShotChange;
         int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
         int sopSize = this->stateEncodePicture->docket->currentGopSize;
         if(sopSize > 1)
             stateEncode->rateControlEngine->setSopSize(sopSize);
         if(h[slice_type()] == I)
         {
+            if(isShotChange)
+            {
+                stateEncode->rateControlEngine->reset();
+            }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
             stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo);
             stateEncode->rateControlEngine->initNewSop();

@@ -80,6 +80,7 @@ struct Encoder
     size_t byteCount = 0;
     double frameRate;
     std::vector<int> m_shotChangeList;
+    Level bitstreamLevel;
 
     // Check whether one of the VUI parameters is set, so that VUI writing can be happen
     bool writeVui();
@@ -113,6 +114,9 @@ struct Encoder
 
     template <class H>
     void setupVui(H &h);
+
+    template <class H>
+    void setupHrd(H &h);
 
     // returns parsed value of boolean settings of form "--no-thing" / "--thing"
     bool booleanSwitchSetting(std::string name, bool defaultValue);

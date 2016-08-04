@@ -51,12 +51,79 @@ For more information, contact us at info @ turingcodec.org.
 #define MAX_NUM_LEVELS     6
 #define CTU_SMOOT_WINDOW   4
 #define BISECTION_MAX_IT   40
-#define SOP_ADAPTIVE       1
+#define SOP_ADAPTIVE       0
 #define BETA_INTRA_MAD     1.2517
 
 using namespace std;
 
 struct EstimateIntraComplexity;
+
+class CpbInfo
+{
+private:
+    int m_cpbStatus;
+    int m_cpbSize;
+    int m_cpbBufferingRate;
+
+public:
+    CpbInfo() : m_cpbStatus(0),
+    m_cpbSize(0),
+    m_cpbBufferingRate(0) {}
+
+    CpbInfo(int cpbSize, int targetRate, double frameRate, double initialFullness)
+    {
+        m_cpbSize          = cpbSize;
+        m_cpbStatus        = static_cast<int>(static_cast<double>(m_cpbSize * initialFullness));
+        m_cpbBufferingRate = static_cast<int>(static_cast<double>(targetRate) / frameRate);
+    }
+    void updateCpbStatus(int codingBits)
+    {
+        m_cpbStatus += m_cpbBufferingRate - codingBits;
+    }
+
+    void setCpbInfo(int cpbSize, int targetRate, double frameRate, double initialFullness)
+    {
+        m_cpbSize          = cpbSize;
+        m_cpbStatus        = static_cast<int>(static_cast<double>(m_cpbSize * initialFullness));
+        m_cpbBufferingRate = static_cast<int>(static_cast<double>(targetRate) / frameRate);
+    }
+
+    int getCpbStatus()
+    {
+        return m_cpbStatus;
+    }
+
+    int getCpbBufferRate()
+    {
+        return m_cpbBufferingRate;
+    }
+
+    int getCpbSize()
+    {
+        return m_cpbSize;
+    }
+
+    void adjustAllocatedBits(int &currentBitsPerPicture)
+    {
+        // Cpb correction
+        int estimatedCpbFullness = m_cpbStatus + m_cpbBufferingRate;
+
+        // Check whether the allocated bits will lead to cpb overflow
+        int overflowLevel = m_cpbSize * 0.9;
+        if(estimatedCpbFullness - currentBitsPerPicture > overflowLevel)
+        {
+            currentBitsPerPicture = estimatedCpbFullness - overflowLevel;
+        }
+
+        // Check whether the allocated bits will lead to cpb underflow
+        estimatedCpbFullness -= m_cpbBufferingRate;
+        int underflowLevel = m_cpbSize * 0.1;
+        if(estimatedCpbFullness - currentBitsPerPicture < underflowLevel)
+        {
+            currentBitsPerPicture = estimatedCpbFullness - underflowLevel;
+        }
+    }
+};
 
 class CodedCtu
 {
@@ -155,6 +222,12 @@ public:
     void addCodedPicture(int level);
 
     void initCtuStorage(int numberOfUnits);
+
+    void resetPreviousCodedPicturesBuffer();
+
+    void resetCodedPicturesAtLevelMemory();
+
+    void resetCodedCtuAtLevelMemory(int totalCtusPerFrame);
 
 };
 
@@ -312,25 +385,25 @@ public:
 class SequenceController
 {
 private:
-    double m_targetRate;
-    int    m_smoothingWindow;
-    int    m_totalFrames;
-    int    m_framesLeft;
-    double m_frameRate;
-    int    m_sopSize;
-    double m_averageRate;
-    double m_averageBpp;
-    int    m_bitsPerPicture;
-    int    m_bitsLeft;
-    int    m_targetBits;
-    int    m_pixelsPerPicture;
-    int    m_sopWeight[7][4][8] = {{{30, 8, 0, 0, 0, 0, 0, 0}, {25, 7, 0, 0, 0, 0, 0, 0}, {20, 6, 0, 0, 0, 0, 0, 0}, {15, 5, 0, 0, 0, 0, 0, 0}},
-                                   {{30, 8, 4, 0, 0, 0, 0, 0}, {25, 7, 4, 0, 0, 0, 0, 0}, {20, 6, 4, 0, 0, 0, 0, 0}, {15, 5, 4, 0, 0, 0, 0, 0}},
-                                   {{30, 8, 4, 4, 0, 0, 0, 0}, {25, 7, 4, 4, 0, 0, 0, 0}, {20, 6, 4, 4, 0, 0, 0, 0}, {15, 5, 4, 4, 0, 0, 0, 0}},
-                                   {{30, 8, 4, 4, 8, 0, 0, 0}, {25, 7, 4, 4, 7, 0, 0, 0}, {20, 6, 4, 4, 6, 0, 0, 0}, {15, 5, 4, 4, 5, 0, 0, 0}},
-                                   {{30, 8, 4, 4, 8, 4, 0, 0}, {25, 7, 4, 4, 7, 4, 0, 0}, {20, 6, 4, 4, 6, 4, 0, 0}, {15, 5, 4, 4, 5, 4, 0, 0}},
-                                   {{30, 8, 4, 1, 1, 4, 1, 0}, {25, 7, 4, 1, 1, 4, 1, 0}, {20, 6, 4, 1, 1, 4, 1, 0}, {15, 5, 4, 1, 1, 4, 1, 0}},
-                                   {{30, 8, 4, 1, 1, 4, 1, 1}, {25, 7, 4, 1, 1, 4, 1, 1}, {20, 6, 4, 1, 1, 4, 1, 1}, {15, 5, 4, 1, 1, 4, 1, 1}}}; // As in HM
+    double  m_targetRate;
+    int     m_smoothingWindow;
+    int     m_totalFrames;
+    int     m_framesLeft;
+    double  m_frameRate;
+    int     m_sopSize;
+    double  m_averageRate;
+    double  m_averageBpp;
+    int     m_bitsPerPicture;
+    int64_t m_bitsLeft;
+    int64_t m_targetBits;
+    int     m_pixelsPerPicture;
+    int     m_sopWeight[7][4][8] = {{{30, 8, 0, 0, 0, 0, 0, 0}, {25, 7, 0, 0, 0, 0, 0, 0}, {20, 6, 0, 0, 0, 0, 0, 0}, {15, 5, 0, 0, 0, 0, 0, 0}},
+                                    {{30, 8, 4, 0, 0, 0, 0, 0}, {25, 7, 4, 0, 0, 0, 0, 0}, {20, 6, 4, 0, 0, 0, 0, 0}, {15, 5, 4, 0, 0, 0, 0, 0}},
+                                    {{30, 8, 4, 4, 0, 0, 0, 0}, {25, 7, 4, 4, 0, 0, 0, 0}, {20, 6, 4, 4, 0, 0, 0, 0}, {15, 5, 4, 4, 0, 0, 0, 0}},
+                                    {{30, 8, 4, 4, 8, 0, 0, 0}, {25, 7, 4, 4, 7, 0, 0, 0}, {20, 6, 4, 4, 6, 0, 0, 0}, {15, 5, 4, 4, 5, 0, 0, 0}},
+                                    {{30, 8, 4, 4, 8, 4, 0, 0}, {25, 7, 4, 4, 7, 4, 0, 0}, {20, 6, 4, 4, 6, 4, 0, 0}, {15, 5, 4, 4, 5, 4, 0, 0}},
+                                    {{30, 8, 4, 1, 1, 4, 1, 0}, {25, 7, 4, 1, 1, 4, 1, 0}, {20, 6, 4, 1, 1, 4, 1, 0}, {15, 5, 4, 1, 1, 4, 1, 0}},
+                                    {{30, 8, 4, 1, 1, 4, 1, 1}, {25, 7, 4, 1, 1, 4, 1, 1}, {20, 6, 4, 1, 1, 4, 1, 1}, {15, 5, 4, 1, 1, 4, 1, 1}}}; // As in HM
 
     int   *m_frameWeight;
     int    m_totalLevels;
@@ -339,6 +412,7 @@ private:
     DataStorage       *m_dataStorageEngine;
     PictureController *m_pictureControllerEngine;
     CtuController     *m_ctuControllerEngine;
+    CpbInfo            m_cpbControllerEngine;
     double m_lastCodedPictureLambda;
     int    m_currentCodingBits;
     int    m_picSizeInCtbsY;
@@ -386,7 +460,6 @@ public:
     }
 
     SequenceController(double targetRate,
-                       int smoothingWindow,
                        int totalFrames,
                        double frameRate,
                        int sopSize,
@@ -474,6 +547,13 @@ public:
         }
         else
             m_frameWeight = m_sopWeight[m_sopSize-2][3];
+    }
+
+    void reset();
+
+    void initCpbInfo(int cpbMaxSize)
+    {
+        m_cpbControllerEngine.setCpbInfo(cpbMaxSize, (int)m_targetRate, m_frameRate, 0.8);
     }
 };
 
