@@ -14,7 +14,7 @@ script:
   - make
   - git clone -n https://github.com/kupix/bitstreams.git
   - cd bitstreams
-  - git checkout 26f3162
+  - git checkout b19d683
   - cd ..
   - ./turing/turing-exe signature ../test/
   - ./turing/turing-exe testdecode
