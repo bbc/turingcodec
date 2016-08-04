@@ -47,9 +47,9 @@ struct Speed
     Speed(Type speed = slow) : speed(speed) { }
 
     operator Type() const
-	{
+    {
         return this->speed;
-	}
+    }
 
     bool trySplit(const coding_quadtree &cqt) const
     {

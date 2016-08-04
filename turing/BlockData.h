@@ -80,7 +80,7 @@ struct PuData
     }
 
     bool operator==(const PuData &other) const
-	                {
+                    {
         if (this->refIdxPlus1[0] != other.refIdxPlus1[0]) return false;
         if (this->refIdxPlus1[0])
         {
@@ -92,12 +92,12 @@ struct PuData
             if (this->inter.motionVector[1] != other.inter.motionVector[1]) return false;
         }
         return true;
-	                }
+                    }
 
     bool operator!=(const PuData &other) const
-	                {
+                    {
         return !this->operator==(other);
-	                }
+                    }
 
     // actually, this really means "is available and is not intra"
     bool isAvailable() const

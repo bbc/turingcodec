@@ -18,8 +18,8 @@ the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
 
-// Encoder "Search" functions - all encoder decisions are made by functions here.
-// For example, CQT topology, CU prediction, mode, CU partitioning, intra prediction modes, inter modes, motion vectors, etc.
+ // Encoder "Search" functions - all encoder decisions are made by functions here.
+ // For example, CQT topology, CU prediction, mode, CU partitioning, intra prediction modes, inter modes, motion vectors, etc.
 
 
 #include "Search.h"
@@ -283,8 +283,8 @@ void searchIntraChroma(H &h, const coding_quadtree &cqt)
             if (m[rqt_root_cbf()])
             {
                 m[MaxTrafoDepth()] = (m[current(CuPredMode(cu.x0, cu.y0))] == MODE_INTRA)
-					        ? m[max_transform_hierarchy_depth_intra()] + m[IntraSplitFlag()]
-					                                                       : m[max_transform_hierarchy_depth_inter()];
+                    ? m[max_transform_hierarchy_depth_intra()] + m[IntraSplitFlag()]
+                    : m[max_transform_hierarchy_depth_inter()];
                 m(transform_tree(cu.x0, cu.y0, cu.x0, cu.y0, cu.log2CbSize, 0, 0));
             }
         }
@@ -404,8 +404,8 @@ void searchIntraCu(H &h, CandidateStash<Sample> *&challenger, CandidateStash<Sam
                 m(part_mode(), ae(v));
             }
             if (m[PartMode()] == PART_2Nx2N && m[pcm_enabled_flag()] &&
-                    cqt->log2CbSize >= m[Log2MinIpcmCbSizeY()] &&
-                    cqt->log2CbSize <= m[Log2MaxIpcmCbSizeY()])
+                cqt->log2CbSize >= m[Log2MinIpcmCbSizeY()] &&
+                cqt->log2CbSize <= m[Log2MaxIpcmCbSizeY()])
             {
                 m(pcm_flag(cqt->x0, cqt->y0), ae(v));
             }
@@ -746,8 +746,8 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     originalCandidate->StateCodedData::startCu();
 
     bool mustSplit =
-            cqt.x0 + (1 << cqt.log2CbSize) > h[pic_width_in_luma_samples()] ||
-            cqt.y0 + (1 << cqt.log2CbSize) > h[pic_height_in_luma_samples()];
+        cqt.x0 + (1 << cqt.log2CbSize) > h[pic_width_in_luma_samples()] ||
+        cqt.y0 + (1 << cqt.log2CbSize) > h[pic_height_in_luma_samples()];
 
     if (FORCE_PCM(h) && cqt.log2CbSize > h[Log2MaxIpcmCbSizeY()])
     {
@@ -788,9 +788,9 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
             // resultant state of single CU / split=0 test is now in *originalCandidate
         }
         const bool trySplit = !testFull || (testSplit && (
-                cqt.log2CbSize > h[MinCbLog2SizeY()] &&
-                (!stateEncode->ecu || h[current(CuPredMode(cqt.x0, cqt.y0))] != MODE_SKIP) &&
-                static_cast<Speed *>(h)->trySplit(cqt)));
+            cqt.log2CbSize > h[MinCbLog2SizeY()] &&
+            (!stateEncode->ecu || h[current(CuPredMode(cqt.x0, cqt.y0))] != MODE_SKIP) &&
+            static_cast<Speed *>(h)->trySplit(cqt)));
 
         if (trySplit)
         {
@@ -1194,7 +1194,7 @@ struct Search<coding_unit>
 struct MvCandidate
 {
     MvCandidate()
-    :
+        :
         cost(std::numeric_limits<Cost>::max())
     {
     }
@@ -1327,8 +1327,8 @@ struct LimitFullPelMv
 
             int maxWavefront[2] =
             {
-                    h[xCtb()] + 3 * h[CtbSizeY()] - pu.x0 - pu.nPbW - howCloseDoYouDare,
-                    h[yCtb()] + 2 * h[CtbSizeY()] - pu.y0 - pu.nPbH - howCloseDoYouDare,
+                h[xCtb()] + 3 * h[CtbSizeY()] - pu.x0 - pu.nPbW - howCloseDoYouDare,
+                h[yCtb()] + 2 * h[CtbSizeY()] - pu.y0 - pu.nPbH - howCloseDoYouDare,
             };
 
             this->max[0] = std::min(this->max[0], MotionVector::ComponentType(maxWavefront[0]));
@@ -1353,14 +1353,14 @@ template <typename Sample>
 struct StateMeFullPel
 {
     template <class H> StateMeFullPel(H &h, int refList, prediction_unit const &pu, MvCandidate &best)
-		        :
-		        best(best),
-		        tableSad(h),
-		        tableSadMultiref(h),
-		        limit(pu, h),
-		        refList(refList),
-		        rect(HAVOC_RECT(pu.nPbW, pu.nPbH))
-		        {
+        :
+        best(best),
+        tableSad(h),
+        tableSadMultiref(h),
+        limit(pu, h),
+        refList(refList),
+        rect(HAVOC_RECT(pu.nPbW, pu.nPbH))
+    {
         this->functionSad = *havoc_get_sad(tableSad, pu.nPbW, pu.nPbH);
         this->functionSad4 = *havoc_get_sad_multiref(tableSadMultiref, 4, pu.nPbW, pu.nPbH);
 
@@ -1371,7 +1371,7 @@ struct StateMeFullPel
         this->ref = Raster<Sample const>((*referencePicture.picture)[0], pu.x0, pu.y0);
 
         this->lambda.set(getReciprocalSqrtLambda(h));
-		        }
+    }
 
     template <class H> bool considerPattern(H &h, MotionVector origin, MotionVector const *pattern, int n, int step, int dist, mvd_coding mvdc)
     {
@@ -1651,17 +1651,17 @@ struct Search<prediction_unit>
         ContextsAndCost bestContextsAndCost;
 
         template <class H> State(H &h)
-			        :
-			        neighbourhood(h),
-			        cursor(h),
-			        stateCodedData(h),
-			        stateEncodeSubstream(h),
-			        cqt(h)
-			        {
+            :
+            neighbourhood(h),
+            cursor(h),
+            stateCodedData(h),
+            stateEncodeSubstream(h),
+            cqt(h)
+        {
             bestCost = std::numeric_limits<Cost>::max();
             bestCostUni[0] = std::numeric_limits<Cost>::max();
             bestCostUni[1] = std::numeric_limits<Cost>::max();
-			        }
+        }
 
         template <class H> void searchMergeMode(int i, const prediction_unit &pu, H &h)
         {
@@ -1672,7 +1672,7 @@ struct Search<prediction_unit>
 
         template <class H> void searchMergeModes(const prediction_unit &pu, H &h)
         {
-            populateMergeCandidates(h, pu, stateEncodeSubstream->partIdx);
+            populateMergeCandidates(h, pu);
             for (int i = 0; i < h[MaxNumMergeCand()]; ++i)
             {
                 searchMergeMode(i, pu, h);
@@ -1767,7 +1767,7 @@ struct Search<prediction_unit>
             if (std::is_same<typename H::Tag, SearchMerge2Nx2N<void>>::value)
             {
                 assert(h[PartMode()] == PART_2Nx2N);
-                populateMergeCandidates(h, pu, stateEncodeSubstream->partIdx);
+                populateMergeCandidates(h, pu);
                 StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
                 Snake<BlockData>::Cursor *cursor = h;
                 prediction_unit const pu = *static_cast<prediction_unit *>(h);
@@ -1796,8 +1796,8 @@ struct Search<prediction_unit>
                 if (h[RefPicList(L1)][0].dp) searchUni(L1, 0, pu, h);
 
                 if (pu.nPbW + pu.nPbH != 12 &&
-                        bestCostUni[L0] != std::numeric_limits<Cost>::max() &&
-                        bestCostUni[L1] != std::numeric_limits<Cost>::max())
+                    bestCostUni[L0] != std::numeric_limits<Cost>::max() &&
+                    bestCostUni[L1] != std::numeric_limits<Cost>::max())
                 {
                     searchBi(pu, h);
                 }
@@ -2102,17 +2102,17 @@ template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, Mv
     int step = 4;
 
     static const MotionVector diamond[16] = {
-            { 0, -4 },{ 1, -3 },{ 2, -2 },{ 3, -1 },
-            { 4, 0 },{ 3, 1 },{ 2, 2 },{ 1, 3 },
-            { 0, 4 },{ -1, 3 },{ -2, 2 },{ -3, 1 },
-            { -4, 0 },{ -3, -1 },{ -2, -2 },{ -1, -3 },
+        { 0, -4 },{ 1, -3 },{ 2, -2 },{ 3, -1 },
+        { 4, 0 },{ 3, 1 },{ 2, 2 },{ 1, 3 },
+        { 0, 4 },{ -1, 3 },{ -2, 2 },{ -3, 1 },
+        { -4, 0 },{ -3, -1 },{ -2, -2 },{ -1, -3 },
     };
 
     static const MotionVector square[16] = {
-            { 4, -4 },{ 4, -2 },{ 4, 0 },{ 4, 2 },
-            { 4, 4 },{ 2, 4 },{ 0, 4 },{ -2, 4 },
-            { -4, 4 },{ -4, 2 },{ -4, 0 },{ -4, -2 },
-            { -4, -4 },{ -2, -4 },{ 0, -4 },{ 2, -4 },
+        { 4, -4 },{ 4, -2 },{ 4, 0 },{ 4, 2 },
+        { 4, 4 },{ 2, 4 },{ 0, 4 },{ -2, 4 },
+        { -4, 4 },{ -4, 2 },{ -4, 0 },{ -4, -2 },
+        { -4, -4 },{ -2, -4 },{ 0, -4 },{ 2, -4 },
     };
 
     static const MotionVector square4[4] = { { -4, -4 },{ -4, 4 },{ 4, 4 },{ 4, -4 } };
@@ -2300,8 +2300,8 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         haveResidual = m[rqt_root_cbf()];
 
         bool const isMerge2Nx2N =
-                h[PartMode()] == PART_2Nx2N &&
-                h[merge_flag(cqt->x0, cqt->y0)];
+            h[PartMode()] == PART_2Nx2N &&
+            h[merge_flag(cqt->x0, cqt->y0)];
 
         bool const encodeAsSkip = isMerge2Nx2N && !haveResidual;
         if (encodeAsSkip)

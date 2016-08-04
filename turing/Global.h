@@ -1436,25 +1436,6 @@ int computeMaxDpbSize(H &h, int MaxLumaPs)
         return maxDpbPicBuf;
 }
 
-struct MotionCand
-{
-    int refList;
-    const char *name;
-    MotionCand(int refList, const char *name)
-    :
-        refList(refList),
-        name(name)
-    {
-    }
-};
-
-template <>
-struct Syntax<MotionCand>
-{
-    template <class H> static void go(MotionCand, H &)
-    {
-    }
-};
 
 DEFINE_STRUCT_ARITY_0(ContextsInitialize);
 DEFINE_STRUCT_ARITY_1(ContextsSave, i);

@@ -41,10 +41,10 @@ struct BitField
     operator int() const { return (this->value & mask) >> offset;  }
 
     BitField const &operator |=(BitField other)
-	        {
+            {
         this->value |= other.value & mask;
         return *this;
-	        }
+            }
 
 private:
 

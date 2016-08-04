@@ -48,10 +48,10 @@ struct EstimateRateBin
     ContextModel contextModel;
 
     template <class H> EstimateRateBin(H &h, int ctxInc)
-	        {
+            {
         Contexts *contexts = h;
         this->contextModel = contexts->template get<typename Context<V>::Type>(ctxInc);
-	        }
+            }
 
     Cost rate(int binVal)
     {

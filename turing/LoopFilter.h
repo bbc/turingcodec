@@ -168,12 +168,12 @@ namespace LoopFilter
     {
 
         BlockEdge(Raster<Sample> s, Raster<Block> blocks, int bitDepth, int position = 0) :
-		blockP(blocks(-1, 0)),
-		blockQ(blocks(0, 0)),
-		bitDepth(bitDepth),
-		s(s.offset(0, 4*position))
-		{
-		}
+        blockP(blocks(-1, 0)),
+        blockQ(blocks(0, 0)),
+        bitDepth(bitDepth),
+        s(s.offset(0, 4*position))
+        {
+        }
 
         Sample &p(int i, int k)
         {
@@ -192,12 +192,12 @@ namespace LoopFilter
     struct BlockEdge<Sample, EDGE_HOR>
     {
         BlockEdge(Raster<Sample> s, Raster<Block> blocks, int bitDepth, int position = 0) :
-		blockP(blocks(0, -1)),
-		blockQ(blocks(0, 0)),
-		bitDepth(bitDepth),
-		s(s.offset(4*position, 0))
-		{
-		}
+        blockP(blocks(0, -1)),
+        blockQ(blocks(0, 0)),
+        bitDepth(bitDepth),
+        s(s.offset(4*position, 0))
+        {
+        }
 
         Sample &p(int i, int k)
         {

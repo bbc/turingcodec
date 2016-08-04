@@ -37,12 +37,12 @@ int psnr(int argc, const char* const argv[], std::ostream &cout, std::ostream &c
 {
     po::options_description options("Options");
     options.add_options()
-		        ("bit-depth", po::value<int>()->default_value(8), "video bit depth (of both input YUV and output stream)");
+                ("bit-depth", po::value<int>()->default_value(8), "video bit depth (of both input YUV and output stream)");
     ("help,h", "display help message");
 
     po::options_description hidden("Hidden options");
     hidden.add_options()
-		        ("input-file", po::value<std::vector<std::string>>());
+                ("input-file", po::value<std::vector<std::string>>());
 
     po::options_description all;
     all.add(options).add(hidden);

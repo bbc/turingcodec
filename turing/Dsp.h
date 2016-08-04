@@ -105,9 +105,9 @@ class Initializer
 public:
     Initializer(T t) : value(t) { };
     operator T()
-	        {
+            {
         return this->value;
-	        }
+            }
 protected:
     const T value;
 };

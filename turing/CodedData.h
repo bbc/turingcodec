@@ -101,9 +101,9 @@ namespace CodedData {
         uint16_t const mask;
 
         operator int() const
-	        {
+            {
             return (*this->p & mask) ? 1 : 0;
-	        }
+            }
 
         Bit const &operator=(int value)
         {

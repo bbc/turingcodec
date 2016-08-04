@@ -65,10 +65,10 @@ struct Violation
         this->message = this->message % t;
 #else
         std::ostringstream oss(this->message);
-	oss << " " << t;
-	this->message = oss.str();
+    oss << " " << t;
+    this->message = oss.str();
 #endif
-	return *this;
+    return *this;
     }
 };
 

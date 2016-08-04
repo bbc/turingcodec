@@ -1472,7 +1472,7 @@ struct Read<prediction_unit>
 
         PuData &puData = cursor->current(0, 0, h[MinCbLog2SizeY()] - 1);
 
-        processPredictionUnit(h, pu, puData, stateSubstream->partIdx);
+        processPredictionUnit(h, pu, puData, stateSubstream->partIdx, h[merge_idx(xPb, yPb)]);
 
         StatePicture *statePictureBase = h;
         statePictureBase->loopFilterPicture->processPu(h, pu);

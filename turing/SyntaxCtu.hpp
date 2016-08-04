@@ -253,8 +253,8 @@ void Syntax<coding_unit>::go(const coding_unit &cu, H &h)
             }
 
             h[MaxTrafoDepth()] = (h[current(CuPredMode(cu.x0, cu.y0))] == MODE_INTRA)
-				        ? h[max_transform_hierarchy_depth_intra()] + h[IntraSplitFlag()]
-				                                                       : h[max_transform_hierarchy_depth_inter()];
+                        ? h[max_transform_hierarchy_depth_intra()] + h[IntraSplitFlag()]
+                                                                       : h[max_transform_hierarchy_depth_inter()];
 
             h(IfCbf<rqt_root_cbf, transform_tree>{ rqt_root_cbf(), transform_tree(cu.x0, cu.y0, cu.x0, cu.y0, cu.log2CbSize, 0, 0) });
         }

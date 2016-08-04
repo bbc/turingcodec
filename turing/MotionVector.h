@@ -43,28 +43,28 @@ struct MotionVector
     }
 
     bool operator==(MotionVector const &other) const
-	{
+    {
         return this->x == other.x && this->y == other.y;
-	}
+    }
 
     bool operator!=(MotionVector const &other) const
-	{
+    {
         return this->x != other.x || this->y != other.y;
-	}
+    }
 
     MotionVector const &operator+=(MotionVector const &other)
-	{
+    {
         this->x += other.x;
         this->y += other.y;
         return *this;
-	}
+    }
 
     MotionVector const &operator+=(ComponentType i)
-	{
+    {
         this->x += i;
         this->y += i;
         return *this;
-	}
+    }
 
     template <class Other>
     MotionVector operator+(Other const &other) const
@@ -75,18 +75,18 @@ struct MotionVector
     }
 
     MotionVector const &operator-=(MotionVector const &other)
-	{
+    {
         this->x -= other.x;
         this->y -= other.y;
         return *this;
-	}
+    }
 
     MotionVector const &operator-=(ComponentType i)
-	{
+    {
         this->x -= i;
         this->y -= i;
         return *this;
-	}
+    }
 
     template <class Other>
     MotionVector operator-(Other const &other) const
@@ -97,11 +97,11 @@ struct MotionVector
     }
 
     MotionVector const &operator*=(ComponentType i)
-	{
+    {
         this->x *= i;
         this->y *= i;
         return *this;
-	}
+    }
 
     template <class Other>
     MotionVector operator*(Other const &other) const
@@ -144,11 +144,11 @@ struct MotionVector
     }
 
     MotionVector const &operator>>=(int n)
-	{
+    {
         this->x >>= n;
         this->y >>= n;
         return *this;
-	}
+    }
 
     MotionVector operator>>(int n) const
     {
@@ -158,11 +158,11 @@ struct MotionVector
     }
 
     MotionVector const &operator<<=(int n)
-	{
+    {
         this->x <<= n;
         this->y <<= n;
         return *this;
-	}
+    }
 
     MotionVector operator<<(int n) const
     {
@@ -172,11 +172,11 @@ struct MotionVector
     }
 
     MotionVector const &operator&=(ComponentType i)
-	{
+    {
         this->x &= i;
         this->y &= i;
         return *this;
-	}
+    }
 
     MotionVector operator&(ComponentType i) const
     {
@@ -186,11 +186,11 @@ struct MotionVector
     }
 
     MotionVector const &operator|=(ComponentType i)
-	{
+    {
         this->x |= i;
         this->y |= i;
         return *this;
-	}
+    }
 
     MotionVector operator|(ComponentType i) const
     {
@@ -205,9 +205,9 @@ struct MotionVector
     }
 
     explicit operator bool() const
-	{
+    {
         return this->x || this->y;
-	}
+    }
 
     friend MotionVector operator+(int i, MotionVector mv)
     {

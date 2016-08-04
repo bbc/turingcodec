@@ -230,9 +230,9 @@ struct ReconstructionCache
     Piece *piece;
 
     Raster<Sample> get(Piece piece)
-	        {
+            {
         return Raster<Sample>(&this->buffer[piece.i << 4], 1ll << piece.log2Size);
-	        }
+            }
 
     // recursively copy blocks of reconstructed samples from pieces' list to the reconstructed picture buffer.
     void commit(Raster<Sample> dst, int log2Size, Piece *&piece)

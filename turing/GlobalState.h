@@ -41,7 +41,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "StateFunctionTables.h"
 #include "QpState.h"
 #include "RateControl.h"
-#include "Mvp.h"
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -88,6 +87,19 @@ struct StateSlice :
         Contexts savedContexts[2];
         int savedStatCoeff[2][4];
     };
+
+
+namespace Mvp {
+
+struct Predictors
+{
+    PuData merge[5];
+    MotionVector mvp[15 /* refIdx */][2 /* refList */][2 /* mvp_flag */];
+};
+
+}
+
+
 
 struct StateSubstream :
     AccessOperators<StateSubstream>,
