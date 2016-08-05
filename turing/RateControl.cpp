@@ -347,6 +347,7 @@ SequenceController::SequenceController(double targetRate,
 {
     m_targetRate       = targetRate * 1000; // kbps to bps conversion
     m_smoothingWindow  = smoothingWindow;
+    totalFrames        = std::max<int>(totalFrames, frameRate); // Assumes at least one intra period
     m_totalFrames      = totalFrames;
     m_framesLeft       = totalFrames;
     m_frameRate        = frameRate;

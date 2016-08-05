@@ -612,7 +612,7 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         int log2MaxTransformBlockSize = std::min(5, h[CtbLog2SizeY()]);
         h[log2_diff_max_min_luma_transform_block_size()] = log2MaxTransformBlockSize - h[MinTbLog2SizeY()];
         h[max_transform_hierarchy_depth_intra()] = 1;
-        h[max_transform_hierarchy_depth_inter()] = (this->stateEncode.rqt) ? h[CtbLog2SizeY()] - h[MinTbLog2SizeY()] : 0;
+        h[max_transform_hierarchy_depth_inter()] = (this->stateEncode.rqt) ? 1 : 0;
         if (h[pic_width_in_luma_samples()] % (1 << h[MinCbLog2SizeY()])) throw std::runtime_error("picture width is not a multiple of minimum CU size");
         if (h[pic_height_in_luma_samples()] % (1 << h[MinCbLog2SizeY()])) throw std::runtime_error("picture height is not a multiple of minimum CU size");
 

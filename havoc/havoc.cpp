@@ -156,7 +156,6 @@ int havoc_main(int argc, const char *argv[])
 {
     std::string mainArgument(argv[1]);
     if(mainArgument == "--help")
-
     {
         std::cout << "Usage: " << argv[0] << "\n";
         std::cout << "Performs the following checks:\n";
