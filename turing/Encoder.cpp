@@ -877,10 +877,13 @@ void Encoder::setupVui(H &h)
     {
         h[vui_hrd_parameters_present_flag()] = 1;
         Hrd hrdDefault{};
+        Hrd::SubLayer sublayerDefault{};
         auto currentSps = h[Table<Sps>()][0];
+        auto h2 = h.extend(&hrdDefault);
+        auto h3 = h2.extend(&sublayerDefault);
+        setupHrd(h3);
+        hrdDefault.sublayers.push_back(sublayerDefault);
         currentSps->hrdArray.hrd.push_back(hrdDefault);
-        auto h2 =  h.extend(&hrdDefault);
-        setupHrd(h2);
     }
 }
 
@@ -912,18 +915,12 @@ void Encoder::setupHrd(H &h)
     h[au_cpb_removal_delay_length_minus1()] = 5;
     h[dpb_output_delay_du_length_minus1()] = 5;
 
-    h[fixed_pic_rate_general_flag()] = 1;
-    h[elemental_duration_in_tc_minus1()] = 0;
+    h[fixed_pic_rate_general_flag(0)] = 1;
+    h[fixed_pic_rate_within_cvs_flag(0)] = 1;
+    h[elemental_duration_in_tc_minus1(0)] = 0;
 
-    Hrd::SubLayer subLayerDefault{};
-    VuiParameters *currentVui = h;
-    Hrd &currentHrd = currentVui->hrdArray.hrd.front();
-    currentHrd.sublayers.push_back(subLayerDefault);
-
-    auto h2 = h.extend(&subLayerDefault);
-
-    h2[bit_rate_value_minus1()] = targetRate >> (bitrateScale + 6);
-    h2[cpb_size_value_minus1()] = cpbSize >> (cpbScale + 4);
-    h2[cbr_flag()] = 1;
+    h[bit_rate_value_minus1(0)] = targetRate >> (bitrateScale + 6);
+    h[cpb_size_value_minus1(0)] = cpbSize >> (cpbScale + 4);
+    h[cbr_flag(0)] = 1;
 
 }
