@@ -43,6 +43,12 @@ template <unsigned u> struct Search<Mode<u>> :
     };
 
 template <>
+struct Search<sao>
+{
+    template <class H> static void go(const sao &sao, H &h);
+};
+
+template <>
 struct Search<coding_quadtree>
 {
     template <class H> static void go(const coding_quadtree &cqt, H &h);

@@ -132,7 +132,7 @@ bool TaskDeblock<H>::run()
             // No need to pad non-reference pictures (note: in fact they don't need even
             // to be allocated with a padding boundary).
         }
-        else
+        else if (!h[sample_adaptive_offset_enabled_flag()])
         {
             Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->pad);
 
@@ -170,136 +170,11 @@ bool TaskDeblock<H>::run()
         if (blocked) return true;
     }
 
-    if (this->end == h[PicSizeInCtbsY()])
-    {
-        StateEncode *stateEncode = h;
-        StatePicture *statePicture = h;
-        ReconstructedPicture2<Sample> *currPic = h;
-
-        if (stateEncode->psnrAnalysis)
-        {
-            StateEncodePicture *stateEncodePicture = h;
-            PictureWrapper &pictureWrapper = *stateEncodePicture->docket->picture;
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-            static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-            auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
-            stateEncode->psnrAnalysis->analyse(*currPic->picture, picture);
-        }
-
-        if (stateEncode->decodedHashSei)
-        {
-            stateEncode->hashElement.clear();
-            auto &picture = *currPic->picture;
-
-            if (stateEncode->hashType == MD5)
-            {
-                for (int cIdx = 0; cIdx < 3; cIdx++)
-                {
-                    md5_byte_t digest[16];
-                    int currentBitDepth = cIdx ? h[BitDepthC()] : h[BitDepthY()];
-                    if(currentBitDepth == 8)
-                    {
-                        stateEncode->decodedPictureHash.computeMd5Sum(
-                                digest,
-                                (unsigned char*)picture[cIdx].p,
-                                picture[cIdx].stride,
-                                picture[cIdx].height,
-                                picture[cIdx].width);
-                    }
-                    else
-                    {
-                        stateEncode->decodedPictureHash.computeMd5Sum(
-                                digest,
-                                (unsigned short*)picture[cIdx].p,
-                                picture[cIdx].stride,
-                                picture[cIdx].height,
-                                picture[cIdx].width);
-                    }
-
-                    for (int i = 0; i < 16; i++)
-                    {
-                        h[picture_md5(cIdx, i)] = digest[i];
-                        stateEncode->hashElement.push_back(digest[i]);
-                    }
-                }
-            }
-            else if (stateEncode->hashType == CRC)
-            {
-                for (int cIdx = 0; cIdx < 3; cIdx++)
-                {
-                    int currentBitDepth = cIdx ? h[BitDepthC()] : h[BitDepthY()];
-                    int crc;
-                    if(currentBitDepth == 8)
-                    {
-                        crc = stateEncode->decodedPictureHash.computeCrc((unsigned char*)picture[cIdx].p,
-                                                                             picture[cIdx].stride,
-                                                                             picture[cIdx].height,
-                                                                             picture[cIdx].width,
-                                                                             currentBitDepth);
-                    }
-                    else
-                    {
-                        crc = stateEncode->decodedPictureHash.computeCrc((unsigned short*)picture[cIdx].p,
-                                                                             picture[cIdx].stride,
-                                                                             picture[cIdx].height,
-                                                                             picture[cIdx].width,
-                                                                             currentBitDepth);
-                    }
-                    h[picture_crc(cIdx)] = crc;
-                    stateEncode->hashElement.push_back((crc >> 8) & 0xff);
-                    stateEncode->hashElement.push_back(crc & 0xff);
-                }
-            }
-            else if (stateEncode->hashType == CHKSUM)
-            {
-                for (int cIdx = 0; cIdx < 3; cIdx++)
-                {
-                    int currentBitDepth = cIdx ? h[BitDepthC()] : h[BitDepthY()];
-                    int checkSum;
-                    if(currentBitDepth == 8)
-                    {
-                        checkSum = stateEncode->decodedPictureHash.computeCheckSum((unsigned char*)picture[cIdx].p,
-                                                                                       picture[cIdx].stride,
-                                                                                       picture[cIdx].height,
-                                                                                       picture[cIdx].width,
-                                                                                       currentBitDepth
-                                                                                       );
-                    }
-                    else
-                    {
-                        checkSum = stateEncode->decodedPictureHash.computeCheckSum((unsigned short*)picture[cIdx].p,
-                                                                                       picture[cIdx].stride,
-                                                                                       picture[cIdx].height,
-                                                                                       picture[cIdx].width,
-                                                                                       currentBitDepth
-                                                                                       );
-                    }
-                    h[picture_checksum(cIdx)] = checkSum;
-                    stateEncode->hashElement.push_back((checkSum >> 24) & 0xff);
-                    stateEncode->hashElement.push_back((checkSum >> 16) & 0xff);
-                    stateEncode->hashElement.push_back((checkSum >> 8) & 0xff);
-                    stateEncode->hashElement.push_back(checkSum & 0xff);
-                }
-            }
-        }
-
-        // Signal that picture is now completely reconstructed and postprocessed.
-        // Note: could signal this before padding.
-        {
-
-            std::unique_lock<std::mutex> lock(threadPool->mutex());
-
-            statePicture->reconstructed = true;
-            stateEncode->responsesAvailable.notify_all();
-        }
-
-    }
-
     delete this;
     return false;
 }
 
 
-// explict template instantiations
+// explicit template instantiations
 template struct TaskDeblock<Handler<Encode<void>, StateEncodePicture2<uint8_t>, StateEncode>>;
 template struct TaskDeblock<Handler<Encode<void>, StateEncodePicture2<uint16_t>, StateEncode>>;

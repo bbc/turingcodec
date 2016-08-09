@@ -38,6 +38,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "Binarization.h"
 #include "Vanilla.h"
 #include "Measure.h"
+#include "EncSao.h"
 #include "Speed.h"
 #include "Search.h"
 #include "Cost.h"
@@ -68,6 +69,37 @@ template <> struct Encode<void> { };
 template <class F> struct EstimateRate;
 template <> struct EstimateRate<void> { };
 
+
+//sets the parameters (deblocking etc..) ot the specified element
+template <class F> struct SetParameters : EstimateRate<F> { };
+template <> struct SetParameters<void> { };
+
+template <class F> struct EstimateAndSet : EstimateRate<F> { };
+template <> struct EstimateAndSet<void> { };
+
+template <>
+struct EstimateAndSet<Element<cu_qp_delta_abs, ae>>
+{
+    template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
+    {
+        h[IsCuQpDeltaCoded()] = 1;
+        int qpY = static_cast<QpState* >(h)->getQp(0) - h[QpBdOffsetY()];
+        qpY = Clip3(0, 51, qpY);
+        static_cast<QpState* >(h)->setCodedQp(qpY);
+    }
+};
+
+template <>
+struct SetParameters<Element<cu_qp_delta_abs, ae>>
+{
+    template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
+    {
+        h[IsCuQpDeltaCoded()] = 1;
+        int qpY = static_cast<QpState* >(h)->getQp(0) - h[QpBdOffsetY()];
+        qpY = Clip3(0, 51, qpY);
+        static_cast<QpState* >(h)->setCodedQp(qpY);
+    }
+};
 
 template <> struct Write<video_parameter_set_rbsp>
 {
@@ -531,6 +563,15 @@ struct Write<EncodeTerminate<V>>
     }
 };
 
+template <>
+struct Encode<sao>
+    :
+    Null<sao>
+{
+};
+
+template <class E> struct SetParameters<Element<E, ae>> : Null<Element<E, ae>> {};
+
 
 template <>
 struct Encode<coding_tree_unit>
@@ -586,7 +627,6 @@ struct Encode<coding_tree_unit>
 #endif
     }
 };
-
 
 template <>
 struct Write<coding_quadtree>
@@ -655,7 +695,7 @@ struct Encode<coding_quadtree>
 
         CandidateStash<Sample> candidateCheck(*originalCandidate, cqt, *stateReconstructionCache);
         candidateCheck.resetPieces();
-        if (checkRate)
+
         {
             candidateCheck.copy(*originalCandidate, before, cqt, true, true);
             candidateCheck.copyIntraReferenceSamplesLuma(*originalCandidate, before, cqt);
@@ -733,9 +773,8 @@ struct Encode<coding_quadtree>
 
         Contexts contextsAfterSearch = candidate;
 
-        if (checkRate)
         {
-            // measure rate again to check against that obtained during searches
+            // set CTU parameters (deblocking, adaptive QP etc..)
 
             static_cast<StateCodedData &>(candidateCheck) = static_cast<StateCodedData &>(candidate);
             candidateCheck.StateCodedData::startReading();
@@ -743,61 +782,39 @@ struct Encode<coding_quadtree>
             candidateCheck.StateEstimateRate::rate.set(0, 0);
 
             *currentCandidate = &candidateCheck;
-            auto w = h.template change<EstimateRate<void>>();
-            w[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(w)->codedCu.word0().CtDepth;
+            if (h[cu_qp_delta_enabled_flag()])
+            {
+                static_cast<QpState *>(h)->setCanWrite(true);
+                static_cast<QpState *>(h)->setQpInternal(0, 0, 64, h[SliceQpY()], 0);
+            }
+            if (checkRate)
+            {
+                auto w = h.template change<EstimateAndSet<void>>();
+                w[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(w)->codedCu.word0().CtDepth;
 
-            // walk tree and estimate the rate of resultant bitstream
-            Syntax<coding_quadtree>::go(cqt, w);
+                // walk tree and estimate the rate of resultant bitstream
+                Syntax<coding_quadtree>::go(cqt, w);
 
-            candidateCheck.Contexts::checkSameAs(contextsAfterSearch);
-            ASSERT(candidateCheck.StateEstimateRate::rate == candidate.StateEstimateRate::rate);// && "rate estimated during search doesn't match whole-CTU estimated rate");
+                candidateCheck.Contexts::checkSameAs(contextsAfterSearch);
+                ASSERT(candidateCheck.StateEstimateRate::rate == candidate.StateEstimateRate::rate);// && "rate estimated during search doesn't match whole-CTU estimated rate");
+            }
+            else
+            {
+                auto w = h.template change<SetParameters<void>>();
+                w[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(w)->codedCu.word0().CtDepth;
+
+                // walk tree and set parameters
+                Syntax<coding_quadtree>::go(cqt, w);
+            }
+
+            //if (h[cu_qp_delta_enabled_flag()])
+            //    static_cast<QpState *>(h)->swapInternalMemory();
         }
 
         static_cast<StateCodedData &>(*originalCandidate) = static_cast<StateCodedData &>(candidate);
         originalCandidate->StateCodedData::startReading();
 
         *currentCandidate = originalCandidate;
-
-        {
-            Candidate<Sample> *candidate = h;
-
-            Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->write);
-
-            // walk tree and writes bitstream
-            // review: derive split_cu_flag directly from coded data
-            h[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(h)->codedCu.word0().CtDepth;
-
-            if(h[cu_qp_delta_enabled_flag()])
-            {
-                static_cast<QpState *>(h)->setCanWrite(true);
-                static_cast<QpState *>(h)->setQpInternal(0, 0, 64, h[SliceQpY()], 0);
-            }
-
-            BitWriter &writer = *static_cast<BitWriter *>(h);
-            size_t bytesBeforeWriting = writer.pos();
-
-            auto w = h.template change<Write<void>>();
-            Syntax<coding_quadtree>::go(cqt, w);
-
-            if(h[cu_qp_delta_enabled_flag()])
-                static_cast<QpState *>(h)->swapInternalMemory();
-
-            StateEncode *stateEncode = h;
-            if(stateEncode->useRateControl)
-            {
-                size_t bytesAfterWriting = writer.pos();
-                int codingBits = ((int)bytesAfterWriting - (int)bytesBeforeWriting) << 3;
-                StateEncodePicture *stateEncodePicture = h;
-                int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-
-                // Update the rate controller engine
-                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel);
-            }
-
-            // review: test should pass even if this flag set
-            if(!h[cu_qp_delta_enabled_flag()])
-                candidate->checkSameAs(contextsAfterSearch);
-        }
 
         // Copy reconstructed pieces into reconstructed picture buffer
         candidate.StatePieces<Sample>::commit(h[ReconstructedPicture()], cqt);
@@ -836,6 +853,75 @@ struct Encode<coding_quadtree>
             ASSERT(ok && "distortion (or lambda) does not match that measured during searches");
         }
 
+        // SAO rate-distortion search:
+        if (h[sample_adaptive_offset_enabled_flag()])
+        {
+            StateEncode* stateEncode = h;
+            if (stateEncode->saoslow)
+                static_cast<StatePicture *>(h)->loopFilterPicture->processCtu(h, *static_cast<coding_tree_unit *>(h));
+
+            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
+            EncSao* encSao = new EncSao();
+            const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
+            const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
+            StateEncodePicture *stateEncodePicture = h;
+            PictureWrapper &orgPic = *stateEncodePicture->docket->picture;
+            ReconstructedPicture2<Sample> *recPic = h;
+            encSao->rdSao<Sample>(h, orgPic, recPic, rx, ry);
+            delete encSao;
+        }
+
+        static_cast<StateCodedData &>(*originalCandidate) = static_cast<StateCodedData &>(candidate);
+        originalCandidate->StateCodedData::startReading();
+
+        *currentCandidate = originalCandidate;
+        {
+            Candidate<Sample> *candidate = h;
+
+            Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->write);
+
+            // walk tree and writes bitstream
+            // review: derive split_cu_flag directly from coded data
+            h[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(h)->codedCu.word0().CtDepth;
+
+            if(h[cu_qp_delta_enabled_flag()])
+            {
+                static_cast<QpState *>(h)->setCanWrite(true);
+                static_cast<QpState *>(h)->setQpInternal(0, 0, 64, h[SliceQpY()], 0);
+            }
+
+            BitWriter &writer = *static_cast<BitWriter *>(h);
+            size_t bytesBeforeWriting = writer.pos();
+
+            auto w = h.template change<Write<void>>();
+            Syntax<coding_tree_unit>::go(coding_tree_unit(), w);
+
+            {
+                //SAO contexts are not touched during search but they are modified in Write. This ensures that this change is not triggered as an error.
+                contextsAfterSearch.ContextsBase2<sao_type_idx_X, 1>::cm = candidate->ContextsBase2<sao_type_idx_X, 1>::cm;
+                contextsAfterSearch.ContextsBase2<sao_merge_X_flag, 1>::cm = candidate->ContextsBase2<sao_merge_X_flag, 1>::cm;
+            }
+
+            if(h[cu_qp_delta_enabled_flag()])
+                static_cast<QpState *>(h)->swapInternalMemory();
+
+            StateEncode *stateEncode = h;
+            if (stateEncode->useRateControl)
+            {
+                size_t bytesAfterWriting = writer.pos();
+                int codingBits = ((int)bytesAfterWriting - (int)bytesBeforeWriting) << 3;
+                StateEncodePicture *stateEncodePicture = h;
+                int currentPictureLevel = stateEncodePicture->docket->sopLevel;
+
+                // Update the rate controller engine
+                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel);
+            }
+
+            // review: test should pass even if this flag set
+            if(!h[cu_qp_delta_enabled_flag()])
+                candidate->checkSameAs(contextsAfterSearch);
+        }
+
         // review: unnecessary copy
         originalCandidate->snakeIntraReferenceSamples[0].copyBlockFrom(candidate.snakeIntraReferenceSamples[0], after, cqt, 0);
         originalCandidate->snakeIntraReferenceSamples[1].copyBlockFrom(candidate.snakeIntraReferenceSamples[1], after, cqt, 1);
@@ -859,7 +945,6 @@ struct Write<Deleted<coding_quadtree, Direction>>
     }
 };
 
-
 template <>
 struct Write<coding_unit>
 {
@@ -870,6 +955,7 @@ struct Write<coding_unit>
         coding_quadtree const *cqt = h;
         Neighbourhood *neighbourhood = h;
         Snake<BlockData>::Cursor *cursor = h;
+
 
         cursor->relocate(neighbourhood->snake, cu, neighbourhood->MinCbLog2SizeYMinus1);
 
@@ -888,6 +974,7 @@ struct Write<coding_unit>
         cursor->relocate(neighbourhood->snake, cu, h[MinCbLog2SizeY()] - 1); // < review: remove?
 
         if (CuPredMode != MODE_INTRA) stateCodedData->firstPu();
+
 
         if(h[cu_qp_delta_enabled_flag()] && static_cast<QpState *>(h)->getCanWrite())
         {
@@ -933,19 +1020,23 @@ struct Write<coding_unit>
         Syntax<coding_unit>::go(cu, h);
 
         static_cast<QpState *>(h)->postCu(cu, h);
-
         neighbourhood->recordMerge(h, *cqt, CuPredMode == MODE_INTRA);
+  
 
-        if (std::is_same<typename H::Tag, Write<void>>::value)
+        if ( (std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+             (std::is_same<typename H::Tag, EstimateAndSet<void>>::value) )
         {
-
             static_cast<StatePicture *>(h)->loopFilterPicture->processCu(h, cu);
-
+        //}
+        //if (std::is_same<typename H::Tag, Write<void>>::value)
+        //{
             if (CuPredMode == MODE_INTRA)
             {
                 StatePicture *decodedPicture = h;
                 decodedPicture->motion->fillRectangleIntra(cu);
             }
+        //}
+        //{
             StateEncode *stateEncode = h;
             if(stateEncode->useRateControl && h[slice_type()] != I)
             {
@@ -1097,8 +1188,13 @@ struct Write<transform_tree>
         {
             ASSERT(stateCodedData->transformTreeAncestry[tt.trafoDepth - 1].word0().split_transform_flag);
         }
-
-        h[split_transform_flag()] = infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h);
+        bool inferTransformDepth = !((h[current(CuPredMode(tt.x0, tt.y0))] != MODE_INTRA) &&
+            tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
+            tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
+            tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
+        int split = stateCodedData->transformTree.word0().split_transform_flag;
+        
+        h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : split;
 
         //auto p = stateCodedData->transformTree.p;
         Syntax<transform_tree>::go(tt, h);
@@ -1138,7 +1234,8 @@ struct Write<transform_unit>
         }
 
         // Review: replace if () with static techniques.
-        if (std::is_same<typename H::Tag, Write<void>>::value)
+        if ((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+            (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
         {
             static_cast<StatePicture *>(h)->loopFilterPicture->processTu(h, tu);
         }
@@ -1536,8 +1633,8 @@ struct Write<IfCbf<V, residual_coding>>
         if (h[e.cbf])
         {
             CopyValueToState<residual_coding, H> copy{ h, rc };
-
-            if (std::is_same<typename H::Tag, Write<void>>::value)
+            if((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+                (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
             {
                 static_cast<StatePicture *>(h)->loopFilterPicture->processRc(h, rc);
             }
@@ -1578,7 +1675,6 @@ struct Write<IfCbf<V, residual_coding>>
     }
 };
 
-
 template <>
 struct Write<prediction_unit>
 {
@@ -1592,19 +1688,23 @@ struct Write<prediction_unit>
         ASSERT(h[slice_type()] != I);
 
         cursor->relocate(neighbourhood->snake, pu, h[MinCbLog2SizeY()] - 1);
+      
         BlockData &blockData = cursor->current(0, 0, h[MinCbLog2SizeY()] - 1);
-        processPredictionUnit(h, pu, blockData, stateSubstream->partIdx);
 
+        processPredictionUnit(h, pu, blockData, stateSubstream->partIdx);
+  
         Syntax<prediction_unit>::go(pu, h);
 
-        if (std::is_same<typename H::Tag, Write<void>>::value)
+        if((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+            (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
         {
-            // This is the CTU-final pass, writing bitstream.
             // Populate loop filter and temporal motion buffers accordingly.
 
             StatePicture *statePictureBase = h;
             statePictureBase->loopFilterPicture->processPu(h, pu);
-
+       // }
+        //if (std::is_same<typename H::Tag, Write<void>>::value)
+        //{
             StatePicture *decodedPicture = h;
             decodedPicture->motion->fillRectangle(pu, blockData);
         }

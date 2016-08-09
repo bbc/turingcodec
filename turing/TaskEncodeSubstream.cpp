@@ -78,7 +78,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
         {
             StateEncodePicture *stateEncodePicture = dynamic_cast<StateEncodePicture *>(h[RefPicList(L0)][rIdx].dp.get());
             StateWavefront *stateWavefrontRef = stateEncodePicture;
-            if (!stateWavefrontRef->deblocked(depX, depY)) return true;
+            if (!stateWavefrontRef->saoed(depX, depY)) return true;
         }
     }
 
@@ -88,7 +88,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
         {
             StateEncodePicture *stateEncodePicture = dynamic_cast<StateEncodePicture *>(h[RefPicList(L1)][rIdx].dp.get());
             StateWavefront *stateWavefrontRef = stateEncodePicture;
-            if (!stateWavefrontRef->deblocked(depX, depY)) return true;
+            if (!stateWavefrontRef->saoed(depX, depY)) return true;
         }
     }
 

@@ -105,6 +105,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
     po::options_description optionsTools("Coding tool options");
     optionsTools.add_options()
                 ("deblock", po::bool_switch()->default_value(true), "enable deblocking filter")
+                ("sao", po::bool_switch()->default_value(false), "enable sample adaptive offset filter")
                 ("strong-intra-smoothing", po::bool_switch(), "enable strong intra smoothing")
                 ("rqt", po::bool_switch(), "enable one level of rqt (inter coding only)")
                 ("amp", po::bool_switch(), "enable asymmetric motion partitions")
@@ -129,7 +130,8 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
                         ("cfm", po::bool_switch(), "enable coding flag mode")
                         ("met", po::bool_switch(), "enable multiple early termination for motion estimation")
                         ("aps", po::bool_switch(), "enable adaptive partition selection")
-                        ("rcudepth", po::bool_switch(), "enable rcu-depth algorithm");
+                        ("rcudepth", po::bool_switch(), "enable rcu-depth algorithm")
+                        ("sao-slow-mode", po::bool_switch()->default_value(false), "enable slow sao mode (more accurate)");
     options.add(optionsPerformance);
 
     po::options_description optionsOptimisation("Optimisation options");
@@ -167,6 +169,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
                 ("no-strong-intra-smoothing", po::bool_switch(), "disable strong intra smoothing")
                 ("no-wpp", po::bool_switch(), "disable wpp")
                 ("no-deblock", po::bool_switch(), "disable deblocking")
+                ("no-sao", po::bool_switch(), "disable sao")
                 ("no-rect", po::bool_switch(), "disable rectangular partitions for inter coding")
                 ("no-amp", po::bool_switch(), "disable asymmetric motion partition")
                 ("no-smp", po::bool_switch()->default_value(false), "disable symmetric motion partition")
@@ -176,6 +179,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
                 ("no-esd", po::bool_switch(), "disable early skip detection")
                 ("no-cfm", po::bool_switch(), "disable coding flag mode")
                 ("no-met", po::bool_switch(), "disable multiple early termination")
+                ("no-sao-slow-mode", po::bool_switch(), "disable slow sao mode")
                 ("no-rdoq", po::bool_switch(), "disable rate distortion optimised quantisation")
                 ("no-rcudepth", po::bool_switch(), "disable rcu-depth algorithm")
                 ("no-sdh", po::bool_switch(), "disable sign data hiding")

@@ -276,6 +276,8 @@ DEFINE_DERIVED_LONG(MinTbAddrZs)
 
 
 struct ReconstructedPicture { };
+struct SaoPicture { };
+struct DeblockPicture { };
 template <typename T>
 struct ReconstructedPicture2;
 

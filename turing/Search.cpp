@@ -576,6 +576,71 @@ void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtr
 #endif
 };
 
+template <class H>
+void Search<sao>::go(const sao &s, H &h)
+{
+    const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
+    const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
+    auto h2 = h.template change<EstimateRate<void>>();
+    if (s.rx > 0)
+    {
+        const bool leftCtbInSliceSeg = h[CtbAddrInRs()] > h[SliceAddrRs()];
+        const bool leftCtbInTile = h[TileId(h[CtbAddrInTs()])] == h[TileId(h[CtbAddrRsToTs(h[CtbAddrInRs()] - 1)])];
+        if (leftCtbInSliceSeg && leftCtbInTile)
+            h2(sao_merge_left_flag(), ae(v));
+    }
+    if (s.ry > 0 && !h2[sao_merge_left_flag()])
+    {
+        const bool upCtbInSliceSeg = (h[CtbAddrInRs()] - h[PicWidthInCtbsY()]) >= h[SliceAddrRs()];
+        const bool upCtbInTile = h[TileId(h[CtbAddrInTs()])] == h[TileId(h[CtbAddrRsToTs(h[CtbAddrInRs()] - h[PicWidthInCtbsY()])])];
+        if (upCtbInSliceSeg && upCtbInTile)
+            h2(sao_merge_up_flag(), ae(v));
+    }
+    if (!h2[sao_merge_up_flag()] && !h2[sao_merge_left_flag()])
+    {
+        if (h2[slice_sao_luma_flag()])
+        {
+
+            h2(sao_type_idx_luma(), ae(v));
+            if (h2[SaoTypeIdx(0, s.rx, s.ry)] != 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    h2(sao_offset_abs(0, s.rx, s.ry, i), ae(v));
+                if (h2[SaoTypeIdx(0, s.rx, s.ry)] == 1)
+                {
+                    for (int i = 0; i < 4; i++)
+                        if (h2[sao_offset_abs(0, s.rx, s.ry, i)] != 0)
+                            h2(sao_offset_sign(0, s.rx, s.ry, i), ae(v));
+                    h2(sao_band_position(0, s.rx, s.ry), ae(v));
+                }
+                else
+                {
+                    h2(sao_eo_class_luma(), ae(v));
+                }
+            }
+        }
+        if (h2[slice_sao_chroma_flag()])
+        {
+            h2(sao_type_idx_chroma(), ae(v));
+            if (h2[SaoTypeIdx(1, s.rx, s.ry)] != 0)
+            {
+                for (int i = 0; i < 4; i++)
+                    h2(sao_offset_abs(1, s.rx, s.ry, i), ae(v));
+                if (h2[SaoTypeIdx(1, s.rx, s.ry)] == 1)
+                {
+                    for (int i = 0; i < 4; i++)
+                        if (h2[sao_offset_abs(1, s.rx, s.ry, i)] != 0)
+                            h2(sao_offset_sign(1, s.rx, s.ry, i), ae(v));
+                    h2(sao_band_position(1, s.rx, s.ry), ae(v));
+                }
+                else
+                {
+                    h2(sao_eo_class_chroma(), ae(v));
+                }
+            }
+        }
+    }
+}
 
 template <class H>
 void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
@@ -854,7 +919,9 @@ void searchInterCuPartMode(H &h, coding_quadtree const &cqt, int partMode, Candi
     stateEncodeSubstream->interPieces[0][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].allocateBlock(cqt.log2CbSize, zY);
     stateEncodeSubstream->interPieces[1][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].allocateBlock(cqt.log2CbSize - 1, zC);
     stateEncodeSubstream->interPieces[2][1] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].allocateBlock(cqt.log2CbSize - 1, zC);
-
+    stateEncodeSubstream->interPieces[0][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].allocateBlock(cqt.log2CbSize, zY);
+    stateEncodeSubstream->interPieces[1][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].allocateBlock(cqt.log2CbSize - 1, zC);
+    stateEncodeSubstream->interPieces[2][2] = stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].allocateBlock(cqt.log2CbSize - 1, zC);
     if (partMode < 0)
     {
         contender->StateCodedData::codedCu.word1().merge[stateEncodeSubstream->partIdx] = partMode + h[MaxNumMergeCand()] + 1;
@@ -2209,16 +2276,15 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         stateEncodeSubstream->ssdPrediction[0] = 0;
         stateEncodeSubstream->ssdPrediction[1] = 0;
         stateEncodeSubstream->ssdPrediction[2] = 0;
-
         // encode transform tree, measure distortion (SSD) and create corresponding CodedData
         auto const ssd = reconstructInter(tt, h);
+        int rqtdepth = candidate->rqtdepth;
         candidate->lambdaDistortion += ssd * getReciprocalLambda(h);
         StateCodedData codedDataAfter = *stateCodedData;
 
         // rewind CodedData pointers to start of CU in preparation for measuring rate
         *stateCodedData = codedDataBefore;
         stateCodedData->partIdx = 0;
-
         // review: sort out how snake is positioned / moves through this function
         // cu_skip_flag needs top/left CU neighbours
         // at entry to this function, snake is bottom/right
@@ -2342,14 +2408,38 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         }
 
         candidate->snake = snakePointerBefore;
+        int keep3, flush1, flush2;
+        if (keep == 0)
+        {
+            keep3 = 0;
+            flush1 = 1;
+            flush2 = 2;
 
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][1 - keep]);
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][1 - keep]);
-        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][1 - keep]);
+        }
+        else if(rqtdepth == 0)
+        {
+            flush1 = 0;
+            keep3 = 1;
+            flush2 = 2;
+        }
+        else if (rqtdepth == 1)
+        {
+            flush1 = 0;
+            flush2 = 1;
+            keep3 = 2;
+        }
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][flush1]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][flush1]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][flush1]);
 
-        candidate->appendPiece(0, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize, 0), uint16_t((*cqt).log2CbSize), stateEncodeSubstream->interPieces[0][keep].i);
-        candidate->appendPiece(1, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 1), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[1][keep].i);
-        candidate->appendPiece(2, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 2), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[2][keep].i);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][flush2]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][flush2]);
+        stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][flush2]);
+
+
+        candidate->appendPiece(0, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize, 0), uint16_t((*cqt).log2CbSize), stateEncodeSubstream->interPieces[0][keep3].i);
+        candidate->appendPiece(1, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 1), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[1][keep3].i);
+        candidate->appendPiece(2, residual_coding((*cqt).x0, (*cqt).y0, (*cqt).log2CbSize - 1, 2), uint16_t((*cqt).log2CbSize - 1), stateEncodeSubstream->interPieces[2][keep3].i);
     }
 };
 
@@ -2359,3 +2449,5 @@ template void Search<coding_quadtree>::go<Handler<Search<Mode<0>>, Candidate<uin
 template void Search<coding_quadtree>::go<Handler<Search<Mode<0>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<0>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> &);
 template void Search<coding_quadtree>::go<Handler<Search<Mode<1>>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<1>>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> &);
 template void Search<coding_quadtree>::go<Handler<Search<Mode<1>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(coding_quadtree const &, Handler<Search<Mode<1>>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> &);
+template void Search<sao>::go<Handler<Search<void>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode> >(sao const&, Handler<Search<void>, Candidate<uint8_t>, StateEncodeSubstream<uint8_t>, StateEncodePicture2<uint8_t>, StateEncode>&);
+template void Search<sao>::go<Handler<Search<void>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode> >(sao const&, Handler<Search<void>, Candidate<uint16_t>, StateEncodeSubstream<uint16_t>, StateEncodePicture2<uint16_t>, StateEncode>&);
