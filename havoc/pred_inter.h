@@ -92,9 +92,9 @@ namespace havoc {
         SubtractBi<Sample>* p;
 
         SubtractBi<Sample>*& get()
-	        {
+            {
             return this->p;
-	        }
+            }
     };
 
     template <typename Sample>

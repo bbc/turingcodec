@@ -37,10 +37,13 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ALL_NO_LIB /bigobj /GS- /MP")
 endif()
 
+set(LINK_LIBRARIES boost_program_options boost_filesystem boost_system boost_timer boost_chrono)
+
 if (CMAKE_COMPILER_IS_GNUCC)
     set(GCC_COMPILE_FLAGS "-fno-operator-names -std=c++0x -pthread -O3 -std=c++1y -mlzcnt")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
+    set(LINK_LIBRARIES ${LINK_LIBRARIES} rt)
 endif (CMAKE_COMPILER_IS_GNUCC	)
 
 set(SEI_HEADERS
@@ -112,8 +115,8 @@ add_library(turing
     signature.cpp
     ProgressReporter.cpp 
     SCDetection.cpp
-    smoke.cpp 
     TaskDeblock.cpp 
+    testdecode.cpp 
     Aps.h
     Binarization.h
     BitField.h
@@ -123,7 +126,6 @@ add_library(turing
     CandModeList.h
     CodeCache.h
     CodedData.h
-    ConformanceStreams.h
     ContextModel.h
     Cost.h
     Decode.h
@@ -203,7 +205,7 @@ target_link_libraries (turing LINK_PUBLIC havoc)
 
 add_executable (turing-exe main.cpp )
 
-target_link_libraries (turing-exe LINK_PUBLIC turing boost_program_options boost_filesystem boost_system boost_timer boost_chrono)
+target_link_libraries (turing-exe LINK_PUBLIC turing ${LINK_LIBRARIES})
 
 install(TARGETS turing LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 install(FILES turing.h DESTINATION include)

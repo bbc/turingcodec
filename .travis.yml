@@ -1,0 +1,20 @@
+language: generic
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-5
+
+script:
+  - mkdir build
+  - cd build
+  - cmake -DCMAKE_CXX_COMPILER=g++-5 -DCMAKE_C_COMPILER=gcc-5 ..
+  - make
+  - git clone -n https://github.com/kupix/bitstreams.git
+  - cd bitstreams
+  - git checkout 26f3162
+  - cd ..
+  - ./turing/turing-exe signature ../test/
+  - ./turing/turing-exe testdecode
