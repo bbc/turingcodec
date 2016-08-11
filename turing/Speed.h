@@ -74,7 +74,6 @@ struct Speed
         return true;
     }
 
-
     bool useSmallSearchWindow() const
     {
         return *this >= fast;
