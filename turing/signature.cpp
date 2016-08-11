@@ -228,7 +228,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 
     static const Test tests[] =
     {
-        { "03e9f1b8", "7e5882e3", "caminandes2", "" },
+        { "371ae2fb", "9e14bdb3", "caminandes2", "--no-sao" },
         { "77aac733", "d463c072", "caminandes2", "--speed fast" },
         { "77aac733", "d463c072", "caminandes2", "--speed fast --asm 0" },
         { "77aac733", "d463c072", "caminandes2", "--speed fast --threads 1" },

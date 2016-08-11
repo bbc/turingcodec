@@ -34,12 +34,12 @@ DEFINE_VALUE_ARRAY_3(filter_hint_value, cIdx, 3, cy, 16, cx, 16);
 template <>
 struct Syntax<post_filter_hint>
 {
-    template <class H> static void go(const post_filter_hint &fun, H &h);
+    template <class H> static void go(post_filter_hint fun, H &h);
 };
 
 
 template <class H>
-void Syntax<post_filter_hint>::go(const post_filter_hint &fun, H &h)
+void Syntax<post_filter_hint>::go(post_filter_hint fun, H &h)
 {
     h(filter_hint_size_y(), ue(v));
     h(filter_hint_size_x(), ue(v));
@@ -60,14 +60,9 @@ struct PostFilterHint :
     };
 
 
-template <class H> void Read<post_filter_hint>::go(const post_filter_hint &f, H &h)
+template <class H> void Read<post_filter_hint>::go(post_filter_hint f, H &h)
 {
     PostFilterHint postFilterHint;
-    auto h3 = extendHandler(postFilterHint, h);
+    auto h3 = h.extend(&postFilterHint);
     Syntax<post_filter_hint>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(post_filter_hint)
-#endif

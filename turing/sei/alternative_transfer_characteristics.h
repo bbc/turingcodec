@@ -28,7 +28,7 @@ struct preferred_transfer_characteristics { };
 template <>
 struct Syntax<alternative_transfer_characteristics>
 {
-    template <class H> static void go(const alternative_transfer_characteristics &fun, H &h)
+    template <class H> static void go(alternative_transfer_characteristics fun, H &h)
     {
         h(preferred_transfer_characteristics(), u(8));
     }
@@ -39,10 +39,10 @@ struct AlternativeTransferCharacteristics :
     {
     };
 
-template <class H> void Read<alternative_transfer_characteristics>::go(const alternative_transfer_characteristics &f, H &h)
+template <class H> void Read<alternative_transfer_characteristics>::go(alternative_transfer_characteristics f, H &h)
 {
     AlternativeTransferCharacteristics atc;
-    auto h2 = extendHandler(atc, h);
+    auto h2 = h.extend(&atc);
 
     Syntax<alternative_transfer_characteristics>::go(f, h2);
 }

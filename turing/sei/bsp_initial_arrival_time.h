@@ -38,7 +38,7 @@ struct BspInitialArrivalTime :
 template <>
 struct Syntax<bsp_initial_arrival_time>
 {
-    template <class H> static void go(const bsp_initial_arrival_time &fun, H &h)
+    template <class H> static void go(bsp_initial_arrival_time fun, H &h)
     {
         auto const psIdx = h[sei_partitioning_scheme_idx()];
         if (nalInitialArrivalDelayPresent)
@@ -51,7 +51,7 @@ struct Syntax<bsp_initial_arrival_time>
 };
 
 
-template <class H> void Read<bsp_initial_arrival_time>::go(const bsp_initial_arrival_time &f, H &h)
+template <class H> void Read<bsp_initial_arrival_time>::go(bsp_initial_arrival_time f, H &h)
 {
     RecoveryPoint recoveryPoint;
     auto h3 = h.extend(&recoveryPoint);

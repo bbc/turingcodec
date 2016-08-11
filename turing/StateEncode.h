@@ -725,6 +725,7 @@ struct StateEncode :
     InputQueue,
     StateSequence,
     StateFunctionTables,
+    StateWriteUserDataUnregistered,
     ValueHolder<rbsp_byte>,
     ValueHolder<more_data_in_byte_stream>,
     ValueHolder<more_rbsp_data>,

@@ -60,15 +60,10 @@ template <> struct Syntax<mastering_display_colour_volume>
 };
 
 
-template <class H> void  Read<mastering_display_colour_volume>::go(mastering_display_colour_volume const &f, H &h)
+template <class H> void  Read<mastering_display_colour_volume>::go(mastering_display_colour_volume f, H &h)
 {
     StateParameterSets *stateParameterSets = h;
     stateParameterSets->masteringDisplayColourVolume.reset(new MasteringDisplayColourVolume());
     auto h3 = h.extend(stateParameterSets->masteringDisplayColourVolume.get());
     Syntax<mastering_display_colour_volume>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(mastering_display_colour_volume)
-#endif

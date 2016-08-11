@@ -68,7 +68,7 @@ struct TimeCode :
     };
 
 
-template <class H> void Read<time_code>::go(time_code const & f, H &h)
+template <class H> void Read<time_code>::go(time_code  f, H &h)
 {
     TimeCode s;
     auto h3 = h.extend(&s);
@@ -119,9 +119,3 @@ void Syntax<time_code>::go(time_code fun, H &h)
         }
     }
 }
-
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(time_code)
-#endif

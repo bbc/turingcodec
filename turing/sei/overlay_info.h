@@ -30,9 +30,7 @@ For more information, contact us at info @ turingcodec.org.
 // where stringLength is equal to the number of bytes returned.
 struct st
 {
-    st(int v)
-    {
-    }
+    st(int v) {}
 };
 
 
@@ -61,7 +59,6 @@ DEFINE_VALUE_ARRAY_1(overlay_name, i, 16);
 template <> struct ValueType<struct overlay_element_name> { typedef std::string Type; };
 DEFINE_VALUE_ARRAY_2(overlay_element_name, i, 16, j, 256);
 struct overlay_info_persistence_flag { };
-
 
 
 template <>
@@ -146,6 +143,46 @@ struct OverlayInfo :
     };
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(overlay_info)
-#endif
+template <class H> void Read<overlay_info>::go(overlay_info f, H &h)
+{
+    OverlayInfo overlayInfo;
+    auto hh = h.extend(&overlayInfo);
+    Syntax<overlay_info>::go(f, hh);
+}
+
+
+template <>
+struct Read<Element<overlay_element_label_min, u>>
+{
+    template <class H> static void go(Element<overlay_element_label_min, u> fun, H &h)
+    {
+        const int nBits = h[overlay_element_label_value_length_minus8()] + 8;
+        h[fun.v] = read_bits<typename ValueType<overlay_element_label_min>::Type>(h, nBits);
+    }
+};
+
+template <>
+struct Read<Element<overlay_element_label_max, u>>
+{
+    template <class H> static void go(Element<overlay_element_label_max, u> fun, H &h)
+    {
+        const int nBits = h[overlay_element_label_value_length_minus8()] + 8;
+        h[fun.v] = read_bits<typename ValueType<overlay_element_label_max>::Type>(h, nBits);
+    }
+};
+
+
+template <class V>
+struct Read<Element<V, st>>
+{
+    template <class H> static void go(Element<V, st> fun, H &h)
+    {
+        while (true)
+        {
+            char c = read_bytes<char>(h, 1);
+            if (!c) 
+                break;
+            h[fun.v] += c;
+        }
+    }
+};

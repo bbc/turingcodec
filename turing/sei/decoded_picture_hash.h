@@ -50,11 +50,11 @@ DEFINE_VALUE_ARRAY_1(picture_checksum, cIdx, 3);
 template <>
 struct Syntax<decoded_picture_hash>
 {
-    template <class H> static void go(const decoded_picture_hash &fun, H &hh);
+    template <class H> static void go(decoded_picture_hash fun, H &hh);
 };
 
 template <class H>
-void Syntax<decoded_picture_hash>::go(const decoded_picture_hash &fun, H &hh)
+void Syntax<decoded_picture_hash>::go(decoded_picture_hash fun, H &hh)
 {
     StateSlice *stateSlice = hh;
     auto h = hh;//.extend(stateSlice, hh);
@@ -173,7 +173,7 @@ struct DecodedPictureHash :
     };
 
 
-template <class H> void Read<decoded_picture_hash>::go(const decoded_picture_hash &f, H &h)
+template <class H> void Read<decoded_picture_hash>::go(decoded_picture_hash f, H &h)
 {
     DecodedPictureHash decodedPictureHash;
     auto h3 = h.extend(&decodedPictureHash);
@@ -182,6 +182,3 @@ template <class H> void Read<decoded_picture_hash>::go(const decoded_picture_has
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(decoded_picture_hash)
-#endif

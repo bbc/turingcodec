@@ -46,7 +46,7 @@ void Syntax<content_light_level>::go(content_light_level fun, H &h)
 }
 
 
-template <class H> void Read<content_light_level>::go(content_light_level const &f, H &h)
+template <class H> void Read<content_light_level>::go(content_light_level f, H &h)
 {
     ContentLightLevel s;
     auto h3 = h.extend(&s);
@@ -55,6 +55,3 @@ template <class H> void Read<content_light_level>::go(content_light_level const 
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(content_light_level)
-#endif

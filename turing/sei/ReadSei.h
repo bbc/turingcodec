@@ -26,7 +26,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "user_data_unregistered.h"
 #include "time_code.h"
 #include "overlay_info.h"
-#include "../Read.h"
+#include "../Read.hpp"
 #include "../Violation.h"
 
 
@@ -64,7 +64,7 @@ template <> struct Read<Element<bp_seq_parameter_set_id, ue>>
 
 // layers_not_present
 
-template <class H> void Read<layers_not_present>::go(layers_not_present const & f, H &h)
+template <class H> void Read<layers_not_present>::go(layers_not_present  f, H &h)
 {
     LayersNotPreset s;
     auto h3 = h.extend(&s);
@@ -95,7 +95,7 @@ template <> struct Read<Element<lnp_sei_active_vps_id, u>>
 
 // user_data_unregistered
 
-template <class H> void Read<user_data_unregistered>::go(user_data_unregistered const &f, H &h)
+template <class H> void Read<user_data_unregistered>::go(user_data_unregistered f, H &h)
 {
     UserDataUnregistered userDataRegistered;
     auto h3 = h.extend(&userDataRegistered);
@@ -150,7 +150,7 @@ template <> struct Read<Element<time_offset_value, i>>
 
 // overlay_info
 
-template <class H> void Read<overlay_info>::go(overlay_info const &f, H &h)
+template <class H> void Read<overlay_info>::go(overlay_info f, H &h)
 {
     OverlayInfo overlayInfo;
     auto hh = h.extend(&overlayInfo);

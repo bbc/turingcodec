@@ -72,12 +72,12 @@ struct FilmGrainCharacteristics :
 template <>
 struct Syntax<film_grain_characteristics>
 {
-    template <class H> static void go(const film_grain_characteristics &fun, H &h);
+    template <class H> static void go(film_grain_characteristics fun, H &h);
 };
 
 
 template <class H>
-void Syntax<film_grain_characteristics>::go(const film_grain_characteristics &fun, H &h)
+void Syntax<film_grain_characteristics>::go(film_grain_characteristics fun, H &h)
 {
     h(film_grain_characteristics_cancel_flag(), u(1));
     if (!h[film_grain_characteristics_cancel_flag()])
@@ -120,15 +120,10 @@ void Syntax<film_grain_characteristics>::go(const film_grain_characteristics &fu
 }
 
 
-template <class H> void Read<film_grain_characteristics>::go(const film_grain_characteristics &f, H &h)
+template <class H> void Read<film_grain_characteristics>::go(film_grain_characteristics f, H &h)
 {
     FilmGrainCharacteristics filmGrainCharacteristics;
     auto h3 = h.extend(&filmGrainCharacteristics);
 
     Syntax<film_grain_characteristics>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(film_grain_characteristics)
-#endif

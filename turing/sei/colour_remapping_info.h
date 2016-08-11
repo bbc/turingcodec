@@ -131,7 +131,7 @@ struct ColourRemappingInfo :
     };
 
 
-template <class H> void Read<colour_remapping_info>::go(colour_remapping_info const &f, H &h)
+template <class H> void Read<colour_remapping_info>::go(colour_remapping_info f, H &h)
 {
     ColourRemappingInfo colourRemappingInfo;
     auto hh = h.extend(&colourRemappingInfo);
@@ -139,6 +139,3 @@ template <class H> void Read<colour_remapping_info>::go(colour_remapping_info co
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(colour_remapping_info)
-#endif

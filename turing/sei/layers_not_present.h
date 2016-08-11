@@ -49,6 +49,31 @@ template <> struct Syntax<layers_not_present>
 };
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(layers_not_present)
-#endif
+template <class H> void Read<layers_not_present>::go(layers_not_present  f, H &h)
+{
+    LayersNotPreset s;
+    auto h3 = h.extend(&s);
+    Syntax<layers_not_present>::go(f, h3);
+}
+
+
+template <> struct Read<Element<lnp_sei_active_vps_id, u>>
+{
+    template <class H> static void go(Element<lnp_sei_active_vps_id, u> f, H &h)
+    {
+        ReadU<lnp_sei_active_vps_id, u>::go(f, h);
+
+        auto found = h[Table<Vps>()].find(h[f.v]);
+
+        if (found == h[Table<Vps>()].end())
+        {
+            h(Violation("F.14.3.3", "lnp_sei_active_vps_id does not indicate a valid VPS ID"));
+            throw Abort();
+        }
+        else
+        {
+            h[Active<Vps>()] = found->second;
+        }
+    }
+};
+

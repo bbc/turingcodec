@@ -34,7 +34,7 @@ struct pan_scan_rect_persistence_flag { };
 template <>
 struct Syntax<pan_scan_rect>
 {
-    template <class H> static void go(const pan_scan_rect &fun, H &h)
+    template <class H> static void go(pan_scan_rect fun, H &h)
     {
         h(pan_scan_rect_id(), ue(v));
         h(pan_scan_rect_cancel_flag(), u(1));
@@ -65,17 +65,12 @@ struct PanScanRect :
     {
     };
 
-template <class H> void Read<pan_scan_rect>::go(const pan_scan_rect &f, H &h)
+template <class H> void Read<pan_scan_rect>::go(pan_scan_rect f, H &h)
 {
     PanScanRect panScanRect;
     auto h3 = h.extend(&panScanRect);
 
     Syntax<pan_scan_rect>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(pan_scan_rect)
-#endif
 
 

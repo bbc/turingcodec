@@ -86,7 +86,7 @@ struct ChromaResamplingFilterHint :
     };
 
 
-template <class H> void Read<chroma_resampling_filter_hint>::go(const chroma_resampling_filter_hint &f, H &h)
+template <class H> void Read<chroma_resampling_filter_hint>::go(chroma_resampling_filter_hint f, H &h)
 {
     ChromaResamplingFilterHint chromaResamplingFilterHint;
     auto hh = h.extend(&chromaResamplingFilterHint);
@@ -94,6 +94,3 @@ template <class H> void Read<chroma_resampling_filter_hint>::go(const chroma_res
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(chroma_resampling_filter_hint)
-#endif

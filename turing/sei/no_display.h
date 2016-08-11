@@ -26,18 +26,13 @@ For more information, contact us at info @ turingcodec.org.
 template <>
 struct Syntax<no_display>
 {
-    template <class H> static void go(const no_display &fun, H &h)
+    template <class H> static void go(no_display fun, H &h)
     {
     }
 };
 
 
-template <class H> void Read<no_display>::go(no_display const & f, H &h)
+template <class H> void Read<no_display>::go(no_display  f, H &h)
 {
     Syntax<no_display>::go(f, h);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(no_display)
-#endif

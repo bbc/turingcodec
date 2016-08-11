@@ -35,7 +35,7 @@ struct ReservedSeiMessage :
 template <>
 struct Syntax<reserved_sei_message>
 {
-    template <class H> static void go(const reserved_sei_message &f, H &h)
+    template <class H> static void go(reserved_sei_message f, H &h)
     {
         for (int i = 0; i < f.payloadSize; i++)
             h(reserved_sei_message_payload_byte(), b(8));
@@ -43,14 +43,9 @@ struct Syntax<reserved_sei_message>
 };
 
 
-template <class H> void Read<reserved_sei_message>::go(const reserved_sei_message &f, H &h)
+template <class H> void Read<reserved_sei_message>::go(reserved_sei_message f, H &h)
 {
     ReservedSeiMessage reservedSeiMessage;
     auto hh = h.extend(&reservedSeiMessage);
     Syntax<reserved_sei_message>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(reserved_sei_message)
-#endif

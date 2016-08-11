@@ -42,12 +42,12 @@ struct DisplayOrientation :
 template <>
 struct Syntax<display_orientation>
 {
-    template <class H> static void go(const display_orientation &fun, H &h);
+    template <class H> static void go(display_orientation fun, H &h);
 };
 
 
 template <class H>
-void Syntax<display_orientation>::go(const display_orientation &fun, H &h)
+void Syntax<display_orientation>::go(display_orientation fun, H &h)
 {
     h(display_orientation_cancel_flag(), u(1));
     if (!h[display_orientation_cancel_flag()])
@@ -60,7 +60,7 @@ void Syntax<display_orientation>::go(const display_orientation &fun, H &h)
 }
 
 
-template <class H> void Read<display_orientation>::go(const display_orientation &f, H &h)
+template <class H> void Read<display_orientation>::go(display_orientation f, H &h)
 {
     DisplayOrientation displayOrientation;
     auto h3 = h.extend(&displayOrientation);
@@ -69,6 +69,3 @@ template <class H> void Read<display_orientation>::go(const display_orientation 
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(display_orientation)
-#endif

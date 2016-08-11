@@ -25,7 +25,7 @@ For more information, contact us at info @ turingcodec.org.
 template <>
 struct Syntax<scalable_nesting>
 {
-    template <class H> static void go(const scalable_nesting &fun, H &h)
+    template <class H> static void go(scalable_nesting fun, H &h)
     {
         h(bitstream_subset_flag(), u(1));
         h(nesting_op_flag(), u(1));
@@ -61,7 +61,7 @@ struct Syntax<scalable_nesting>
 };
 
 
-template <class H> void Read<scalable_nesting>::go(const scalable_nesting &f, H &h)
+template <class H> void Read<scalable_nesting>::go(scalable_nesting f, H &h)
 {
     ScalableNesting *scalableNesting = h;
 
@@ -76,8 +76,3 @@ template <class H> void Read<scalable_nesting>::go(const scalable_nesting &f, H 
         scalableNesting->nested = false;
     }
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(scalable_nesting)
-#endif

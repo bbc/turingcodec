@@ -30,7 +30,7 @@ struct pic_order_cnt_delta { };
 template <>
 struct Syntax<progressive_refinement_segment_start>
 {
-    template <class H> static void go(const progressive_refinement_segment_start &fun, H &h)
+    template <class H> static void go(progressive_refinement_segment_start fun, H &h)
     {
         h(progressive_refinement_id(), ue(v));
         h(pic_order_cnt_delta(), ue(v));
@@ -45,15 +45,10 @@ struct ProgressiveRefinementSegmentStart :
     };
 
 
-template <class H> void Read<progressive_refinement_segment_start>::go(const progressive_refinement_segment_start &f, H &h)
+template <class H> void Read<progressive_refinement_segment_start>::go(progressive_refinement_segment_start f, H &h)
 {
     ProgressiveRefinementSegmentStart progressiveRefinementSegmentStart;
     auto h3 = h.extend(&progressiveRefinementSegmentStart);
 
     Syntax<progressive_refinement_segment_start>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(progressive_refinement_segment_start)
-#endif

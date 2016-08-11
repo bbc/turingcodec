@@ -16,72 +16,131 @@ GNU General Public License for more details.
 Commercial support and intellectual property rights for
 the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
- */
+*/
 
 #pragma once
 
 #include "../SyntaxSei.h"
+#include "../StateParameterSets.h"
+#include "../Read.h"
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/string_generator.hpp>
 
-DEFINE_STRUCT_ARITY_1(user_data_payload_byte, i);
-template<> struct ValueType<user_data_payload_byte> { typedef std::uint8_t Type; };
-template <> struct IsValueArray<user_data_payload_byte> : std::true_type {};
-template <> struct ValueHolder<user_data_payload_byte>
+
+
+struct uuid_iso_iec_11578 {};
+
+struct user_data_payload_byte {};
+
+template <> struct ValueType<uuid_iso_iec_11578>
 {
-    std::vector<uint8_t> value;
-    ValueType<picture_md5>::Type &get(user_data_payload_byte data)
-    {
-        if(data.i == value.size())
-        {
-            // Trying to access the end of the vector, add an element
-            value.push_back(0);
-        }
-        assert(data.i < value.size());
-        return value[data.i];
-    }
-};
-DEFINE_STRUCT_ARITY_1(uuid_iso_iec_11578, i);
-template <> struct ValueType<uuid_iso_iec_11578> { typedef std::uint8_t Type; };
-template <> struct IsValueArray<uuid_iso_iec_11578> : std::true_type {};
-template <> struct ValueHolder<uuid_iso_iec_11578>
-{
-    std::array<uint8_t, 16> value;
-    ValueType<picture_md5>::Type &get(uuid_iso_iec_11578 data)
-    {
-        assert(data.i < 16);
-        return value[data.i];
-    }
+    typedef boost::uuids::uuid Type;
 };
 
-struct UserDataUnregistered :
+
+struct UserDataUnregistered
+    :
     ValueHolder<uuid_iso_iec_11578>,
     ValueHolder<user_data_payload_byte>
-    {
-    };
-
-template <>
-struct Syntax<user_data_unregistered>
 {
-    template <class H> static void go(const user_data_unregistered &fun, H &h)
-    {
+};
 
-        // Review: find a better internal representation to have a 1:1 mapping with the HEVC spec.
-        //h(uuid_iso_iec_11578(), u(128));
-        for(int i = 0; i < 16; i++)
-        {
-            h(uuid_iso_iec_11578(i), u(8));
-        }
+
+template <> struct Syntax<user_data_unregistered>
+{
+    template <class H> static void go(user_data_unregistered fun, H &h)
+    {
+        h(uuid_iso_iec_11578(), u(128));
         for (int i = 16; i < fun.payloadSize; i++)
         {
-            h(user_data_payload_byte(i-16), b(8));
+            h(user_data_payload_byte(), b(8));
         }
     }
 };
 
 
+template <class H> void Read<user_data_unregistered>::go(user_data_unregistered f, H &h)
+{
+    UserDataUnregistered userDataRegistered;
+    auto h3 = h.extend(&userDataRegistered);
+    Syntax<user_data_unregistered>::go(f, h3);
+}
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(user_data_unregistered)
-#endif
+
+template <>
+struct Read<Element<uuid_iso_iec_11578, u>>
+{
+    template <class H> static void go(Element<uuid_iso_iec_11578, u> e, H &h)
+    {
+        boost::uuids::uuid &uuid = h[e.v];
+        assert(e.m.n == 8 * uuid.size());
+        for (auto &byte : uuid)
+            byte = read_bytes<int>(h, 1);
+
+        StateParameterSets *stateParameterSets = h;
+        stateParameterSets->unregisteredUserData[uuid].reset(new std::vector<uint8_t>());
+    }
+};
+
+
+template <>
+struct Read<Element<user_data_payload_byte, b>>
+{
+    template <class H> static void go(Element<user_data_payload_byte, b> e, H &h)
+    {
+        ReadU<user_data_payload_byte, b>::go(e, h);
+
+        auto uuid = h[uuid_iso_iec_11578()];
+
+        StateParameterSets *stateParameterSets = h;
+        stateParameterSets->unregisteredUserData[uuid]->push_back(h[e.v]);
+    }
+};
+
+
+struct StateWriteUserDataUnregistered
+    :
+    ValueHolder<uuid_iso_iec_11578>
+{
+    char const *p;
+    char const *end;
+};
+
+
+template <> struct Write<user_data_unregistered>
+{
+    template <class H> static void go(user_data_unregistered fun, H &h)
+    {
+        StateWriteUserDataUnregistered *stateWriteUserDataUnregistered = h;
+        fun.payloadSize = 16 + (stateWriteUserDataUnregistered->end - stateWriteUserDataUnregistered->p);
+        Syntax<user_data_unregistered>::go(fun, h);
+    }
+};
+
+
+template <>
+struct Write<Element<uuid_iso_iec_11578, u>>
+{
+    template <class H> static void go(Element<uuid_iso_iec_11578, u> e, H &h)
+    {
+        BitWriter *bitWriter = h;
+
+        boost::uuids::uuid uuid = h[e.v];
+        assert(e.m.n == 8 * uuid.size());
+
+        for (auto byte : uuid)
+            bitWriter->writeBits(8, byte);
+    }
+};
+
+
+template <> struct Write<Element<user_data_payload_byte, b>>
+{
+    template <class H> static void go(Element<user_data_payload_byte, b> e, H &h)
+    {
+        StateWriteUserDataUnregistered *stateWriteUserDataUnregistered = h;
+        BitWriter *bitWriter = h;
+        bitWriter->writeBits(8, *stateWriteUserDataUnregistered->p++);
+    }
+};

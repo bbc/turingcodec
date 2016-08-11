@@ -76,14 +76,9 @@ struct KneeFunctionInfo :
     };
 
 
-template <class H> void Read<knee_function_info>::go(knee_function_info const &f, H &h)
+template <class H> void Read<knee_function_info>::go(knee_function_info f, H &h)
 {
     KneeFunctionInfo kneeFunctionInfo;
     auto hh = h.extend(&kneeFunctionInfo);
     Syntax<knee_function_info>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(knee_function_info)
-#endif

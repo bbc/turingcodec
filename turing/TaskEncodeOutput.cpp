@@ -113,27 +113,20 @@ bool writeOut(H &h)
 
     if(!stateEncode->userDataUnregSeiWritten)
     {
+        // Review: add command line options
+        auto const message = "Turing codec version " + std::string(turing_version());
+
+        StateWriteUserDataUnregistered *stateWriteUserDataUnregistered = h;
+        stateWriteUserDataUnregistered->p = message.c_str();
+        stateWriteUserDataUnregistered->end = stateWriteUserDataUnregistered->p + message.length();
+
+        h[uuid_iso_iec_11578()] = boost::uuids::string_generator()("ac9e584e2d484bdd8ccbf3ff9a878e69");
+
         h[nal_unit_type()] = PREFIX_SEI_NUT;
         h[last_payload_type_byte()] = PayloadTypeOf<user_data_unregistered>::value;
-
-        const uint8_t turingUuid[16] = {0xac, 0x9e, 0x58, 0x4e,
-                                        0x2d, 0x48, 0x4b, 0xdd,
-                                        0x8c, 0xcb, 0xf3, 0xff,
-                                        0x9a, 0x87, 0x8e, 0x69};
-        for(int i = 0; i < 16; i++)
-        {
-            h[uuid_iso_iec_11578(i)] = turingUuid[i];
-        }
-        // Review: add command line options
-        string message("Turing codec version " + string(turing_version()));
-        stateEncode->userDataUnregMsgLen = message.length();
-        for(int i = 0; i < stateEncode->userDataUnregMsgLen; i++)
-        {
-            h[user_data_payload_byte(i)] = message[i];
-        }
+        h(byte_stream_nal_unit(0));
 
         stateEncode->userDataUnregSeiWritten = true;
-        h(byte_stream_nal_unit(0));
     }
 
     if (stateEncode->fieldcoding)

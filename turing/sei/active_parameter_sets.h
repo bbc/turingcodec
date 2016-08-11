@@ -45,7 +45,7 @@ struct ActiveParameterSets2 :
 template <>
 struct Syntax<active_parameter_sets>
 {
-    template <class H> static void go(const active_parameter_sets &fun, H &h)
+    template <class H> static void go(active_parameter_sets fun, H &h)
     {
         h(active_video_parameter_set_id(), u(4));
         h(self_contained_cvs_flag(), u(1));
@@ -59,7 +59,7 @@ struct Syntax<active_parameter_sets>
 };
 
 
-template <class H> void Read<active_parameter_sets>::go(const active_parameter_sets &f, H &h)
+template <class H> void Read<active_parameter_sets>::go(active_parameter_sets f, H &h)
 {
     ActiveParameterSets2 activeParameterSets;
     auto h3 = h.extend(&activeParameterSets);
@@ -71,13 +71,9 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-                EXPLICIT_INSTANTIATION(active_parameter_sets)
-#endif
-
 #ifdef REVIEW_LATER
 
-                template <class H> static void Read<buffering_period>::go(buffering_period const &f, H &h)
+                template <class H> static void Read<buffering_period>::go(buffering_period f, H &h)
                 {
                     BufferingPeriod bufferingPeriod;
                     auto h3 = h.extend(&bufferingPeriod);
@@ -88,7 +84,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
                 }
 
 
-                template <class H> void Read<pic_timing>::go(const pic_timing &f, H &h)
+                template <class H> void Read<pic_timing>::go(pic_timing f, H &h)
         {
                     Hrd *hrd = getHrd(h);
 
@@ -108,7 +104,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<decoded_picture_hash>::go(const decoded_picture_hash &f, H &h)
+                template <class H> void Read<decoded_picture_hash>::go(decoded_picture_hash f, H &h)
         {
                     DecodedPictureHash decodedPictureHash;
                     auto h3 = h.extend(&decodedPictureHash);
@@ -125,7 +121,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
                     Syntax<user_data_registered_itu_t_t35>::go(f, h3);
         }
 
-                template <class H> void Read<user_data_unregistered>:: go(const user_data_unregistered &f, H &h)
+                template <class H> void Read<user_data_unregistered>:: go(user_data_unregistered f, H &h)
         {
                     UserDataUnregistered userDataRegistered;
                     auto h3 = h.extend(&userDataRegistered);
@@ -134,7 +130,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<recovery_point>::go(const recovery_point &f, H &h)
+                template <class H> void Read<recovery_point>::go(recovery_point f, H &h)
         {
                     RecoveryPoint recoveryPoint;
                     auto h3 = h.extend(&recoveryPoint);
@@ -143,7 +139,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<scene_info>::go(const scene_info &f, H &h)
+                template <class H> void Read<scene_info>::go(scene_info f, H &h)
         {
                     SceneInfo sceneInfo;
                     auto h3 = h.extend(&sceneInfo);
@@ -152,7 +148,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<picture_snapshot>::go(const picture_snapshot &f, H &h)
+                template <class H> void Read<picture_snapshot>::go(picture_snapshot f, H &h)
         {
                     PictureSnapshot pictureSnapshot;
                     auto h3 = h.extend(&pictureSnapshot);
@@ -161,7 +157,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<progressive_refinement_segment_start>::go(const progressive_refinement_segment_start &f, H &h)
+                template <class H> void Read<progressive_refinement_segment_start>::go(progressive_refinement_segment_start f, H &h)
         {
                     ProgressiveRefinementSegmentStart progressiveRefinementSegmentStart;
                     auto h3 = h.extend(&progressiveRefinementSegmentStart);
@@ -170,7 +166,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<progressive_refinement_segment_end>::go(const progressive_refinement_segment_end &f, H &h)
+                template <class H> void Read<progressive_refinement_segment_end>::go(progressive_refinement_segment_end f, H &h)
         {
                     ProgressiveRefinementSegmentEnd progressiveRefinementSegmentEnd;
                     auto h3 = h.extend(&progressiveRefinementSegmentEnd);
@@ -179,7 +175,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<film_grain_characteristics>::go(const film_grain_characteristics &f, H &h)
+                template <class H> void Read<film_grain_characteristics>::go(film_grain_characteristics f, H &h)
         {
                     FilmGrainCharacteristics filmGrainCharacteristics;
                     auto h3 = h.extend(&filmGrainCharacteristics);
@@ -188,7 +184,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<post_filter_hint>::go(const post_filter_hint &f, H &h)
+                template <class H> void Read<post_filter_hint>::go(post_filter_hint f, H &h)
         {
                     PostFilterHint postFilterHint;
                     auto h3 = extendHandler(postFilterHint, h);
@@ -197,7 +193,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<tone_mapping_info>::go(const tone_mapping_info &f, H &h)
+                template <class H> void Read<tone_mapping_info>::go(tone_mapping_info f, H &h)
         {
                     ToneMappingInfo toneMappingInfo;
                     auto h3 = h.extend(&toneMappingInfo);
@@ -208,7 +204,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
 
 
 
-                template <class H> void Read<pan_scan_rect>:: go(const pan_scan_rect &f, H &h)
+                template <class H> void Read<pan_scan_rect>:: go(pan_scan_rect f, H &h)
         {
                     PanScanRect panScanRect;
                     auto h3 = h.extend(&panScanRect);
@@ -217,7 +213,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<frame_packing_arrangement>::go(const frame_packing_arrangement &f, H &h)
+                template <class H> void Read<frame_packing_arrangement>::go(frame_packing_arrangement f, H &h)
         {
                     FramePackingArrangement framePackingArrangement;
                     auto h3 = h.extend(&framePackingArrangement);
@@ -226,7 +222,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<display_orientation>::go(const display_orientation &f, H &h)
+                template <class H> void Read<display_orientation>::go(display_orientation f, H &h)
         {
                     DisplayOrientation displayOrientation;
                     auto h3 = h.extend(&displayOrientation);
@@ -235,7 +231,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<structure_of_pictures_info>::go(const structure_of_pictures_info &f, H &h)
+                template <class H> void Read<structure_of_pictures_info>::go(structure_of_pictures_info f, H &h)
         {
                     StructureOfPicturesInfo structureOfPicturesInfo;
                     auto h3 = h.extend(&structureOfPicturesInfo);
@@ -244,7 +240,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<active_parameter_sets>::go(const active_parameter_sets &f, H &h)
+                template <class H> void Read<active_parameter_sets>::go(active_parameter_sets f, H &h)
         {
                     ActiveParameterSets2 activeParameterSets;
                     auto h3 = h.extend(&activeParameterSets);
@@ -256,7 +252,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> void Read<decoding_unit_info>::go(const decoding_unit_info &f, H &h)
+                template <class H> void Read<decoding_unit_info>::go(decoding_unit_info f, H &h)
         {
                     Hrd *hrd = getHrd(h);
 
@@ -277,7 +273,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
         }
 
 
-                template <class H> static void Read<temporal_sub_layer_zero_index>:go(const temporal_sub_layer_zero_index &f, H &h)
+                template <class H> static void Read<temporal_sub_layer_zero_index>:go(temporal_sub_layer_zero_index f, H &h)
         {
                     TemporalSubLayerZeroIndex temporalSubLayerZeroIndex;
                     auto h3 = h.extend(&temporalSubLayerZeroIndex);
@@ -285,7 +281,7 @@ template <class H> void Read<active_parameter_sets>::go(const active_parameter_s
                     Syntax<temporal_sub_layer_zero_index>::go(f, h3);
         }
 
-                template <class H> static void Read<scalable_nesting>::go(const scalable_nesting &f, H &h)
+                template <class H> static void Read<scalable_nesting>::go(scalable_nesting f, H &h)
         {
                     ScalableNesting *scalableNesting = h;
 
