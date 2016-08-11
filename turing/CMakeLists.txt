@@ -127,6 +127,7 @@ add_library(turing
     CandModeList.h
     CodeCache.h
     CodedData.h
+    ConformanceStreams.h
     ContextModel.h
     Cost.h
     Decode.h
