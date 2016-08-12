@@ -403,6 +403,9 @@ void Syntax<mvd_coding>::go(const mvd_coding &e, H &h)
 }
 
 
+template <class> struct Decode;
+
+
 template <class H>
 void Syntax<transform_unit>::go(const transform_unit &tu, H &h)
 {
@@ -425,7 +428,8 @@ void Syntax<transform_unit>::go(const transform_unit &tu, H &h)
         h(cu_qp_delta_abs(), ae(v));
         if (h[cu_qp_delta_abs()])
             h(cu_qp_delta_sign_flag(), ae(v));
-        if(static_cast<QpState *>(h)->getCanWrite())
+        // review: move these specifics out of the syntax function
+        if (!std::is_same<typename H::Tag, Decode<void>>::value && static_cast<QpState *>(h)->getCanWrite())
         {
             int rowQgModulo = (tu.yBase & (h[CtbSizeY()] - 1)) >> 3;
             int colQgModulo = (tu.xBase & (h[CtbSizeY()] - 1)) >> 3;

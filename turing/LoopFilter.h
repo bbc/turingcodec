@@ -41,7 +41,9 @@ For more information, contact us at info @ turingcodec.org.
 static const int EDGE_VER = 0; // vertical edge
 static const int EDGE_HOR = 1; // horizontal edge
 
-template <class F> struct Write;
+// review: these should not be necessary, LoopFilter should be generic
+template <class> struct Write;
+template <class> struct Decode;
 
 namespace LoopFilter
 {
@@ -590,7 +592,7 @@ namespace LoopFilter
                 {
                     int qpy = h[QpY()];
 
-                    if(h[cu_qp_delta_enabled_flag()])
+                    if(!std::is_same<typename H::Tag, Decode<void>>::value && h[cu_qp_delta_enabled_flag()])
                     {
                         int rowModulo = ((y<<3) & qpState->getMaskCtb()) >> 3;
                         int colModulo = ((x<<3) & qpState->getMaskCtb()) >> 3;
