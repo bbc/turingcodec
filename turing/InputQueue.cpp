@@ -23,6 +23,10 @@ For more information, contact us at info @ turingcodec.org.
 #include <cassert>
 #include <deque>
 
+struct LookaheadAnalysisResults
+{
+};
+
 
 namespace {
 
@@ -37,6 +41,7 @@ struct Piece
     std::shared_ptr<InputQueue::Docket> docket;
     std::shared_ptr<PictureWrapper> picture;
     std::shared_ptr<AdaptiveQuantisation> aqInfo;
+    std::shared_ptr<LookaheadAnalysisResults> lookaheadAnalysisResults;
 
     bool done() const
     {
@@ -60,7 +65,8 @@ struct InputQueue::State
         maxGopN(maxGopN),
         maxGopM(maxGopM),
         fieldCoding(fieldCoding),
-        shotChange(shotChange)
+        shotChange(shotChange),
+        scd(new ShotChangeDetection())
     {
     }
 
@@ -69,6 +75,14 @@ struct InputQueue::State
     const bool fieldCoding;
     const bool shotChange;
 
+
+    // list of pictures in preanalysis stage
+    std::deque<Piece> entriesPreanalysis;
+
+    // Shot change detection engine
+    std::unique_ptr<ShotChangeDetection> scd;
+
+    //list of pictures use during SOP planning - ~8 pictures
     std::deque<Piece> entries;
 
     struct Timestamp
@@ -103,20 +117,17 @@ struct InputQueue::State
         return !!this->entries.at(i - 1 + delta).docket;
     }
 
-    std::vector<int>        m_shotChangeList;
-    void setShotChangeList(std::vector<int>& shotChangeList) { if (shotChangeList.size()) m_shotChangeList.swap(shotChangeList); };
-    int computeNextIdr(int sequenceFront, int nextDefaultIdr, bool fieldCoding = false)
+    int computeNextIdr(int sequenceFront, int nextDefaultIdr)
     {
         int nextIdr = nextDefaultIdr;
-        int scale = fieldCoding ? 1 : 0;
         for (int i = sequenceFront; i < nextDefaultIdr; i++)
         {
-            int index = (i >> scale);
+            int index = i;
             index = (index < 0) ? 0 : index;
-            if (index >= m_shotChangeList.size())
+            if (index >= this->scd->m_shotChangeList.size())
                 break;
 
-            if (i % (fieldCoding + 1) == 0 && m_shotChangeList[index])
+            if (this->scd->m_shotChangeList[index])
             {
                 nextIdr = i;
                 break;
@@ -168,7 +179,7 @@ void InputQueue::State::process()
     if (this->shotChange)
     {
         if ((this->sequenceIdr - this->sequenceFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->maxGopN), this->fieldCoding);
+            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->maxGopN));
     }
     else
     {
@@ -276,8 +287,8 @@ void InputQueue::State::process()
 void InputQueue::append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr<AdaptiveQuantisation> aqInfo)
 {
     assert(!this->state->finish);
-    this->state->entries.push_back(Piece(picture));
-    this->state->entries.back().aqInfo = aqInfo;
+    this->state->entriesPreanalysis.push_back(Piece(picture));
+    this->state->entriesPreanalysis.back().aqInfo = aqInfo;
 
     auto &timestamps = this->state->timestamps;
 
@@ -300,6 +311,33 @@ void InputQueue::endOfInput()
     this->state->finish = true;
 }
 
+void InputQueue::preanalyse()
+{
+    auto n = this->state->entriesPreanalysis.size();
+    if (n == 0)
+        return;
+
+    auto intraPeriod = this->state->maxGopN;
+
+    if (n >= intraPeriod || this->state->finish)
+    {
+        if (n > intraPeriod)
+            n = intraPeriod;
+
+        // do preanalysis here
+        if (this->state->shotChange)
+        {
+            this->state->scd->processSeq(this->state->entriesPreanalysis, n, this->state->sequenceFront);
+        }
+
+
+        for (int i = 0; i < n; ++i)
+        {
+            this->state->entries.push_back(this->state->entriesPreanalysis.front());
+            this->state->entriesPreanalysis.pop_front();
+        }
+    }
+}
 
 bool InputQueue::eos() const
 {
@@ -312,7 +350,6 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
     if (this->state->pictureInputCount == 1 && !this->eos())
         return nullptr;
 
-    this->state->setShotChangeList(m_shotChangeList);
     this->state->process();
 
     int isIntraFrame = -1;

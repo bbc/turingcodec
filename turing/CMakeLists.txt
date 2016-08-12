@@ -114,7 +114,6 @@ add_library(turing
     sao.cpp 
     signature.cpp
     ProgressReporter.cpp 
-    SCDetection.cpp
     TaskDeblock.cpp 
     testdecode.cpp 
 	TaskSao.cpp 

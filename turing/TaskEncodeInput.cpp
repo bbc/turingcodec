@@ -212,6 +212,8 @@ bool TaskEncodeInput<H>::run()
             return true;
         }
 
+        inputQueue->preanalyse();
+
         auto docket = inputQueue->getDocket();
         const bool eos = inputQueue->eos();
         threadPool->unlock();

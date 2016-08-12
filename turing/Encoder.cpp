@@ -396,7 +396,6 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
     if (this->stateEncode.verbosity == 2) this->frameCpuTimer.start();
 
     const bool eos = !picture;
-    this->stateEncode.setShotChangeList(m_shotChangeList);
 
     {
         threadPool->lock();
@@ -685,13 +684,6 @@ void Encoder::setupPps(H &hh)
         h[diff_cu_qp_delta_depth()] = this->vm.at("aq-depth").as<int>();
     }
 }
-
-
-void Encoder::setShotChangeList(std::vector<int>& shotChangeList)
-{
-    m_shotChangeList.swap(shotChangeList);
-}
-
 
 bool Encoder::writeVui()
 {

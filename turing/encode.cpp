@@ -345,11 +345,20 @@ struct turing_encoder
                     pictureWrap->fieldTB = (fieldCoding) ? (field + 1) : 0;
 
                     for (int cIdx = 0; cIdx < 3; ++cIdx)
-                        for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
+                    {
+                        for (int y = 0; y < ((this->encoder->frameHeight>>(fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); ++y)
                         {
                             auto p = frame[cIdx].p + line(y, fieldCoding, !field) * frame[cIdx].stride;
                             memcpy(&(*pictureWrap)[cIdx](0, y), p, (*pictureWrap)[cIdx].width * sizeof(uint8_t));
                         }
+                        if(fieldCoding)
+                        {
+                            for (int y = ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); y < (*pictureWrap)[cIdx].height; ++y)
+                            {
+                                memset(&(*pictureWrap)[cIdx](0, y), 0, (*pictureWrap)[cIdx].width * sizeof(uint8_t));
+                            }
+                        }
+                    }
 
                     pictureWrapper = pictureWrap;
                 }
@@ -522,15 +531,6 @@ int encode(int argc, const char* const argv[])
         {
             if (encoder->vm["verbosity"].as<int>())
                 encoder->encoder->printHeader(std::cout, encoder->inputFilename, encoder->outputFilename);
-
-            if (encoder->vm["shot-change"].as<bool>())
-            {
-                int bitdepth = encoder->vm.at("bit-depth").as<int>();
-                ShotChangeDetection sc(encoder->inputFilename.c_str(), bitdepth, encoder->encoder->frameWidth, encoder->encoder->frameHeight, (int)encoder->bytesPerInputFrame(), firstFrame, (int)nFrames);
-                std::vector<int> shotChangeList;
-                sc.processSeq(shotChangeList);
-                encoder->encoder->setShotChangeList(shotChangeList);
-            }
 
             //ofs << *turing_encode_headers(encoder);
 
