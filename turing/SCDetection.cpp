@@ -36,11 +36,11 @@ std::ifstream i_seq;
 const int SHIFT_DOWN = 2;
 const int THRESHOLD_CONST = 45;
 const int LOWER_THRESHOLD = 7;
-const int DELAY = 5;////55;
-const int WINDOW_SIZE = 8;//
+const int DELAY = 64;////55;
+const int WINDOW_SIZE = 12;//
 int last_shot_change = 0;
 //const double LIKE_THRESHOLD = 1.002;
-const double LIKE_THRESHOLD = 1.7;
+const double LIKE_THRESHOLD = 1.1;
 
 double calc_likelihood (double avg1, double var1, double avg2, double var2)
 {
