@@ -46,11 +46,15 @@ struct ReconstructedPictureBase
     virtual ~ReconstructedPictureBase() { };
 };
 
+
+// metafunction to retrieve sample type from handler type
 template <class H>
-struct GetSampleType
+struct SampleType
 {
     typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Type;
+    static_assert(std::is_same<Type, uint8_t>::value || std::is_same<Type, uint16_t>::value, "");
 };
+
 
 // review: naming - perhaps combine functionality with ReconstructedPicture
 template <typename T>

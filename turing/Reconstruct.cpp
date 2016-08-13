@@ -59,8 +59,7 @@ struct ReconstructInter<transform_tree>
 {
     template <class H> static void go(const transform_tree &tt, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateEncode *stateEncode = h;
         StateCodedData *stateCodedData = h;
@@ -177,8 +176,7 @@ struct ReconstructIntraBlock
 {
     template <class H> static void go(residual_coding const &rc, H h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
         StateCodedData *stateCodedData = h;
@@ -585,8 +583,7 @@ struct PredictIntraLumaBlock
 {
     template <class H> static void go(residual_coding const &rc, H h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
         StateEncodePicture *stateEncodePicture = h;
@@ -610,8 +607,7 @@ struct PredictIntraLumaBlock
             predictBlockIntra(h, predSamples, s, rc);
         }
 
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         // input picture
         ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
@@ -658,8 +654,7 @@ template <class Cbf> struct ReconstructInterBlock
 {
     template <class H> static void go(IfCbf<Cbf, residual_coding> const &ifcbf, H h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         residual_coding const &rc = ifcbf.f;
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
@@ -672,9 +667,6 @@ template <class Cbf> struct ReconstructInterBlock
 
         assert(h[current(CuPredMode(cqt->x0, cqt->y0))] != MODE_INTRA);
         assert(!h[cu_transquant_bypass_flag()]);
-
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
 
         // input picture
         ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
@@ -1021,8 +1013,7 @@ template <class F> struct ReconstructInter<IfCbf<F, residual_coding>> : Reconstr
 template <class H>
 int32_t predictIntraLuma(transform_tree const &tt, H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstreamBase *stateEncodeSubstream = h;
     stateEncodeSubstream->satd = 0;
@@ -1080,9 +1071,7 @@ int32_t reconstructIntraLuma(IntraPartition const &e, H &h)
         stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
     }
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+    using Sample = typename SampleType<H>::Type;
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     stateEncodeSubstream->ssd[0] = 0;
     stateEncodeSubstream->ssd[1] = 0;
@@ -1111,8 +1100,7 @@ int32_t reconstructIntraChroma(transform_tree const &tt, H &h)
         stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
     }
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     stateEncodeSubstream->ssd[0] = 0;
@@ -1127,8 +1115,7 @@ int32_t reconstructIntraChroma(transform_tree const &tt, H &h)
 template <class H>
 int32_t reconstructInter(transform_tree const &tt, H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateEncode *stateEncode = h;
@@ -1143,8 +1130,8 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
         int const nTbS = 1 << log2TrafoSize;
 
         auto &pictureWrapper = *static_cast<StateEncodePicture *>(h)->docket->picture;
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
+        
         auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
         auto sourceSamples = picture(tt.x0, tt.y0, cIdx);
 

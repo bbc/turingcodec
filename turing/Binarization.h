@@ -1147,8 +1147,7 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
 {
     template <class H> static void go(Element<coeff_abs_level_remaining, ae> fun, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         // FL cMax=1
         StateEncode& stateEncode = *static_cast<StateEncode *>(h);

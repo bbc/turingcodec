@@ -578,9 +578,7 @@ struct Encode<coding_tree_unit>
 {
     template <class H> static void go(const coding_tree_unit &ctu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
 
         //#ifdef SNAKE_DEBUG
         coding_quadtree cqt(
@@ -657,8 +655,7 @@ struct Encode<coding_quadtree>
     // Review: consistency - naming, access and usage of various Candidates
     template <class H> static void go(const coding_quadtree &cqt, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
 
@@ -822,8 +819,6 @@ struct Encode<coding_quadtree>
         if (checkDistortion)
         {
             // Measure distortion again, check that it is same as that measured during search
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-            static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
 
             // input picture
             ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
@@ -860,7 +855,7 @@ struct Encode<coding_quadtree>
             if (stateEncode->saoslow)
                 static_cast<StatePicture *>(h)->loopFilterPicture->processCtu(h, *static_cast<coding_tree_unit *>(h));
 
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
+            using Sample = typename SampleType<H>::Type;
             EncSao* encSao = new EncSao();
             const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
             const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
@@ -1064,9 +1059,7 @@ template <> struct Write<pcm_sample>
         assert(h[PcmBitDepthC()] == 8);
 
         // Input picture
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
         ThreePlanes<Sample> *picture = &dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
         assert(!"this function writes PCM to bitstream but does not reconstruct - intra and inter prediction from here may fail");
@@ -1121,8 +1114,7 @@ struct Write<transform_tree>
 {
     template <class H> static void go(const transform_tree &tt, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         coding_quadtree const *cqt = h;
         Snake<BlockData>::Cursor *cursor = h;
@@ -1355,8 +1347,7 @@ struct OptimizedResidualCodingEncode
 {
     template <class H> static void go(const residual_coding &rc, H &hParent)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateEncodeSubstreamBase *stateEncodeSubstreamBase = hParent;
         ResidualCodingState residualCodingState(hParent);

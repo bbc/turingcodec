@@ -63,8 +63,7 @@ bool TaskSao<H>::blocked()
 template <class H>
 bool TaskSao<H>::run()
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->postprocess);
 
@@ -172,8 +171,7 @@ bool TaskSao<H>::run()
         {
             StateEncodePicture *stateEncodePicture = h;
             PictureWrapper &pictureWrapper = *stateEncodePicture->docket->picture;
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-            static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+            using Sample = typename SampleType<H>::Type;
             auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
             stateEncode->psnrAnalysis->analyse(*currPic->picture, picture);
         }

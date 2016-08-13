@@ -39,8 +39,7 @@ For more information, contact us at info @ turingcodec.org.
 template <class H>
 void searchIntraPartition(H &h, IntraPartition intraPartition)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     coding_quadtree *cqt = h;
@@ -234,8 +233,7 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
 template <class H>
 void searchIntraChroma(H &h, const coding_quadtree &cqt)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateReconstructionCache<Sample> *stateReconstructionCache = h;
@@ -552,8 +550,7 @@ template <class Direction>
 template <class H>
 void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtree, Direction> &cqt, H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Candidate<Sample> *candidate = h;
 
@@ -648,8 +645,7 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     StateEncodePicture *stateEncodePicture = h;
     StateEncode *stateEncode = h;
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Candidate<Sample> **activeCandidate = h;
     Candidate<Sample> *originalCandidate = *activeCandidate;
@@ -1027,8 +1023,7 @@ struct Search<coding_unit>
 {
     template <class H> static void go(const coding_unit &cu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
@@ -1254,8 +1249,7 @@ struct MvCandidate
 
 template <class H> static void searchMotionUni(H &h, int refList)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateEncodePicture *stateEncodePicture = h;
@@ -1278,8 +1272,7 @@ template <class H> static void searchMotionUni(H &h, int refList)
 
     if (speed->doHalfPelRefinement())
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
@@ -1426,8 +1419,7 @@ struct StateMeFullPel
 
 template <class H> static void searchMotionBi(H &h, int refList)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateCodedData *stateCodedData = h;
@@ -1463,8 +1455,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
         f(predictionOther.p, predictionOther.stride, reference.p, reference.stride, pu->nPbW, pu->nPbH, mvFrac[0], mvFrac[1], h[BitDepthY()]);
     }
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
     Raster<Sample const> input(pictureInput[0], pu->x0, pu->y0);
@@ -1577,8 +1568,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
 template <class H>
 Cost measurePuCost(H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StatePicture *statePicture = h;
@@ -1868,9 +1858,7 @@ struct Search<prediction_unit>
 
     template <class H> static void go(const prediction_unit &pu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
         State<Sample> s(h);
         s.go2(pu, h);
     }
@@ -1969,8 +1957,7 @@ void patternSearch(H &h, mvd_coding mvdc, const P &pattern, bool tryOrigin, Moti
 // Integer motion estimation
 template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, MvCandidate &best)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     auto const refIdx = 0;
 
@@ -2259,8 +2246,7 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
 {
     template <class H> static void go(const IfCbf<rqt_root_cbf, transform_tree> &i, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         transform_tree const &tt = i.f;
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
