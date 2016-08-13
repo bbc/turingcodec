@@ -593,6 +593,8 @@ struct Encode<coding_tree_unit>
         Syntax<coding_tree_unit>::go(ctu, h);
 
         postCtu(h);
+    StatePicture *statePicture = h;
+    statePicture->loopFilterPicture->processCtu(h, ctu);
 
 #ifdef SNAKE_DEBUG
         bool lastCtuInRow = cqt.x0 + (1 << cqt.log2CbSize) >= h[pic_width_in_luma_samples()];

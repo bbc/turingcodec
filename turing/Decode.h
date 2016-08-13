@@ -117,6 +117,29 @@ template <> struct Decode<OutputPicture>
 };
 
 
+ template <>
+struct Decode<coding_tree_unit>
+{
+    template <class H> static void go(const coding_tree_unit &ctu, H &h)
+    {
+        Read<coding_tree_unit>::go(ctu, h);
+        StatePicture *statePicture = h;
+        statePicture->loopFilterPicture->processCtu(h, ctu);
+    }
+};
+
+
+template <>
+struct Decode<coding_unit>
+{
+    template <class H> static void go(const coding_unit &cu, H &h)
+    {
+        Read<coding_unit>::go(cu, h);
+        StatePicture *statePicture = h;
+        statePicture->loopFilterPicture->processCu(h, cu);
+    }
+};
+
 
 template <>
 struct Decode<UnexpectedData> : Null<UnexpectedData> { };
@@ -127,16 +150,21 @@ struct Decode<sei_rbsp> : Null<sei_rbsp> { };
 
 
 template <>
-struct Decode<prediction_unit>
+struct Decode<Process<prediction_unit>>
 {
-    template <class H> static void go(const prediction_unit &pu, H &h)
+    template <class H> static void go(Process<prediction_unit>, H &h)
     {
-        Read<prediction_unit>::go(pu, h);
+        prediction_unit *pu = h;
 
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
-        predictInter(*reconstructedPicture.picture, pu, h);
+        StatePicture *statePicture = h;
+        statePicture->loopFilterPicture->processPu(h, *pu);
+
+        using Sample = typename SampleType<H>::Type;
+        ReconstructedPicture2<Sample> *stateReconstructedPicture = h;
+        predictInter(*stateReconstructedPicture->picture, *pu, h);
     }
 };
+
 
 
 template <>
@@ -179,6 +207,20 @@ struct Decode<Element<pcm_sample_chroma, uv>>
 };
 
 
+
+template <>
+struct Decode<transform_unit>
+{
+    template <class H> static void go(const transform_unit &tu, H &h)
+    {
+        StatePicture *statePictureBase = h;
+        statePictureBase->loopFilterPicture->processTu(h, tu);
+
+        Syntax<transform_unit>::go(tu, h);
+    }
+};
+
+
 template <class V>
 struct Decode<IfCbf<V, residual_coding>>
 {
@@ -202,12 +244,10 @@ struct Decode<residual_coding>
 {
     template <class H> static void go(const residual_coding &rc, H &h)
     {
-        Read<residual_coding>::go(rc, h);
+        StatePicture *statePicture = h;
+        statePicture->loopFilterPicture->processRc(h, rc);
 
-        if (h[PicOrderCntVal()] == 1 && rc == residual_coding(16, 0, 2, 1))
-        {
-            std::cout << rc;
-        }
+        Read<residual_coding>::go(rc, h);
 
         const int nCbS = 1 << rc.log2TrafoSize;
 

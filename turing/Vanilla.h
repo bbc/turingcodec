@@ -343,8 +343,6 @@ void postCtu(H &h)
     {
         h(ContextsSave(tablesWpp));
     }
-
-    static_cast<StatePicture *>(h)->loopFilterPicture->processCtu(h, *static_cast<coding_tree_unit *>(h));
 }
 
 #endif

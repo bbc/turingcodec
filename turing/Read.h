@@ -737,8 +737,6 @@ struct Read<coding_unit>
 
         Syntax<coding_unit>::go(cu, h);
 
-        statePictureBase->loopFilterPicture->processCu(h, cu);
-
         qpState->postCu(cu, h);
 
         if (h[IntraSplitFlag()])
@@ -786,19 +784,6 @@ struct Read<transform_tree>
 
 
 template <>
-struct Read<transform_unit>
-{
-    template <class H> static void go(const transform_unit &tu, H &h)
-    {
-        StatePicture *statePictureBase = h;
-        statePictureBase->loopFilterPicture->processTu(h, tu);
-
-        Syntax<transform_unit>::go(tu, h);
-    }
-};
-
-
-template <>
 struct Read<pcm_sample>
 {
     template <class H> static void go(const pcm_sample &fun, H &h)
@@ -829,8 +814,6 @@ struct Read<residual_coding>
 {
     template <class H> static void go(const residual_coding &rc, H &hParent)
     {
-        static_cast<StatePicture *>(hParent)->loopFilterPicture->processRc(hParent, rc);
-
         ResidualCodingState residualCodingState(hParent);
 
         auto h =  hParent.extend(&residualCodingState);
@@ -1405,6 +1388,14 @@ template <>
 struct Read<Element<rqt_root_cbf, ae>> : DecisionLength1<rqt_root_cbf> { };
 
 
+// compute and store loop filter metadata for specified entity
+template <class F> struct Process { };
+
+
+template <>
+struct Read<Process<prediction_unit>> : Null<Process<prediction_unit>> { };
+
+
 template <>
 struct Read<prediction_unit>
 {
@@ -1430,8 +1421,7 @@ struct Read<prediction_unit>
 
         processPredictionUnit(h, pu, puData, stateSubstream->partIdx, h[merge_idx(xPb, yPb)]);
 
-        StatePicture *statePictureBase = h;
-        statePictureBase->loopFilterPicture->processPu(h, pu);
+    h(Process<prediction_unit>());
 
         cursor->commit(pu, h[MinCbLog2SizeY()] - 1);
 
