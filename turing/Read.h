@@ -84,16 +84,10 @@ static std::ofstream &flog()
 
 struct CabacState
 {
-    CabacState() :
-    bitsNeeded(-8), ivlCurrRange(510), ivlOffset(0)
-    {
-    }
-    unsigned ivlCurrRange;
-    int bitsNeeded;
-    unsigned ivlOffset;
-    int n; // unused?
+    int ivlCurrRange = -8;
+    int bitsNeeded = 510;
+    int ivlOffset = 0;
 };
-
 
 
 template <class F>
@@ -537,99 +531,100 @@ struct GetContext
 };
 
 
+static inline int decodeDecision(BitReader *bitReader, CabacState *cabacState, ContextModel &contextModel)
+{
+    const int pStateIdx = contextModel.getState();
+    const int valMPS = contextModel.getMps();
+
+    const int qRangeIdx = (cabacState->ivlCurrRange >> 6) & 3;
+    const int ivlLpsRange = rangeTabLPS(pStateIdx, qRangeIdx); // uiLPS
+    cabacState->ivlCurrRange -= ivlLpsRange;
+    const int32_t scaledRange = cabacState->ivlCurrRange << 7;
+    int32_t mask = (cabacState->ivlOffset - scaledRange) >> 31;
+
+    int binVal, numBits;
+    binVal = valMPS ^ (1 + mask);
+    cabacState->ivlOffset -= scaledRange & ~mask;
+    cabacState->ivlCurrRange += (ivlLpsRange - cabacState->ivlCurrRange) & ~mask;
+    contextModel.update(mask);
+
+    static const uint8_t renormTable[] = {
+        6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    numBits = renormTable[cabacState->ivlCurrRange >> 3];
+
+    cabacState->ivlOffset <<= numBits;
+    cabacState->ivlCurrRange <<= numBits;
+    cabacState->bitsNeeded += numBits;
+
+    if (cabacState->bitsNeeded >= 0)
+    {
+        cabacState->ivlOffset |= bitReader->readBytes(1) << cabacState->bitsNeeded;
+        cabacState->bitsNeeded -= 8;
+
+        //if ((cabacState->ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
+        //{
+        //     h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (cabacState->ivlOffset >> 7));
+        //     throw Abort();
+        //}
+    }
+
+    return binVal;
+}
+
+
 template <class V>
 struct Read<DecodeDecision<V>>
 {
     template <class H> static void go(DecodeDecision<V> e, H &h)
     {
-        BitReader &reader = *static_cast<BitReader *>(h);
-        CabacState &state = *static_cast<CabacState *>(h);
-
-        Contexts &contexts = *static_cast<Contexts *>(h);
-        ContextModel &contextModel = contexts.get<typename Context<V>::Type>(e.ctxInc);
-
-        const int pStateIdx = contextModel.getState();
-        const int valMPS = contextModel.getMps();
-
-        const int qRangeIdx = (state.ivlCurrRange >> 6) & 3;
-        const int ivlLpsRange = rangeTabLPS(pStateIdx, qRangeIdx); // uiLPS
-        state.ivlCurrRange -= ivlLpsRange;
-        const unsigned scaledRange = state.ivlCurrRange << 7;
-
-        int binVal, numBits;
-        if (state.ivlOffset < scaledRange)
-        {
-            binVal = valMPS;
-            contextModel.updateMps();
-            numBits = (scaledRange < (256 << 7)) ? 1 : 0;
-        }
-        else
-        {
-            binVal = 1 - valMPS;
-            state.ivlOffset -= scaledRange;
-            state.ivlCurrRange = ivlLpsRange;
-            contextModel.updateLps();
-            static const int renormTable[] = { 6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-            numBits = renormTable[ivlLpsRange >> 3];
-        }
-
-        state.ivlOffset <<= numBits;
-        state.ivlCurrRange <<= numBits;
-        state.bitsNeeded += numBits;
-
-        if (state.bitsNeeded >= 0)
-        {
-            state.ivlOffset |= read_bytes<int>(h, 1) << state.bitsNeeded;
-            state.bitsNeeded -= 8;
-
-            if ((state.ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
-            {
-                h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (state.ivlOffset >> 7));
-                throw Abort();
-            }
-        }
-
-        *e.value = binVal;
+        BitReader *bitReader = h;
+        CabacState *cabacState = h;
+        Contexts *contexts = h;
+        ContextModel &contextModel = contexts->get<typename Context<V>::Type>(e.ctxInc);
+        *e.value = decodeDecision(bitReader, cabacState, contextModel);
     }
 };
+
+
+static int decodeBypass(CabacState *cabacState, BitReader *bitReader)
+{
+    cabacState->ivlOffset *= 2;
+    if (++cabacState->bitsNeeded >= 0)
+    {
+        cabacState->bitsNeeded = -8;
+        cabacState->ivlOffset |= bitReader->readBytes(1);
+    }
+    int scaledRange = cabacState->ivlCurrRange << 7;
+    int mask = (scaledRange - cabacState->ivlOffset - 1) >> 31;
+    cabacState->ivlOffset -= scaledRange & mask;
+
+    //if ((cabacState->ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
+    //{
+    // h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (cabacState->ivlOffset >> 7));
+    // throw Abort();
+    //}
+
+    //if ((cabacState->ivlOffset >> 7) >= (scaledRange >> 7)) // CondCheck 9.3.4.3.4-A
+    //{
+    // h(Violation("9.3.4.3.4", "ivlOffset{%1%} >= ivlCurrRange{%2%} after DecodeBypass")
+    //         % (cabacState->ivlOffset >> 7)
+    //         % (scaledRange >> 7));
+    // throw Abort();
+    //}
+
+    return mask & 1;
+}
 
 
 template <class V>
 struct Read<DecodeBypass<V>>
 {
-    template <class H> static void go(DecodeBypass<V> e, H &h)
+    template <class H> static inline void go(DecodeBypass<V> e, H &h)
     {
-        int binVal = 0;
-
-        BitReader &reader = *static_cast<BitReader *>(h);
-        CabacState &state = *static_cast<CabacState *>(h);
-
-        state.ivlOffset *= 2;
-        if (++state.bitsNeeded >= 0)
-        {
-            state.bitsNeeded = -8;
-            state.ivlOffset |= read_bytes<int>(h, 1);
-        }
-        unsigned scaledRange = state.ivlCurrRange << 7;
-        if (state.ivlOffset >= scaledRange)
-        {
-            state.ivlOffset -= scaledRange;
-            binVal = 1;
-        }
-        if ((state.ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
-        {
-            h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (state.ivlOffset >> 7));
-            throw Abort();
-        }
-        if ((state.ivlOffset >> 7) >= (scaledRange >> 7)) // CondCheck 9.3.4.3.4-A
-        {
-            h(Violation("9.3.4.3.4", "ivlOffset{%1%} >= ivlCurrRange{%2%} after DecodeBypass")
-                % (state.ivlOffset >> 7)
-                % (scaledRange >> 7));
-            throw Abort();
-        }
-
-        *e.value = binVal;
+        CabacState *cabacState = h;
+        BitReader *bitReader = h;
+        *e.value = decodeBypass(cabacState, bitReader);
     }
 };
 
