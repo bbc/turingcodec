@@ -167,45 +167,37 @@ struct Decode<Process<prediction_unit>>
 
 
 
-template <>
-struct Decode<Element<pcm_sample_luma, uv>>
+template <class V>
+struct DecodePcmSample
 {
-    template <class H> static void go(Element<pcm_sample_luma, uv> fun, H &h)
+    static bool constexpr isChroma = std::is_same<V, pcm_sample_chroma>::value;
+
+    template <class H> static void go(Element<V, uv> fun, H &h)
     {
-        Read<Element<pcm_sample_luma, uv>>::go(fun, h);
+        Read<Element<V, uv>>::go(fun, h);
 
-        const coding_quadtree *cqt = h;
-        const int nCbS = 1 << cqt->log2CbSize;
+        coding_quadtree const *cqt = h;
+        auto const nCbS = 1 << cqt->log2CbSize;
+        auto const width = nCbS / (isChroma ? h[SubWidthC()] : 1);
+        auto const height = nCbS / (isChroma ? h[SubHeightC()] : 1);
 
-        const int i = fun.v.i % nCbS;
-        const int j = fun.v.i / nCbS;
+        auto const i = fun.v.i % width;
+        auto const row = fun.v.i / width;
+        auto const j = row % height;
+        auto const cIdx = isChroma ? (1 + row / height) : 0;
 
-        auto reconstructedCuLuma = h[ReconstructedSamples(cqt->x0, cqt->y0, 0)];
-        reconstructedCuLuma(i, j) = h[fun.v] << (h[BitDepthY()] - h[PcmBitDepthY()]);
+        auto const shift = isChroma
+            ? h[BitDepthC()] - h[PcmBitDepthC()]
+            : h[BitDepthY()] - h[PcmBitDepthY()];
+
+        auto const sample = h[fun.v];
+        h[ReconstructedSamples(cqt->x0, cqt->y0, cIdx)](i, j) = sample << shift;
     }
 };
 
 
-template <>
-struct Decode<Element<pcm_sample_chroma, uv>>
-{
-    template <class H> static void go(Element<pcm_sample_chroma, uv> fun, H &h)
-    {
-        Read<Element<pcm_sample_chroma, uv>>::go(fun, h);
-
-        const coding_quadtree *cqt = h;
-        const int nCbS = 1 << cqt->log2CbSize;
-
-        const int i = fun.v.i % (nCbS / 2);
-        const int j = fun.v.i / (nCbS / 2) % (nCbS / 2);
-        const int cIdx = 1 + fun.v.i / (nCbS / 2) / (nCbS / 2);
-
-        auto reconstructedCuChroma = h[ReconstructedSamples(cqt->x0, cqt->y0, cIdx)];
-
-        reconstructedCuChroma(i, j) = h[fun.v] << (h[BitDepthC()] - h[PcmBitDepthC()]);
-    }
-};
-
+template <> struct Decode<Element<pcm_sample_chroma, uv>> : DecodePcmSample<pcm_sample_chroma> {};
+template <> struct Decode<Element<pcm_sample_luma, uv>> : DecodePcmSample<pcm_sample_luma> {};
 
 
 template <>
