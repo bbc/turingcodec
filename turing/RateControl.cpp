@@ -344,12 +344,12 @@ void DataStorage::resetPreviousCodedPicturesBuffer()
 
 void DataStorage::resetCodedPicturesAtLevelMemory()
 {
-    m_codedCtusPerLevel[0]->setAlpha(ALPHA_INTRA);
-    m_codedCtusPerLevel[0]->setBeta(BETA_INTRA);
+    m_codedPicturesPerLevel[0].setAlpha(ALPHA_INTRA);
+    m_codedPicturesPerLevel[0].setBeta(BETA_INTRA);
     for(int level = 1; level < m_codedPicturesPerLevel.size(); level++)
     {
-        m_codedCtusPerLevel[level]->setAlpha(INITIAL_ALPHA);
-        m_codedCtusPerLevel[level]->setAlpha(INITIAL_BETA);
+        m_codedPicturesPerLevel[level].setAlpha(INITIAL_ALPHA);
+        m_codedPicturesPerLevel[level].setBeta(INITIAL_BETA);
     }
 }
 
@@ -448,11 +448,17 @@ SequenceController::SequenceController(double targetRate,
     pictureIntra.setBeta(BETA_INTRA);
 
     m_remainingCostIntra = 0.0;
+
+    m_logFile.open("rcLogFile.txt", ios::out);
+    m_logFile<<"--------------------------------------------------------------------\n";
+    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |      Total |\n";
+    m_logFile<<"--------------------------------------------------------------------\n";
+    m_logFile.flush();
 }
 
 void SequenceController::initNewSop()
 {
-    int realInfluencePicture  = std::min<int>(m_smoothingWindow, m_framesLeft);
+    int64_t realInfluencePicture  = std::min<int64_t>(m_smoothingWindow, m_framesLeft);
     int64_t bitsStillToBeSpent = static_cast<int64_t>(m_bitsPerPicture * (m_framesLeft - realInfluencePicture));
     int currentBitsPerPicture = static_cast<int>((m_bitsLeft - bitsStillToBeSpent)/(int64_t)realInfluencePicture);
     int currentBitsSop = currentBitsPerPicture * m_sopSize;
@@ -542,7 +548,9 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel)
     int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(m_framesLeft, currentPictureLevel);
 
     // Cpb correction
-    m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
+    cout<<"Bits before HRD adjustment: "<<picTargetBits<<"\n";
+    //m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
+    cout<<"Bits after HRD adjustment: "<<picTargetBits<<"\n";
 
     m_pictureControllerEngine->initPictureController(picTargetBits, m_pixelsPerPicture, m_averageBpp);
 
@@ -703,7 +711,9 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     int currentBitsPerPicture = (int)(alpha* pow(cost*4.0/(double)averageBitsLeft, beta)*(double)averageBitsLeft + 0.5);
 
     // Cpb correction
-    m_cpbControllerEngine.adjustAllocatedBits(currentBitsPerPicture);
+    cout<<"Bits before HRD adjustment: "<<currentBitsPerPicture<<"\n";
+    //m_cpbControllerEngine.adjustAllocatedBits(currentBitsPerPicture);
+    cout<<"Bits after HRD adjustment: "<<currentBitsPerPicture<<"\n";
 
     if(currentBitsPerPicture < 200)
     {

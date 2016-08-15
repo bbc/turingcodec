@@ -163,10 +163,10 @@ bool writeOut(H &h)
 
     // Write the slice segment NALU (slice_segment_data() and slice_segment_trailing_bits() suppressed here)
     NalWriter *nalWriter = h;
-    size_t rateBefore = (nalWriter->pos()) << 3;
+    size_t rateBefore = (nalWriter->data->size()) << 3;
     h(byte_stream_nal_unit(0));
 
-    size_t rateAfter = (nalWriter->pos()) << 3;
+    size_t rateAfter = (nalWriter->data->size()) << 3;
     if(stateEncode->useRateControl)
     {
         StateEncodePicture *stateEncodePicture = h;
@@ -242,7 +242,7 @@ bool TaskEncodeOutput<H>::run()
                 if(stateEncode->useRateControl)
                 {
                     NalWriter *nalWriter = h;
-                    size_t rate = (nalWriter->pos()) << 3;
+                    size_t rate = (nalWriter->data->size()) << 3;
                     bool isIntra = h[slice_type()] == I;
                     int averageQp = NON_VALID_QP;
                     double averageLambda = NON_VALID_LAMBDA;
@@ -252,6 +252,9 @@ bool TaskEncodeOutput<H>::run()
                     StateEncodePicture *stateEncodePicture = h;
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
+                    char data[100];
+                    sprintf(data, " %10d |\n", (int)rate);
+                    stateEncode->rateControlEngine->writetoLogFile(data);
                 }
 
                 response.done = true;

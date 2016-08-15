@@ -29,6 +29,7 @@ For more information, contact us at info @ turingcodec.org.
 #define Included_RateControl_h
 
 #include <iostream>
+#include <fstream>
 #include <list>
 #include <array>
 #include "HevcMath.h"
@@ -388,12 +389,12 @@ private:
     double  m_targetRate;
     int     m_smoothingWindow;
     int     m_totalFrames;
-    int     m_framesLeft;
+    int64_t m_framesLeft;
     double  m_frameRate;
     int     m_sopSize;
     double  m_averageRate;
     double  m_averageBpp;
-    int     m_bitsPerPicture;
+    int64_t m_bitsPerPicture;
     int64_t m_bitsLeft;
     int64_t m_targetBits;
     int     m_pixelsPerPicture;
@@ -421,6 +422,7 @@ private:
     int    m_ctusLeft;
     int    m_ctusCoded;
     double m_remainingCostIntra;
+    ofstream m_logFile;
 
     void   resetCtuController();
 #if SOP_ADAPTIVE
@@ -479,6 +481,8 @@ public:
             delete m_pictureControllerEngine;
         if(m_ctuControllerEngine)
             delete[] m_ctuControllerEngine;
+        if(m_logFile)
+            m_logFile.close();
     }
 
     void initNewSop();
@@ -554,6 +558,17 @@ public:
     void initCpbInfo(int cpbMaxSize)
     {
         m_cpbControllerEngine.setCpbInfo(cpbMaxSize, (int)m_targetRate, m_frameRate, 0.8);
+    }
+
+    void writetoLogFile(string s)
+    {
+        m_logFile<<s;
+        m_logFile.flush();
+    }
+
+    int getPictureTargetBits()
+    {
+        return m_pictureControllerEngine->getPictureTargetBits();
     }
 };
 

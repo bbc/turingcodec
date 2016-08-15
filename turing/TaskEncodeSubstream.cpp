@@ -133,6 +133,7 @@ bool TaskEncodeSubstream<Sample>::run()
         {
             if(isShotChange)
             {
+                std::cout<<"Resetting the rate control engine with POC: "<<this->stateEncodePicture->docket->poc<<"\n";
                 stateEncode->rateControlEngine->reset();
             }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
@@ -156,6 +157,9 @@ bool TaskEncodeSubstream<Sample>::run()
         h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
         this->stateEncodePicture->reciprocalLambda.set(1.0 / this->stateEncodePicture->lambda);
         this->stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / this->stateEncodePicture->lambda);
+        char data[100];
+        sprintf(data, "| %06d | %10d | %9.2f | %4d |", this->stateEncodePicture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(), this->stateEncodePicture->lambda, currentQP);
+        stateEncode->rateControlEngine->writetoLogFile(data);
     }
 
     while (h[CtbAddrInRs()] != this->end)
@@ -201,8 +205,11 @@ bool TaskEncodeSubstream<Sample>::run()
     {
         // Only set coding rate at the end of one frame
         BitWriter *bitWrite = h;
-        size_t rate = (bitWrite->pos()) << 3;
+        size_t rate = (bitWrite->data->size()) << 3;
         stateEncode->rateControlEngine->setCodingBits(static_cast<int>(rate));
+        char data[100];
+        sprintf(data, " %10d |", (int)rate);
+        stateEncode->rateControlEngine->writetoLogFile(data);
     }
 
     threadPool->lock();
