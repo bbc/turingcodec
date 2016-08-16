@@ -253,7 +253,7 @@ bool TaskEncodeOutput<H>::run()
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
                     char data[100];
-                    sprintf(data, " %10d |\n", (int)rate);
+                    sprintf(data, " %10d | %10d \n", (int)rate, stateEncode->rateControlEngine->getCpbFullness());
                     stateEncode->rateControlEngine->writetoLogFile(data);
                 }
 

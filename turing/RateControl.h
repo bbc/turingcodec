@@ -570,6 +570,11 @@ public:
     {
         return m_pictureControllerEngine->getPictureTargetBits();
     }
+
+    int getCpbFullness()
+    {
+        return m_cpbControllerEngine.getCpbStatus();
+    }
 };
 
 

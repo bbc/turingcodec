@@ -449,10 +449,10 @@ SequenceController::SequenceController(double targetRate,
 
     m_remainingCostIntra = 0.0;
 
-    m_logFile.open("rcLogFile.txt", ios::out);
-    m_logFile<<"--------------------------------------------------------------------\n";
-    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |      Total |\n";
-    m_logFile<<"--------------------------------------------------------------------\n";
+    m_logFile.open("rcLogFileCpb.txt", ios::out);
+    m_logFile<<"---------------------------------------------------------------------------------\n";
+    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |      Total | CPB Status |\n";
+    m_logFile<<"---------------------------------------------------------------------------------\n";
     m_logFile.flush();
 }
 
@@ -548,9 +548,7 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel)
     int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(m_framesLeft, currentPictureLevel);
 
     // Cpb correction
-    cout<<"Bits before HRD adjustment: "<<picTargetBits<<"\n";
-    //m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
-    cout<<"Bits after HRD adjustment: "<<picTargetBits<<"\n";
+    m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
 
     m_pictureControllerEngine->initPictureController(picTargetBits, m_pixelsPerPicture, m_averageBpp);
 
@@ -711,9 +709,7 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     int currentBitsPerPicture = (int)(alpha* pow(cost*4.0/(double)averageBitsLeft, beta)*(double)averageBitsLeft + 0.5);
 
     // Cpb correction
-    cout<<"Bits before HRD adjustment: "<<currentBitsPerPicture<<"\n";
-    //m_cpbControllerEngine.adjustAllocatedBits(currentBitsPerPicture);
-    cout<<"Bits after HRD adjustment: "<<currentBitsPerPicture<<"\n";
+    m_cpbControllerEngine.adjustAllocatedBits(currentBitsPerPicture);
 
     if(currentBitsPerPicture < 200)
     {
