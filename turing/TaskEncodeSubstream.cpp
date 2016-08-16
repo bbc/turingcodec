@@ -126,9 +126,16 @@ bool TaskEncodeSubstream<Sample>::run()
     {
         bool isShotChange = this->stateEncodePicture->docket->isShotChange;
         int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+        int currentPoc = h[PicOrderCntVal()];
         int sopSize = this->stateEncodePicture->docket->currentGopSize;
         if(sopSize > 1)
             stateEncode->rateControlEngine->setSopSize(sopSize);
+
+        if (currentPoc && ((currentPoc % stateEncode->rateControlEngine->getTotalFrames()) == 0 || isShotChange))
+        {
+            stateEncode->rateControlEngine->resetSequenceController(!isShotChange);
+        }
+
         if(h[slice_type()] == I)
         {
             if(isShotChange)

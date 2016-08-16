@@ -367,8 +367,8 @@ void DataStorage::resetCodedCtuAtLevelMemory(int totalCtusPerFrame)
 }
 
 SequenceController::SequenceController(double targetRate,
-                                       int totalFrames,
                                        double frameRate,
+                                       int intraPeriod,
                                        int sopSize,
                                        int picHeight,
                                        int picWidth,
@@ -378,7 +378,7 @@ SequenceController::SequenceController(double targetRate,
 {
     m_targetRate       = targetRate * 1000; // kbps to bps conversion
     m_smoothingWindow  = static_cast<int>(frameRate);
-    totalFrames        = std::max<int>(totalFrames, frameRate); // Assumes at least one intra period
+    int totalFrames    = intraPeriod != 1 ? intraPeriod : ((static_cast<int>(frameRate) + 4)/8)*8;
     m_totalFrames      = totalFrames;
     m_framesLeft       = totalFrames;
     m_frameRate        = frameRate;

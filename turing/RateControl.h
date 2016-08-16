@@ -462,8 +462,8 @@ public:
     }
 
     SequenceController(double targetRate,
-                       int totalFrames,
                        double frameRate,
+                       int intraPeriod,
                        int sopSize,
                        int picHeight,
                        int picWidth,
@@ -574,6 +574,24 @@ public:
     int getCpbFullness()
     {
         return m_cpbControllerEngine.getCpbStatus();
+    }
+
+    void resetSequenceController(bool carryForward)
+    {
+        m_framesLeft = m_totalFrames;
+        if(carryForward)
+        {
+            m_bitsLeft = m_targetBits + (int)((double)m_bitsLeft * 0.1);
+        }
+        else
+        {
+            m_bitsLeft = m_targetBits;
+        }
+    }
+
+    int getTotalFrames()
+    {
+        return m_totalFrames;
     }
 };
 

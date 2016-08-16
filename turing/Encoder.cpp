@@ -199,8 +199,8 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
             frames *= 2;
         this->stateEncode.rateControlEngine.reset(new SequenceController(
                 (double)this->vm["bitrate"].as<int>(),
-                frames,
                 this->vm["frame-rate"].as<double>(),
+                this->vm["max-gop-n"].as<int>(),
                 this->vm["max-gop-m"].as<int>(),
                 this->pictureHeight,
                 this->pictureWidth,
