@@ -370,9 +370,30 @@ struct NotImplemented
 // The following are not yet used in encoding
 template <> struct Write<scaling_list_data> : NotImplemented {};
 template <> struct Write<pred_weight_table> : NotImplemented {};
-template <> struct Write<hrd_parameters> : NotImplemented {};
 template <> struct Write<Element<reserved_payload_extension_data, uv>> : NotImplemented {};
 
+template <>
+struct Write<sub_layer_hrd_parameters>
+{
+    template <class H> static void go(const sub_layer_hrd_parameters &fun, H &h)
+    {
+        Hrd *currentHrd = getHrd(h);
+        Hrd::SubLayer *currentSublayer = &(currentHrd->sublayers.back());
+        auto h2 = h.extend(currentSublayer);
+        Syntax<sub_layer_hrd_parameters>::go(fun, h2);
+    }
+};
+
+template <>
+struct Write<hrd_parameters>
+{
+    template <class H> static void go(const hrd_parameters &fun, H &h)
+    {
+        Hrd *currentHrd = getHrd(h);
+        auto h2 = h.extend(currentHrd);
+        Syntax<hrd_parameters>::go(fun, h2);
+    }
+};
 
 template <>
 struct Write<vui_parameters>

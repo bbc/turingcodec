@@ -334,10 +334,41 @@ void DataStorage::initCtuStorage(int numberOfUnits)
     }
 }
 
+void DataStorage::resetPreviousCodedPicturesBuffer()
+{
+    while(m_previousCodedPictures.size() > 0)
+    {
+        m_previousCodedPictures.pop_front();
+    }
+}
+
+void DataStorage::resetCodedPicturesAtLevelMemory()
+{
+    m_codedPicturesPerLevel[0].setAlpha(ALPHA_INTRA);
+    m_codedPicturesPerLevel[0].setBeta(BETA_INTRA);
+    for(int level = 1; level < m_codedPicturesPerLevel.size(); level++)
+    {
+        m_codedPicturesPerLevel[level].setAlpha(INITIAL_ALPHA);
+        m_codedPicturesPerLevel[level].setBeta(INITIAL_BETA);
+    }
+}
+
+void DataStorage::resetCodedCtuAtLevelMemory(int totalCtusPerFrame)
+{
+    for(int level = 0; level < m_codedCtusPerLevel.size(); level++)
+    {
+        CodedCtu *codedCtuAtLevel = m_codedCtusPerLevel[level];
+        for(int ctuIdx = 0; ctuIdx < totalCtusPerFrame; ctuIdx++)
+        {
+            codedCtuAtLevel[ctuIdx].setAlpha(INITIAL_ALPHA);
+            codedCtuAtLevel[ctuIdx].setBeta(INITIAL_BETA);
+        }
+    }
+}
+
 SequenceController::SequenceController(double targetRate,
-                                       int smoothingWindow,
-                                       int totalFrames,
                                        double frameRate,
+                                       int intraPeriod,
                                        int sopSize,
                                        int picHeight,
                                        int picWidth,
@@ -346,15 +377,15 @@ SequenceController::SequenceController(double targetRate,
                                        int baseQp)
 {
     m_targetRate       = targetRate * 1000; // kbps to bps conversion
-    m_smoothingWindow  = smoothingWindow;
-    totalFrames        = std::max<int>(totalFrames, frameRate); // Assumes at least one intra period
+    m_smoothingWindow  = static_cast<int>(frameRate);
+    int totalFrames    = intraPeriod != 1 ? intraPeriod : ((static_cast<int>(frameRate) + 4)/8)*8;
     m_totalFrames      = totalFrames;
     m_framesLeft       = totalFrames;
     m_frameRate        = frameRate;
     m_sopSize          = sopSize;
 
     m_averageRate      = m_targetRate / m_frameRate;
-    m_targetBits       = static_cast<int>(m_averageRate * totalFrames);
+    m_targetBits       = static_cast<int64_t>(m_averageRate * totalFrames);
     m_bitsPerPicture   = (int)(m_targetBits / (double)totalFrames);
     m_bitsLeft         = m_targetBits;
     m_pixelsPerPicture = picHeight * picWidth;
@@ -417,23 +448,32 @@ SequenceController::SequenceController(double targetRate,
     pictureIntra.setBeta(BETA_INTRA);
 
     m_remainingCostIntra = 0.0;
+
+#if WRITE_RC_LOG
+    m_logFile.open("rcLogFileCpb.txt", ios::out);
+    m_logFile<<"---------------------------------------------------------------------------------\n";
+    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |      Total | CPB Status |\n";
+    m_logFile<<"---------------------------------------------------------------------------------\n";
+    m_logFile.flush();
+#endif
 }
 
 void SequenceController::initNewSop()
 {
-    int realInfluencePicture  = std::min<int>(m_smoothingWindow, m_framesLeft);
-    int currentBitsPerPicture = (int)((m_bitsLeft - m_bitsPerPicture * (m_framesLeft - realInfluencePicture))/realInfluencePicture);
-    currentBitsPerPicture *= m_sopSize;
+    int64_t realInfluencePicture  = std::min<int64_t>(m_smoothingWindow, m_framesLeft);
+    int64_t bitsStillToBeSpent = static_cast<int64_t>(m_bitsPerPicture * (m_framesLeft - realInfluencePicture));
+    int currentBitsPerPicture = static_cast<int>((m_bitsLeft - bitsStillToBeSpent)/(int64_t)realInfluencePicture);
+    int currentBitsSop = currentBitsPerPicture * m_sopSize;
 
-    if(currentBitsPerPicture < 200)
+    if(currentBitsSop < 200)
     {
-        currentBitsPerPicture = 200; // As in HM RC
+        currentBitsSop = 200; // As in HM RC
     }
 
 #if SOP_ADAPTIVE
     if(m_lastCodedPictureLambda < 0.1)
     {
-        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsPerPicture, m_frameWeight);
+        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, m_frameWeight);
     }
     else
     {
@@ -442,7 +482,7 @@ void SequenceController::initNewSop()
         double *coefficient = new double[m_sopSize];
         double *exponent    = new double[m_sopSize];
         int    *frameWeight = new int[m_sopSize];
-        double targetBpp    = (double)currentBitsPerPicture / (double)m_pixelsPerPicture;
+        double targetBpp    = (double)currentBitsSop / (double)m_pixelsPerPicture;
 
         if ( m_lastCodedPictureLambda < 90.0 )
         {
@@ -485,7 +525,7 @@ void SequenceController::initNewSop()
         {
             frameWeight[sopIdx] = (int)(coefficient[sopIdx] * pow(adaptiveLambda, exponent[sopIdx]) * m_pixelsPerPicture);
         }
-        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsPerPicture, frameWeight);
+        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, frameWeight);
 
         delete[] lambdaRatio;
         delete[] coefficient;
@@ -493,7 +533,7 @@ void SequenceController::initNewSop()
         delete[] frameWeight;
     }
 #else
-    m_sopControllerEngine->initSOPController(m_sopSize, currentBitsPerPicture, m_frameWeight);
+    m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, m_frameWeight);
 #endif
 
 }
@@ -502,6 +542,10 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel)
     CodedPicture &codedPictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     codedPictureAtLevel.setLevel(currentPictureLevel);
     int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(m_framesLeft, currentPictureLevel);
+
+    // Cpb correction
+    m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
+
     m_pictureControllerEngine->initPictureController(picTargetBits, m_pixelsPerPicture, m_averageBpp);
 
     // Reset the array of CTU controllers
@@ -515,7 +559,7 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel)
 void SequenceController::updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel)
 {
     // Update the bit budget and frames to be encoded at sequence and SOP levels
-    m_bitsLeft -= bitsSpent;
+    m_bitsLeft -= static_cast<int64_t>(bitsSpent);
     m_framesLeft--;
 
     int currentPictureLevel = isIntra ? 0 : sopLevel;
@@ -544,6 +588,9 @@ void SequenceController::updateSequenceController(int bitsSpent, int qp, double 
                                                        currentPictureLevel,
                                                        isIntra,
                                                        m_lastCodedPictureLambda);
+
+    // Update Cpb status
+    m_cpbControllerEngine.updateCpbStatus(bitsSpent);
 }
 
 double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel)
@@ -573,7 +620,6 @@ double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel)
         }
         m_ctuControllerEngine[ctuIdx].setCtuWeight(ctuWeight);
         totalWeight += ctuWeight;
-        //std::cout<<"CTU: "<<ctuIdx<<", Lambda: "<<estLambda<<", alpha: "<<alpha<<", beta: "<<beta<<" weight: "<<ctuWeight<<", total:  "<<totalWeight<<'\n';
     }
 
     // Weight normalisation
@@ -641,7 +687,7 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     m_remainingCostIntra = (double)cost;
 
     // Get average bits left
-    int averageBitsLeft = m_bitsLeft / m_framesLeft;
+    int averageBitsLeft = static_cast<int>(m_bitsLeft / static_cast<int64_t>(m_framesLeft));
 
     // Refine the bits estimate for intra
     double alpha=0.25, beta=0.5582;
@@ -656,6 +702,9 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     }
 
     int currentBitsPerPicture = (int)(alpha* pow(cost*4.0/(double)averageBitsLeft, beta)*(double)averageBitsLeft + 0.5);
+
+    // Cpb correction
+    m_cpbControllerEngine.adjustAllocatedBits(currentBitsPerPicture);
 
     if(currentBitsPerPicture < 200)
     {
@@ -1023,4 +1072,12 @@ void SequenceController::getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAd
     qp = Clip3(minQP, maxQP, qp);
     qp = Clip3(0, 51, qp);
     m_ctuControllerEngine[ctbAddrInRs].setCtuQp(qp);
+}
+
+void SequenceController::reset()
+{
+    // Reset the buffers used for prediction and parameter smoothing
+    m_dataStorageEngine->resetPreviousCodedPicturesBuffer();
+    m_dataStorageEngine->resetCodedPicturesAtLevelMemory();
+    m_dataStorageEngine->resetCodedCtuAtLevelMemory(m_picSizeInCtbsY);
 }

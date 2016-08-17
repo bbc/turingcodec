@@ -149,6 +149,15 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
         docket->qpFactor = qpFactor;
         docket->currentGopSize = gopSize;
         docket->sopLevel = sopLevel;
+        if(shotChange)
+        {
+            assert(docket->poc < m_shotChangeList.size());
+            docket->isShotChange = !!m_shotChangeList[docket->poc];
+        }
+        else
+        {
+            docket->isShotChange = false;
+        }
 
         if (this->isValidReference(i, ref1)) addReference(*docket, ref1);
         if (this->isValidReference(i, ref2)) addReference(*docket, ref2);
