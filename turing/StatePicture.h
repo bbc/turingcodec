@@ -148,27 +148,6 @@ struct Access<RefPicList, S, typename std::enable_if<std::is_base_of<StatePictur
     }
 };
 
-template <class S>
-struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(SaoPicture, StateReconstructedPicture<Sample> &s)
-    {
-        return *s.saoPicture;
-    }
-};
-
-template <class S>
-struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(DeblockPicture, StateReconstructedPicture<Sample> &s)
-    {
-        return *s.deblockPicture;
-    }
-};
 
 template <class S>
 struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>

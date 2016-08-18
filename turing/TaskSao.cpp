@@ -72,7 +72,7 @@ bool TaskSao<H>::run()
 
     StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
     Picture<Sample> *picture = stateReconstructedPicture->picture.get();
-    Picture<Sample> *saoPicture = &h[SaoPicture()];
+    Picture<Sample> *saoPicture = stateReconstructedPicture->saoPicture.get();
     while (true)
     {
         const int rx = this->position % h[PicWidthInCtbsY()];

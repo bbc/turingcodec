@@ -965,7 +965,7 @@ public :
         {
             int xCtb = rx << h[CtbLog2SizeY()];
             int yCtb = ry << h[CtbLog2SizeY()];
-            Picture<Sample> *picture = &h[DeblockPicture()];
+            Picture<Sample> *picture = recPic->deblockPicture.get();
             auto &debSamplesL = (*picture)[0];
             auto &debSamplesU = (*picture)[1];
             auto &debSamplesV = (*picture)[2];

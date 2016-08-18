@@ -275,12 +275,7 @@ DEFINE_DERIVED_LONG(MinTbAddrZs)
 };
 
 
-struct SaoPicture { };
-struct DeblockPicture { };
-template <typename T>
-struct StateReconstructedPicture;
-
-
+template <typename Sample> struct StateReconstructedPicture;
 
 
 // To-do - move availability code to separate file
