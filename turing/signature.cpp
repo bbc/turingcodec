@@ -233,7 +233,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
         { "77aac733", "d463c072", "caminandes2", "--speed fast --asm 0" },
         { "77aac733", "d463c072", "caminandes2", "--speed fast --threads 1" },
         { "1a958b17", "d463c072", "caminandes2", "--speed fast --atc-sei 0" },
-        { "71f34591", "4fa7a0a3", "caminandes2", "--speed fast --field-coding" },
+        { "2d895158", "4fa7a0a3", "caminandes2", "--speed fast --field-coding" },
         { "d9b799be", "515892ec", "caminandes2", "--speed fast --bit-depth 8 --internal-bit-depth 10" },
     };
 
