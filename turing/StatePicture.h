@@ -33,9 +33,9 @@ For more information, contact us at info @ turingcodec.org.
 #include <array>
 
 
-struct ReconstructedPictureBase
+struct StateReconstructedPictureBase
 {
-    virtual ~ReconstructedPictureBase() { };
+    virtual ~StateReconstructedPictureBase() { };
 };
 
 
@@ -43,14 +43,14 @@ struct ReconstructedPictureBase
 template <class H>
 struct SampleType
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Type;
+    typedef typename Access<Concrete<StateReconstructedPictureBase>, H>::ActualType::Sample Type;
     static_assert(std::is_same<Type, uint8_t>::value || std::is_same<Type, uint16_t>::value, "");
 };
 
 
 template <typename T>
 struct StateReconstructedPicture :
-    ReconstructedPictureBase
+    StateReconstructedPictureBase
     {
         typedef T Sample;
         std::shared_ptr<Picture<T>> picture;
@@ -73,7 +73,7 @@ struct StatePicture :
     {
         virtual ~StatePicture() { }
 
-        std::shared_ptr<ReconstructedPictureBase> reconstructedPicture;
+        std::shared_ptr<StateReconstructedPictureBase> reconstructedPicture;
 
         std::shared_ptr<LoopFilter::Picture> loopFilterPicture;
 
@@ -149,7 +149,7 @@ struct Access<RefPicList, S, typename std::enable_if<std::is_base_of<StatePictur
 };
 
 template <class S>
-struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
 {
     typedef typename S::Sample Sample;
     typedef Picture<Sample> &Type;
@@ -160,7 +160,7 @@ struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<Reconstruct
 };
 
 template <class S>
-struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
 {
     typedef typename S::Sample Sample;
     typedef Picture<Sample> &Type;
@@ -171,7 +171,7 @@ struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<Reconst
 };
 
 template <class S>
-struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
 {
     typedef typename S::Sample Sample;
     typedef Raster<Sample> Type;

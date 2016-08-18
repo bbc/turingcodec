@@ -198,7 +198,7 @@ struct SetupDeblockPicture
 };
 
 template <class Picture>
-struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
+struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, Picture>::value>::type>
 {
     typedef typename Picture::Sample Sample;
 
@@ -211,7 +211,7 @@ struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_o
 };
 
 template <class Picture>
-struct SetupSaoPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
+struct SetupSaoPicture<Picture, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, Picture>::value>::type>
 {
     typedef typename Picture::Sample Sample;
 
@@ -224,7 +224,7 @@ struct SetupSaoPicture<Picture, typename std::enable_if<std::is_base_of<Reconstr
 };
 
 template <class Picture>
-struct SetupDeblockPicture<Picture, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, Picture>::value>::type>
+struct SetupDeblockPicture<Picture, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, Picture>::value>::type>
 {
     typedef typename Picture::Sample Sample;
 

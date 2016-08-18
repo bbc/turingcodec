@@ -1054,7 +1054,7 @@ struct Search<coding_unit>
         assert(h[SubWidthC()] == 2);
         assert(h[SubHeightC()] == 2);
 
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+        auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
         Picture<Sample> &currPic = *reconstructedPicture.picture;
 
         for (int cIdx = 0; cIdx < 3; ++cIdx)
@@ -1580,7 +1580,7 @@ Cost measurePuCost(H &h)
 
     int32_t satd[3];
     {
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+        auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
 
         // Reconstruct
         // review: duplication--we have already predicted luma (and measured its SATD) during sub-pixel refinement
@@ -1832,7 +1832,7 @@ struct Search<prediction_unit>
             predAccessor.candidate = h;
             predAccessor.cqt = h;
 
-            auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+            auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
 
             predictInter(*reconstructedPicture.picture, pu, h);
 

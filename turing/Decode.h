@@ -78,7 +78,7 @@ template <> struct Decode<JustDecoded>
     template <class H> static void go(const JustDecoded &jd, H &h)
     {
         StatePicture *statePicture = h;
-        ReconstructedPictureBase *base = statePicture->reconstructedPicture.get();
+        StateReconstructedPictureBase *base = statePicture->reconstructedPicture.get();
 
         if (h[BitDepthY()] > 8 || h[BitDepthC()] > 8)
         {

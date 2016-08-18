@@ -148,7 +148,7 @@ struct Compute<H, struct SumOfAbsoluteTransformedDifferences, Turing::Rectangle>
         auto &pictureWrap = static_cast<PictureWrap<Sample> &>(pictureWrapper);
         auto &picture = static_cast<Picture<Sample> &>(pictureWrap);
 
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+        auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
         Picture<Sample> &reconstructed = *reconstructedPicture.picture;
 
         if (cIdx)
