@@ -33,14 +33,6 @@ For more information, contact us at info @ turingcodec.org.
 #include <array>
 
 
-// review: use x-args here, move to HevcTypes.h
-enum Reference
-{
-    UNUSED,
-    SHORT_TERM,
-    LONG_TERM
-};
-
 struct ReconstructedPictureBase
 {
     virtual ~ReconstructedPictureBase() { };
@@ -86,17 +78,6 @@ struct StatePicture :
         std::shared_ptr<LoopFilter::Picture> loopFilterPicture;
 
         Reference reference;
-
-        char const *referenceName() const
-        {
-            switch (this->reference)
-            {
-                default:
-                case UNUSED: return "unused for reference";
-                case SHORT_TERM: return "used for short-term reference";
-                case LONG_TERM: return "used for long-term reference";
-            }
-        }
 
         bool neededForOutput;
         int nal_unit_type;
