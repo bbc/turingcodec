@@ -19,12 +19,11 @@ For more information, contact us at info @ turingcodec.org.
  */
 
 #include "Global.h"
-#include "Read.h"
+#include "Read.hpp"
 #include "StateDecode.h"
 #include "Decode.h"
 #include "GlobalState.h"
 #include "Syntax.h"
-#include "Vanilla.h"
 #include "SyntaxNal.hpp"
 #include "Read.hpp"
 #include <boost/program_options.hpp>
@@ -105,8 +104,6 @@ int decode(int argc, const char* const argv[], std::ostream &cout, std::ostream 
 
         Handler<Decode<void>, StateDecode> h;
         h.state = &stateDecode;
-
-        static_cast<StatePicturesBase *>(h)->deblockWholeFrame = true;
 
         h(Bitstream(0));
 

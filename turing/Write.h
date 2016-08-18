@@ -36,7 +36,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "Reconstruct.h"
 #include "Picture.h"
 #include "Binarization.h"
-#include "Vanilla.h"
 #include "Measure.h"
 #include "EncSao.h"
 #include "Speed.h"
@@ -1353,7 +1352,7 @@ struct OptimizedResidualCodingEncode
         using Sample = typename SampleType<H>::Type;
 
         StateEncodeSubstreamBase *stateEncodeSubstreamBase = hParent;
-        ResidualCodingState residualCodingState(hParent);
+        StateResidualCoding residualCodingState(hParent);
         auto h = hParent.extend(&residualCodingState);
         bool sdhEnabledFlag = !!h[sign_data_hiding_enabled_flag()];
         bool signHidden;
@@ -1743,21 +1742,12 @@ struct Write<mvd_coding>
 };
 
 template <>
-struct Write<OutputPicture>
+struct Write<PictureOutput>
 {
-    template <class H> static void go(const OutputPicture &op, H &h)
+    template <class H> static void go(PictureOutput po, H &h)
     {
-        std::shared_ptr<StatePicture> pic = static_cast<StatePictures *>(h)->getPicByPoc(op.poc);
-        static_cast<StateEncode *>(h)->decodedPictures.push_back(pic);
-    }
-};
-
-
-template <>
-struct Write<DeletePicture>
-{
-    template <class H> static void go(const DeletePicture &dp, H &h)
-    {
+        StateEncode* stateEncode = h;
+        stateEncode->decodedPictures.push_back(po.statePicture);
     }
 };
 

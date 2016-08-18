@@ -563,9 +563,10 @@ void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtr
 
 #ifdef SNAKE_DEBUG
     NeighbourhoodEnc<Sample> *neighbourhood = h;
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
     for (int cIdx = 0; cIdx < 3; ++cIdx)
     {
-        auto &reconstructed = h[ReconstructedPicture()];
+        Picture<Sample> &reconstructed = *stateReconstructedPicture->picture;
         auto recSamples = reconstructed(0, 0, cIdx);
 
         neighbourhood->snakeIntraReferenceSamples[cIdx].copyFrom2D(cqt, recSamples, cIdx ? 1 : 0);
@@ -1054,8 +1055,8 @@ struct Search<coding_unit>
         assert(h[SubWidthC()] == 2);
         assert(h[SubHeightC()] == 2);
 
-        auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
-        Picture<Sample> &currPic = *reconstructedPicture.picture;
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+        Picture<Sample> &currPic = *stateReconstructedPicture->picture;
 
         for (int cIdx = 0; cIdx < 3; ++cIdx)
         {
@@ -1580,11 +1581,11 @@ Cost measurePuCost(H &h)
 
     int32_t satd[3];
     {
-        auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
 
         // Reconstruct
         // review: duplication--we have already predicted luma (and measured its SATD) during sub-pixel refinement
-        predictInter(*reconstructedPicture.picture, pu, h);
+        predictInter(*stateReconstructedPicture->picture, pu, h);
 
         // Measure distortion using SATD
         for (int cIdx = 0; cIdx < 3; ++cIdx)
@@ -1832,13 +1833,13 @@ struct Search<prediction_unit>
             predAccessor.candidate = h;
             predAccessor.cqt = h;
 
-            auto &reconstructedPicture = h[Concrete<StateReconstructedPictureBase>()];
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
 
-            predictInter(*reconstructedPicture.picture, pu, h);
+            predictInter(*stateReconstructedPicture->picture, pu, h);
 
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 0), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 0), 1ull << cqt->log2CbSize, 1ull << cqt->log2CbSize);
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 1), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 1), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 2), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 2), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 0), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 0), 1ull << cqt->log2CbSize, 1ull << cqt->log2CbSize);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 1), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 1), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 2), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 2), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
 
             if (h[PartMode()] != PART_2Nx2N)
             {

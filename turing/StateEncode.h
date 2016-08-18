@@ -523,7 +523,6 @@ struct StateEncodePicture :
     AccessOperators<StateEncodePicture>,
     StatePicture,
     StateWavefront,
-    StateSlice,
     Strps,
     NalWriter,
     StateEncodePictureSei
@@ -800,7 +799,7 @@ struct StateEncode :
                                 {
                                     auto &top = *dptop.picture;
                                     auto &bottom = *dpbottom.picture;
-                                    writeFields(this->fileOutYuvFrames, top, bottom);
+                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)

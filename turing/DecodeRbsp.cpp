@@ -24,7 +24,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "Decode.h"
 #include "GlobalState.h"
 #include "Syntax.h"
-#include "Vanilla.h"
 #include "SyntaxRbsp.hpp"
 #include "Read.hpp"
 

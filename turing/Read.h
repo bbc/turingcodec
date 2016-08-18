@@ -32,7 +32,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "StatePictures.h"
 #include "GlobalState.h"
 #include "CandModeList.h"
-#include "Vanilla.h"
 #include "LoopFilter.h"
 #include "Violation.h"
 #include "ContextModel.h"
@@ -2629,14 +2628,26 @@ struct Read<CodedVideoSequence>
 {
     template <class H> static void go(CodedVideoSequence, H &h)
     {
-        auto statePictures = &h[Concrete<StatePicturesBase>()];
+        StatePictures *statePictures = h;
+
+        h[Active<Sps>()].reset();
+        h[Active<Vps>()].reset();
 
         ++statePictures->codedVideoSequenceId;
         statePictures->posEndCvs = h[::Stream()].len;
 
         while (!h[::Stop()] && h[::Stream()].state.pos < statePictures->posEndCvs)
         {
-            h(AccessUnit());
+            auto newPicture = h[NewPicture()];
+            auto hPicture = h.extend(newPicture.get());
+
+            hPicture[Active<Vps>()] = h[Active<Vps>()];
+            hPicture[Active<Sps>()] = h[Active<Sps>()];
+
+            hPicture(AccessUnit());
+
+            h[Active<Vps>()] = hPicture[Active<Vps>()];
+            h[Active<Sps>()] = hPicture[Active<Sps>()];
         }
     }
 };
@@ -2678,88 +2689,75 @@ struct NalUnitInfo
 template <>
 struct Read<AccessUnit>
 {
-    template <class H> static void go(AccessUnit au, H &hh)
+    template <class H> static void go(AccessUnit au, H &h)
     {
-        // Retrieve a reference to the derived class of StatePictures in use within H
-        auto &statePicturesConcrete = hh[Concrete<StatePictures>()];
+        StatePicturesBase *statePicturesBase = h;
+        statePicturesBase->sliceHeaderValid = false;
 
-        // Ask that derived class to make a new picture (usually a derived class of StatePicture)
-        auto *statePictureDerivative = statePicturesConcrete.newPicture();
-
-        std::shared_ptr<StatePicture> statePicture{ statePictureDerivative };
-
-        // Extend the handler with the picture state
-        auto h = hh.extend(statePictureDerivative);
-
+        size_t posNextAu = bitLen(h[::Stream()]) / 8;
+        while (h[Position<Bytes<>>()] < posNextAu)
         {
-            size_t posNextAu = bitLen(h[::Stream()]) / 8;
-
-            while (h[Position<Bytes<>>()] < posNextAu)
+            try
             {
+                const size_t NumBytesInNalUnit = numBytesInNalUnit(h[::Stream()]);
+                h(byte_stream_nal_unit(boost::numeric_cast<int>(NumBytesInNalUnit)));
+            }
+            catch (boost::numeric::bad_numeric_cast &)
+            {
+                h(Violation("7", "NAL unit too large"));
+                h[Stop()] = 1;
+                break;
+            }
+            catch (Abort &)
+            {
+                h[Stop()] = 1;
+                break;
+            }
+            const bool firstSliceSegmentInPicture = isSliceSegment(h[nal_unit_type()]) && h[first_slice_segment_in_pic_flag()];
+            if (firstSliceSegmentInPicture)
+            {
+                size_t startPos = 0;
+
+                typename Access<Stream, H>::SetType::Bookmark mark(h[::Stream()]);
                 try
                 {
-                    const size_t NumBytesInNalUnit = numBytesInNalUnit(h[::Stream()]);
-                    h(byte_stream_nal_unit(boost::numeric_cast<int>(NumBytesInNalUnit)));
-                }
-                catch (boost::numeric::bad_numeric_cast &)
-                {
-                    h(Violation("7", "NAL unit too large"));
-                    h[Stop()] = 1;
-                    break;
-                }
-                catch (Abort &)
-                {
-                    h[Stop()] = 1;
-                    break;
-                }
-                const bool firstSliceSegmentInPicture = isSliceSegment(h[nal_unit_type()]) && h[first_slice_segment_in_pic_flag()];
-                if (firstSliceSegmentInPicture)
-                {
-                    size_t startPos = 0;
-
-                    typename Access<Stream, H>::SetType::Bookmark mark(h[::Stream()]);
-                    try
+                    bool seenEos = false;
+                    // loop over NAL units
+                    while (true)
                     {
-                        bool seenEos = false;
-                        // loop over NAL units
-                        while (true)
+                        NalUnitInfo info(h[::Stream()]);
+
+                        if (!startPos && (info.firstSliceSegment || startsNewAccessUnit(info.nal_unit_type)))
                         {
-                            NalUnitInfo info(h[::Stream()]);
+                            startPos = info.pos;
+                        }
 
-                            if (!startPos && (info.firstSliceSegment || startsNewAccessUnit(info.nal_unit_type)))
+                        if (info.firstSliceSegment)
+                        {
+                            posNextAu = startPos;
+
+                            if (isIdr(info.nal_unit_type) || isBla(info.nal_unit_type) || seenEos)
                             {
-                                startPos = info.pos;
+                                static_cast<StatePicturesBase *>(h)->posEndCvs = posNextAu;
                             }
 
-                            if (info.firstSliceSegment)
-                            {
-                                posNextAu = startPos;
+                            break;
+                        }
 
-                                if (isIdr(info.nal_unit_type) || isBla(info.nal_unit_type) || seenEos)
-                                {
-                                    static_cast<StatePicturesBase *>(h)->posEndCvs = posNextAu;
-                                }
-
-                                break;
-                            }
-
-                            {
-                                if (info.nal_unit_type == EOS_NUT) seenEos = true;
-                            }
+                        {
+                            if (info.nal_unit_type == EOS_NUT) seenEos = true;
                         }
                     }
-                    catch (ExceptionOverrun &)
-                    {
-                    }
+                }
+                catch (ExceptionOverrun &)
+                {
                 }
             }
+        }
 
-            StatePicturesBase *statePicturesBase = h;
-            if (statePicturesBase->sliceHeaderValid)
-            {
-                auto statePictures = &h[Concrete<StatePicturesBase>()];
-                statePictures->accessUnitDone(h);
-            }
+        if (statePicturesBase->sliceHeaderValid)
+        {
+            h(PictureDone());
         }
     };
 };
@@ -3113,6 +3111,11 @@ struct Read<slice_segment_header>
         *static_cast<SliceSegmentHeaderIndependent *>(h) = SliceSegmentHeaderIndependent();
 
         Syntax<slice_segment_header>::go(v, h);
+
+        StatePictures *statePictures = h;
+        statePictures->sliceHeaderDone(h);
+
+        h[CtbAddrInTs()] = h[CtbAddrRsToTs(h[slice_segment_address()])];
     }
 };
 
@@ -3133,23 +3136,11 @@ struct Read<Element<num_ref_idx_active_override_flag, u>>
 };
 
 
-template <> struct Read<PictureBegin>
-{
-    template <class H> static void go(PictureBegin e, H &h)
-    {
-    }
-};
-
-
 template <>
 struct Read<slice_segment_data>
 {
     template <class H> static void go(const slice_segment_data &fun, H &h)
     {
-        {
-            StatePictures *statePictures = h;
-            statePictures->sliceHeaderDone(h);
-        }
         auto statePictures = &h[Concrete<StatePicturesBase>()];
         statePictures->sliceHeaderValid = true; // move this into sliceHeaderDone() ?
 
@@ -3175,7 +3166,8 @@ struct Read<slice_segment_data>
 
         // handle the case where first slice does not have first_slice_in_pic_flag set
         // review
-        if (h[ContainerOf<CtbAddrRsToTs>()].empty()) throw Abort();
+        if (h[ContainerOf<CtbAddrRsToTs>()].empty()) 
+            throw Abort();
 
         StatePicturesBase *statePicturesBase = h;
         statePicturesBase->streamType = StatePicturesBase::streamTypeCabac();
@@ -3183,26 +3175,9 @@ struct Read<slice_segment_data>
         StateSubstream stateSubstream(h);
         auto h2 = h.extend(&stateSubstream);
 
-        if (!h2[dependent_slice_segment_flag()])
-        {
-            h2(ContextsInitialize());
-        }
-
         h2[CtbAddrInTs()] = h[CtbAddrInTs()];
         h2[CtbAddrInRs()] = h[CtbAddrTsToRs(h[CtbAddrInTs()])];
         h2[QpY()] = h[QpY()];
-
-        if (isRasl(h2[nal_unit_type()]) && statePicturesBase->NoRaslOutputFlag)
-        {
-            // associated IRAP picture has NoRaslOutputFlag equal to 1, the RASL picture is not output and may not be correctly decodable
-            seek(h2, bitLen(h2[::Stream()]));
-            return;
-        }
-
-        if (statePicturesBase->skipSliceSegmentData)
-        {
-            return;
-        }
 
         if (h[first_slice_segment_in_pic_flag()])
         {
@@ -3214,12 +3189,16 @@ struct Read<slice_segment_data>
         CabacState *cabacState = h2;
         cabacState->ivlCurrRange = 510;
 
-        Syntax<slice_segment_data>::go(fun, h2);
+        if (isRasl(h2[nal_unit_type()]) && statePicturesBase->NoRaslOutputFlag)
+        {
+            // associated IRAP picture has NoRaslOutputFlag equal to 1, the RASL picture is not output and may not be correctly decodable
+            Greedy<slice_segment_data>::go(fun, h2);
+        }
+        else
+            Syntax<slice_segment_data>::go(fun, h2);
 
         if (h2[dependent_slice_segments_enabled_flag()])
-        {
             h2(ContextsSave(tablesDs));
-        }
 
         h[CtbAddrInTs()] = h2[CtbAddrInTs()];
         h[QpY()] = h2[QpY()];
@@ -3302,32 +3281,6 @@ struct Read<Element<pcm_sample_chroma, uv>>
         h[fun.v] = value;
         BitReader &reader = *static_cast<BitReader *>(h);
         //if (reader.log) *reader.log << "pcm_sample_chroma\tu(" << h[PcmBitDepthC()] << ")\t" << std::hex << value << std::dec << "\n";
-    }
-};
-
-
-template <>
-struct Read<OutputPicture>
-{
-    template <class H> static void go(OutputPicture, H &)
-    {
-    }
-};
-
-template <>
-struct Read<DeletePicture>
-{
-    template <class H> static void go(DeletePicture, H &)
-    {
-    }
-};
-
-
-template <>
-struct Read<MotionCand>
-{
-    template <class H> static void go(MotionCand, H &)
-    {
     }
 };
 

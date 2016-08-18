@@ -23,12 +23,13 @@ For more information, contact us at info @ turingcodec.org.
 
 #pragma once
 
-#include "Picture.h"
 #include "StateSpatial.h"
 #include "LoopFilter.h"
 #include "StateCollocatedMotion.h"
+#include "StateParameterSets.h"
 #include "StateValues.h"
-#include "RateControl.h"
+#include "ScalingMatrices.h"
+#include "Cabac.h"
 #include <memory>
 #include <array>
 
@@ -59,6 +60,35 @@ struct SampleType
 };
 
 
+// State that relates to a NAL unit
+struct StateNalUnit :
+    ValueHolder<nal_unit_type>,
+    ValueHolder<nuh_layer_id>,
+    ValueHolder<nuh_temporal_id_plus1>
+{
+    StateNalUnit()
+    {
+        this->ValueHolder<nuh_temporal_id_plus1>::value = 1;
+    }
+};
+
+
+// Decoder or encoder state that persists while working on a particular slice of video
+struct StateSlice :
+    StateNalUnit,
+    ValueHolder<SliceAddrRs>,
+    ValueHolder<CtbAddrInTs>,
+    ValueHolder<QpY>,
+    SliceSegmentHeader,
+    ScalingMatrices,
+    ActiveParameterSets,
+    short_term_ref_pic_set
+{
+    Contexts savedContexts[2];
+    int savedStatCoeff[2][4];
+};
+
+
 // Decoder or encoder state that persists while working on a particular video frame
 struct StatePicture :
     std::enable_shared_from_this<StatePicture>,
@@ -69,8 +99,11 @@ struct StatePicture :
     ValueHolder<CtbAddrRsToTs>,
     ValueHolder<CtbAddrTsToRs>,
     ValueHolder<TileId>,
+    StateSlice,
     StateSpatial
     {
+        using AccessOperators<StatePicture>::operator[];
+
         virtual ~StatePicture() { }
 
         std::shared_ptr<StateReconstructedPictureBase> reconstructedPicture;
@@ -80,6 +113,7 @@ struct StatePicture :
         Reference reference;
 
         bool neededForOutput;
+        bool hasBeenOutput = false;
         int nal_unit_type;
         int TemporalId;
         int codedVideoSequenceId;

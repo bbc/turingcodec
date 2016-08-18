@@ -198,7 +198,6 @@ add_library(turing
     TaskEncodeSubstream.h
     ThreadPool.h
     turing.h
-    Vanilla.h
     Violation.h
     Write.h
     ${SEI_HEADERS})
