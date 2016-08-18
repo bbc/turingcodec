@@ -266,7 +266,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
         if (rv < 0)
         {
             cerr << "signature test failed\n";
-	    ++mismatchCount;
+        ++mismatchCount;
         }
 
         if (rv > 0)

@@ -797,62 +797,346 @@ struct Read<pcm_sample>
 };
 
 
-template <class H>
-void clearCoeffs(H &h)
+static int subBlockRaster(int log2TrafoSize, int x, int y)
 {
-    for (int i = 0; i < 16; ++i)
+    switch (log2TrafoSize)
     {
-        h[coeff_abs_level_greater1_flag(i)] = 0;
-        h[coeff_abs_level_greater2_flag(i)] = 0;
-        h[coeff_abs_level_remaining(i)] = 0;
-        h[coeff_sign_flag(i)] = 0;
+    default:
+        assert(false);
+    case 2:
+        return 0;
+    case 3:
+        return ((y & ~3) >> 1) | (x >> 2);
+    case 4:
+        return (y & ~3) | (x >> 2);
+    case 5:
+        return ((y & ~3) << 1) | (x >> 2);
     }
 }
 
+
+template <int log2TrafoSize>
+struct ResidualCodingStateOptimised
+    :
+    ValueCache<scanIdx>
+{
+    template <class H>
+    ResidualCodingStateOptimised(H &h)
+        :
+        ValueCache<scanIdx>(h)
+    {
+    }
+
+    uint64_t codedSubBlockFlags = 0;
+    int nSigCoeffs;
+    ScanPos coeffPositions[17];
+    int nn[17];
+    int32_t absoluteCoefficients[17];
+    uint16_t remaining;
+};
+
+
+template <int log2TrafoSize>
+struct Access<coded_sub_block_flag, ResidualCodingStateOptimised<log2TrafoSize>>
+{
+    static int shift(coded_sub_block_flag v)
+    {
+        int a = 8 + v.xS - v.yS;
+        assert(a > 0 && a < 16);
+        return a;
+        //return 8 + v.xS - v.yS;
+        //return v.xS + (v.yS << (log2TrafoSize - 2));
+    }
+    typedef int Type;
+    static Type get(coded_sub_block_flag v, ResidualCodingStateOptimised<log2TrafoSize> &s)
+    {
+        return (s.codedSubBlockFlags >> shift(v)) & 1;
+    }
+    static void set(coded_sub_block_flag v, Type x, ResidualCodingStateOptimised<log2TrafoSize> &s)
+    {
+        auto const mask = static_cast<uint64_t>(1) << shift(v);
+        if (x)
+            s.codedSubBlockFlags |= mask;
+        else
+            s.codedSubBlockFlags &= ~mask;
+    }
+};
+
+
+template <int log2TrafoSize, class H>
+void optimisedReadResidualCoding(H &hParent)
+{
+    ResidualCodingStateOptimised<log2TrafoSize> residualCodingState(hParent);
+    auto h = hParent.extend(&residualCodingState);
+
+    StateSubstream *stateSubstream = h;
+    residual_coding *rc = h;
+    assert(rc->log2TrafoSize == log2TrafoSize);
+
+    if (std::is_same<typename H::Tag, Decode<void>>::value)
+    {
+        const int sizeC = 1 << rc->log2TrafoSize;
+        for (int yC = 0; yC < sizeC; ++yC)
+        {
+            for (int xC = 0; xC < sizeC; ++xC)
+            {
+                h[TransCoeffLevel(rc->x0, rc->y0, rc->cIdx, xC, yC)] = 0;
+            }
+        }
+    }
+
+    stateSubstream->lastGreater1Flag = 1;
+    stateSubstream->lastGreater1Ctx = -1;
+
+    stateSubstream->cLastAbsLevel = 0;
+    stateSubstream->firstCoeffAbsLevelRemainingInSubblock = true;
+
+    h[transform_skip_flag()] = 0;
+    h[explicit_rdpcm_flag()] = 0;
+
+    if (h[transform_skip_enabled_flag()] && !h[cu_transquant_bypass_flag()] && (log2TrafoSize <= h[Log2MaxTransformSkipSize()]))
+        h(transform_skip_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+
+    if (h[current(CuPredMode(rc->x0, rc->y0))] == MODE_INTER  &&  h[explicit_rdpcm_enabled_flag()] &&
+        (h[transform_skip_flag(rc->x0, rc->y0, rc->cIdx)] || h[cu_transquant_bypass_flag()]))
+    {
+        h(explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+        if (h[explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx)])
+            h(explicit_rdpcm_dir_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+    }
+
+    h(last_sig_coeff_x_prefix(), ae(v));
+    h(last_sig_coeff_y_prefix(), ae(v));
+    if (h[last_sig_coeff_x_prefix()] > 3)
+        h(last_sig_coeff_x_suffix(), ae(v));
+    if (h[last_sig_coeff_y_prefix()] > 3)
+        h(last_sig_coeff_y_suffix(), ae(v));
+
+    auto xx = h[LastSignificantCoeffX()];
+    auto yy = h[LastSignificantCoeffY()];
+
+    auto const lastSigCoeffRaster = ((h[LastSignificantCoeffY()] & 3) << 2) | (h[LastSignificantCoeffX()] & 3);
+    auto const lastSigSubBlockRaster = subBlockRaster(log2TrafoSize, h[LastSignificantCoeffX()], h[LastSignificantCoeffY()]);
+
+    auto const lastScanPos = scanPosInverse<2>(h[scanIdx()], lastSigCoeffRaster);
+    auto const lastSubBlock = scanPosInverse<log2TrafoSize - 2>(h[scanIdx()], lastSigSubBlockRaster);
+
+    int escapeDataPresent = 0;
+
+    auto const &sp = scanPos<log2TrafoSize - 2>().lookup[h[scanIdx()]];
+    auto const &sp2 = scanPos<2>().lookup[h[scanIdx()]];
+    int &i = stateSubstream->i;
+    for (i = lastSubBlock; i >= 0; i--)
+    {
+        auto const s = sp[i];
+        const auto &xS = s.x;
+        const auto &yS = s.y;
+        auto const offset = 8 + xS - yS;
+
+        // read coded_sub_block_flag
+        int inferSbDcSigCoeffFlag = 0;
+        if (i == 0)
+        {
+        }
+        else if (i < lastSubBlock)
+        {
+            h(coded_sub_block_flag(xS, yS), ae(v));
+            inferSbDcSigCoeffFlag = 1;
+        }
+
+        auto const s2 = s << 2;
+
+        if (i && !h[coded_sub_block_flag(offset - 8, 0)])
+            continue;
+
+
+        residualCodingState.nSigCoeffs = 0;
+        residualCodingState.remaining = ~0;
+
+        int max = 15;
+        if (i == lastSubBlock)
+        {
+            residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = 1;
+            residualCodingState.nn[residualCodingState.nSigCoeffs] = lastScanPos;
+            residualCodingState.coeffPositions[residualCodingState.nSigCoeffs++] = s2 + sp2[lastScanPos];
+            max = lastScanPos - 1;
+        }
+
+        // read sig_coeff_flag
+
+        for (int n = max; n >= inferSbDcSigCoeffFlag; n--)
+        {
+            auto const c = s2 + sp2[n];
+            h(sig_coeff_flag(c.x, c.y), ae(v));
+            residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = h[sig_coeff_flag(c.x, c.y)];
+            inferSbDcSigCoeffFlag &= !h[sig_coeff_flag(c.x, c.y)];
+            int mask = -h[sig_coeff_flag(c.x, c.y)];
+            //if (std::is_same<typename H::Tag, Decode<void>>::value)
+            residualCodingState.nn[residualCodingState.nSigCoeffs] = n;
+            residualCodingState.coeffPositions[residualCodingState.nSigCoeffs] = c;
+            residualCodingState.nSigCoeffs += h[sig_coeff_flag(c.x, c.y)];
+        }
+        residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = 1;
+        //if (std::is_same<typename H::Tag, Decode<void>>::value)
+        residualCodingState.nn[residualCodingState.nSigCoeffs] = 0;
+        residualCodingState.coeffPositions[residualCodingState.nSigCoeffs] = s2;
+        residualCodingState.nSigCoeffs += inferSbDcSigCoeffFlag;
+
+        if (!residualCodingState.nSigCoeffs)
+            continue;
+
+        auto pnn = &residualCodingState.nn[residualCodingState.nSigCoeffs];
+        auto pCoeffPositions = &residualCodingState.coeffPositions[residualCodingState.nSigCoeffs];
+
+        // read coeff_abs_level_greater1_flag
+        int firstSigScanPos = 16;
+        int lastSigScanPos = -1;
+        h[numGreater1Flag()] = 0;
+        int lastGreater1ScanPos = -1;
+        int lastGreater1m = -1;
+
+        int mm = -residualCodingState.nSigCoeffs;
+        do
+        {
+            int m = residualCodingState.nSigCoeffs + mm;
+            auto const c = pCoeffPositions[mm];
+            int n = pnn[mm];
+            auto const &xC = c.x;
+            auto const &yC = c.y;
+
+            if (h[numGreater1Flag()] < 8)
+            {
+                h(coeff_abs_level_greater1_flag(n), ae(v));
+                h[numGreater1Flag()]++;
+
+                if (h[coeff_abs_level_greater1_flag(n)])
+                {
+                    residualCodingState.absoluteCoefficients[m] = 2;
+                    if (lastGreater1ScanPos == -1)
+                    {
+                        lastGreater1ScanPos = n;
+                        lastGreater1m = m;
+                    }
+                }
+                else
+                {
+                    residualCodingState.remaining &= ~(1 << m);
+                }
+            }
+            else
+            {
+                escapeDataPresent = 1;
+            }
+
+            if (lastSigScanPos == -1)
+                lastSigScanPos = n;
+
+            firstSigScanPos = n;
+
+        } while (++mm);
+
+        int signHidden = 0;
+        if (h[sign_data_hiding_enabled_flag()])
+        {
+            if (h[cu_transquant_bypass_flag()] ||
+                (h[current(CuPredMode(rc->x0, rc->y0))] == MODE_INTRA  &&
+                    h[implicit_rdpcm_enabled_flag()] && h[transform_skip_flag(rc->x0, rc->y0, rc->cIdx)] &&
+                    predModeIntraIs10or26(*rc, h)) ||
+                h[explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx)])
+            {
+            }
+            else
+            {
+                signHidden = lastSigScanPos - firstSigScanPos > 3;
+            }
+        }
+
+        // read coeff_abs_level_greater2_flag
+        if (lastGreater1ScanPos != -1)
+        {
+            h(coeff_abs_level_greater2_flag(lastGreater1ScanPos), ae(v));
+            if (h[coeff_abs_level_greater2_flag(lastGreater1ScanPos)])
+            {
+                residualCodingState.absoluteCoefficients[lastGreater1m] = 3;
+                escapeDataPresent = 1;
+            }
+            else
+            {
+                residualCodingState.remaining &= ~(1 << lastGreater1m);
+            }
+        }
+
+        if (h[cabac_bypass_alignment_enabled_flag()] && escapeDataPresent)
+        {
+            assert(!"alignment not yet implemented");
+        }
+
+        mm = -residualCodingState.nSigCoeffs + signHidden;
+        do
+        {
+            int n = std::is_same<typename H::Tag, Decode<void>>::value ? pnn[mm - signHidden] : -1;
+            h(coeff_sign_flag(n), ae(v));
+        } while (++mm);
+
+        // read coeff_abs_level_remaining
+        mm = -residualCodingState.nSigCoeffs;
+        do
+        {
+            int m = residualCodingState.nSigCoeffs + mm;
+
+            if ((residualCodingState.remaining >> m) & 1)
+            {
+                h(coeff_abs_level_remaining(-1), ae(v));
+                residualCodingState.absoluteCoefficients[m] += h[coeff_abs_level_remaining(-1)];
+                stateSubstream->cLastAbsLevel = residualCodingState.absoluteCoefficients[m];
+            }
+        } while (++mm);
+
+        if (std::is_same<typename H::Tag, Decode<void>>::value)
+        {
+            int sumAbsLevel = 0;
+            mm = -residualCodingState.nSigCoeffs;
+            do
+            {
+                int m = residualCodingState.nSigCoeffs + mm;
+                auto const c = pCoeffPositions[mm];
+                int n = pnn[mm];
+                auto const &xC = c.x;
+                auto const &yC = c.y;
+
+                const int baseLevel = residualCodingState.absoluteCoefficients[m];
+                sumAbsLevel ^= (baseLevel);
+
+                if (signHidden)
+                {
+                    if (n == firstSigScanPos)
+                        h[coeff_sign_flag(n)] = sumAbsLevel & 1;
+                }
+
+                h[TransCoeffLevel(rc->x0, rc->y0, rc->cIdx, xC, yC)] = baseLevel * (1 - 2 * h[coeff_sign_flag(n)]);
+
+            } while (++mm);
+        }
+    }
+}
 template <>
 struct Read<residual_coding>
 {
     template <class H> static void go(const residual_coding &rc, H &hParent)
     {
-        ResidualCodingState residualCodingState(hParent);
-
-        auto h = hParent.extend(&residualCodingState);
-
-        const int sizeS = 1 << (rc.log2TrafoSize - 2);
-        for (int yS = 0; yS < sizeS; ++yS)
+        static void(*const read[6])(H &) =
         {
-            for (int xS = 0; xS < sizeS; ++xS)
-            {
-                h[coded_sub_block_flag(xS, yS)] = 0;
-            }
-        }
-        h[coded_sub_block_flag(0, 0)] = 1;
+            0,
+            0,
+            optimisedReadResidualCoding<2, H>,
+            optimisedReadResidualCoding<3, H>,
+            optimisedReadResidualCoding<4, H>,
+            optimisedReadResidualCoding<5, H>,
+        };
+        read[rc.log2TrafoSize](hParent);
+     }
+ };
 
-        const int sizeC = 1 << rc.log2TrafoSize;
-        for (int yC = 0; yC < sizeC; ++yC)
-        {
-            for (int xC = 0; xC < sizeC; ++xC)
-            {
-                h[sig_coeff_flag(xC, yC)] = 0;
-                h[TransCoeffLevel(rc.x0, rc.y0, rc.cIdx, xC, yC)] = 0;
-            }
-        }
-
-        clearCoeffs(h);
-
-        StateSubstream& stateSubstream = *static_cast<StateSubstream *>(h);
-        stateSubstream.lastGreater1Flag = 1;
-        stateSubstream.lastGreater1Ctx = -1;
-
-        stateSubstream.cLastAbsLevel = 0;
-        stateSubstream.firstCoeffAbsLevelRemainingInSubblock = true;
-
-        h[transform_skip_flag()] = 0;
-        h[explicit_rdpcm_flag()] = 0;
-
-        Syntax<residual_coding>::go(rc, h);
-    }
-};
 
 
 template <class V>
@@ -1923,13 +2207,8 @@ void setLast(H &h)
         h[LastSignificantCoeffX()] = computeLast<last_sig_coeff_x_prefix, last_sig_coeff_x_suffix>(h);
         h[LastSignificantCoeffY()] = computeLast<last_sig_coeff_y_prefix, last_sig_coeff_y_suffix>(h);
     }
-    h[coded_sub_block_flag(h[LastSignificantCoeffX()] >> 2, h[LastSignificantCoeffY()] >> 2)] = 1;
-    h[sig_coeff_flag(h[LastSignificantCoeffX()], h[LastSignificantCoeffY()])] = 1;
-
-    //BitReader &reader = *static_cast<BitReader *>(h);
-    //if (reader.log) *reader.log
-    //	<< "last: " << h[LastSignificantCoeffX()] << ", " << h[LastSignificantCoeffY()] << "\n"
-    //	<< "scanIdx: " << h[scanIdx()] << "\n";
+    int v = 1;
+    Access<coded_sub_block_flag, H>::set(coded_sub_block_flag(h[LastSignificantCoeffX()] >> 2, h[LastSignificantCoeffY()] >> 2), v, h);
 }
 
 template <>
@@ -1994,10 +2273,9 @@ struct Read<Element<coded_sub_block_flag, ae>>
     {
         int binVal;
         h(DecodeDecision<coded_sub_block_flag>(&binVal, ctxInc(h, fun.v)));
-        h[fun.v] = binVal;
+        Access<coded_sub_block_flag, H>::set(fun.v, binVal, h);
         if (binVal)
         {
-            h[sig_coeff_flag(fun.v.xS << 2, fun.v.yS << 2)] = 1;
             StateSubstream& stateSubstream = *static_cast<StateSubstream *>(h);
             stateSubstream.cLastAbsLevel = 0;
             stateSubstream.firstCoeffAbsLevelRemainingInSubblock = true;
@@ -2027,12 +2305,6 @@ struct Read<Element<sig_coeff_flag, ae>>
 {
     template <class H> static void go(Element<sig_coeff_flag, ae> fun, H &h)
     {
-        const bool nIs15 = ((fun.v.xC & 3) | (fun.v.xC & 3)) == 3;
-        if (nIs15)
-        {
-            clearCoeffs(h);
-        }
-
         residual_coding &rc = *static_cast<residual_coding *>(h);
         int binVal;
         h(DecodeDecision<sig_coeff_flag>(&binVal, ctxInc(h, rc.cIdx, fun.v.xC, fun.v.yC, h[scanIdx()], rc.log2TrafoSize)));

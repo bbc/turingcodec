@@ -1345,7 +1345,6 @@ int ctxIncSigCoeffFlag(H &h, int cIdx, int xC, int yC, int codedSubBlockFlagRigh
     }
 }
 
-
 template <int log2TrafoSize>
 struct OptimizedResidualCodingEncode
 {
@@ -1434,6 +1433,9 @@ struct OptimizedResidualCodingEncode
 
             if (codedSubBlockFlag)
             {
+                uint8_t greater1[16] = { 0 };
+                uint8_t greater2[16] = { 0 };
+
                 // Sublock loop for sig_coeff_flag
                 for (int n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--)
                 {
@@ -1477,7 +1479,7 @@ struct OptimizedResidualCodingEncode
 
                         if (numGreater1Flag < 8)
                         {
-                            h[coeff_abs_level_greater1_flag(n)] = subBlock.coeffGreater1Flag(n);
+                            greater1[n] = subBlock.coeffGreater1Flag(n);
 
                             if (numGreater1Flag == 0)
                             {
@@ -1511,18 +1513,15 @@ struct OptimizedResidualCodingEncode
                                 greater1Ctx = lastGreater1Flag ? 0 : greater1Ctx + 1;
                             }
 
-                            h(coeff_abs_level_greater1_flag(n), ae(v));
-                            previousGreater1Flag = h[coeff_abs_level_greater1_flag(n)];
+                            h(EncodeDecision<coeff_abs_level_greater1_flag>(greater1[n], Write<Element<coeff_abs_level_greater1_flag, ae>>::ctxInc(h)));
+
+                            previousGreater1Flag = greater1[n];
                             numGreater1Flag++;
-                            if (h[coeff_abs_level_greater1_flag(n)] && lastGreater1ScanPos == -1)
+                            if (greater1[n] && lastGreater1ScanPos == -1)
                             {
                                 lastGreater1ScanPos = n;
-                                h[coeff_abs_level_greater2_flag(lastGreater1ScanPos)] = *pAbsCoeff > 2 ? 1 : 0;
+                                greater2[lastGreater1ScanPos] = *pAbsCoeff > 2 ? 1 : 0;
                             }
-                        }
-                        else
-                        {
-                            h[coeff_abs_level_greater1_flag(n)] = 0;
                         }
 
                         if (lastSigScanPos == -1)
@@ -1537,7 +1536,7 @@ struct OptimizedResidualCodingEncode
 
                 if (lastGreater1ScanPos != -1)
                 {
-                    h(coeff_abs_level_greater2_flag(lastGreater1ScanPos), ae(v));
+                    h(EncodeDecision<coeff_abs_level_greater2_flag>(greater2[lastGreater1ScanPos], Write<Element<coeff_abs_level_greater2_flag, ae>>::ctxInc(h)));
                 }
 
                 if (h[cu_transquant_bypass_flag()])
@@ -1567,9 +1566,6 @@ struct OptimizedResidualCodingEncode
                     const int yC = (yS << 2) + ScanOrder(2, h[scanIdx()], n, 1);
                     if (subBlock.sigCoeffFlag(n))
                     {
-                        ASSERT(codedSubBlockFlag);
-                        ASSERT(subBlock.sigCoeffFlag(n));
-
                         int16_t absCoeff = 1;
                         if (subBlock.coeffGreater1Flag(n))
                         {
@@ -1577,15 +1573,10 @@ struct OptimizedResidualCodingEncode
                         }
 
                         int& baseLevel = stateEncodeSubstreamBase->baseLevel;
-                        baseLevel = 1 + h[coeff_abs_level_greater1_flag(n)] + h[coeff_abs_level_greater2_flag(n)];
+                        baseLevel = 1 + greater1[n] + greater2[n];
                         if (baseLevel == ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
                         {
-                            h[coeff_abs_level_remaining(n)] = absCoeff - baseLevel;
-                            h(coeff_abs_level_remaining(n), ae(v));
-                        }
-                        else
-                        {
-                            h[coeff_abs_level_remaining(n)] = 0;
+                            Write<Element<coeff_abs_level_remaining, ae>>::write(absCoeff - baseLevel, h);
                         }
                         numSigCoeff++;
                     }

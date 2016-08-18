@@ -1202,11 +1202,11 @@ struct last_sig_coeff_y_prefix { };
 struct last_sig_coeff_x_suffix { };
 struct last_sig_coeff_y_suffix { };
 DEFINE_VALUE_ARRAY_2(coded_sub_block_flag, xS, 8, yS, 8)
-DEFINE_VALUE_ARRAY_2(sig_coeff_flag, xC, 32, yC, 32)
-DEFINE_VALUE_ARRAY_1(coeff_abs_level_greater1_flag, n, 16)
-DEFINE_VALUE_ARRAY_1(coeff_abs_level_greater2_flag, n, 16)
+DEFINE_STRUCT_ARITY_2(sig_coeff_flag, xC, yC)
+DEFINE_STRUCT_ARITY_1(coeff_abs_level_greater1_flag, n)
+DEFINE_STRUCT_ARITY_1(coeff_abs_level_greater2_flag, n)
 DEFINE_VALUE_ARRAY_1(coeff_sign_flag, n, 16)
-DEFINE_VALUE_ARRAY_1(coeff_abs_level_remaining, n, 16)
+DEFINE_STRUCT_ARITY_1(coeff_abs_level_remaining, n)
 DEFINE_VALUE_ARRAY_1(StatCoeff, sbType, 4)
 struct sbType { };
 DEFINE_DERIVED_LONG(sbType)
