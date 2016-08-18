@@ -74,6 +74,7 @@ struct InputQueue
         int sopLevel;
         References references;
         int64_t dts;
+        bool isShotChange;
     };
 
     // Retrieves a docket: a packet of work containing a picture and instructions of how to encode it.

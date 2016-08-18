@@ -201,9 +201,8 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
             frames *= 2;
         this->stateEncode.rateControlEngine.reset(new SequenceController(
                 (double)this->vm["bitrate"].as<int>(),
-                40,
-                frames,
                 this->vm["frame-rate"].as<double>(),
+                this->vm["max-gop-n"].as<int>(),
                 this->vm["max-gop-m"].as<int>(),
                 this->pictureHeight,
                 this->pictureWidth,
@@ -562,6 +561,11 @@ void Encoder::setupPtl(H &h)
                                                     && level.parameters[Level::MaxLumaSr] >= h[PicSizeInSamplesY()] * this->frameRate)
         {
             h[general_level_idc()] = level.level_idc();
+            this->bitstreamLevel = level;
+            if(this->stateEncode.useRateControl)
+            {
+                this->stateEncode.rateControlEngine->initCpbInfo(level.parameters[Level::MaxCPB]*1000);
+            }
             break;
         }
     }
@@ -638,11 +642,12 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         h[amp_enabled_flag()] = this->stateEncode.amp;
         h[sample_adaptive_offset_enabled_flag()] = !!(this->vm.at("sao").as<bool>() && !this->vm.at("no-sao").as<bool>());
         h[sps_temporal_mvp_enabled_flag()] = 1;
-        if (writeVui())
-            setupVui(h);
     }
 
     setupPtl(h);
+
+    if (writeVui())
+        setupVui(h);
 
     return &sps->ptl;
 }
@@ -761,7 +766,7 @@ void Encoder::setupVui(H &h)
     bool videoSignalTypeInfoFlag = this->vm.count("video-format") ||
             this->vm.count("range") ||
             this->vm.count("colourprim") ||
-            this->vm.count("transfer_characteristics") ||
+            this->vm.count("transfer-characteristics") ||
             this->vm.count("colour-matrix");
     if (videoSignalTypeInfoFlag)
     {
@@ -786,7 +791,7 @@ void Encoder::setupVui(H &h)
             h[video_full_range_flag()] = 0;
 
         bool colourDescriptionPresentFlag = this->vm.count("colourprim") ||
-                this->vm.count("transfer_characteristics") ||
+                this->vm.count("transfer-characteristics") ||
                 this->vm.count("colour-matrix");
         if (colourDescriptionPresentFlag)
         {
@@ -869,6 +874,58 @@ void Encoder::setupVui(H &h)
     else
         h[default_display_window_flag()] = 0;
 
-    h[vui_timing_info_present_flag()] = 0;
+    h[vui_timing_info_present_flag()] = 1;
+    h[vui_num_units_in_tick()] = 1000;
+    h[vui_time_scale()] = static_cast<int>(this->vm["frame-rate"].as<double>() * 1000 + 0.5);
     h[bitstream_restriction_flag()] = 0;
+    if(this->stateEncode.useRateControl)
+    {
+        h[vui_hrd_parameters_present_flag()] = 1;
+        Hrd hrdDefault{};
+        Hrd::SubLayer sublayerDefault{};
+        auto currentSps = h[Table<Sps>()][0];
+        auto h2 = h.extend(&hrdDefault);
+        auto h3 = h2.extend(&sublayerDefault);
+        setupHrd(h3);
+        hrdDefault.sublayers.push_back(sublayerDefault);
+        currentSps->hrdArray.hrd.push_back(hrdDefault);
+    }
+}
+
+int computeScale(int value)
+{
+    uint32_t mask = 0xffffffff;
+    int scaleValue = 32;
+
+    while ((value & mask) != 0)
+    {
+      scaleValue--;
+      mask = (mask >> 1);
+    }
+
+    return scaleValue;
+}
+
+template <class H>
+void Encoder::setupHrd(H &h)
+{
+    int targetRate = this->vm["bitrate"].as<int>()*1000;
+    int bitrateScale = Clip3(0, 15, computeScale(targetRate) - 6);
+    int cpbSize = static_cast<int>(this->bitstreamLevel.parameters[Level::MaxCPB]*1000);
+    int cpbScale = Clip3(0, 15, computeScale(cpbSize) - 4);
+    h[nal_hrd_parameters_present_flag()] = 1;
+    h[bit_rate_scale()] = bitrateScale;
+    h[cpb_size_scale()] = cpbScale;
+    h[initial_cpb_removal_delay_length_minus1()] = 15;
+    h[au_cpb_removal_delay_length_minus1()] = 5;
+    h[dpb_output_delay_du_length_minus1()] = 5;
+
+    h[fixed_pic_rate_general_flag(0)] = 1;
+    h[fixed_pic_rate_within_cvs_flag(0)] = 1;
+    h[elemental_duration_in_tc_minus1(0)] = 0;
+
+    h[bit_rate_value_minus1(0)] = targetRate >> (bitrateScale + 6);
+    h[cpb_size_value_minus1(0)] = cpbSize >> (cpbScale + 4);
+    h[cbr_flag(0)] = 1;
+
 }

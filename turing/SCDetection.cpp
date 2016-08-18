@@ -41,6 +41,7 @@ const int WINDOW_SIZE = 12;
 int last_shot_change = 0;
 const double LIKE_THRESHOLD =1.1;
 
+
 double calc_likelihood (double avg1, double var1, double avg2, double var2)
 {
     double tmp = (avg2 - avg1) / 2.0;

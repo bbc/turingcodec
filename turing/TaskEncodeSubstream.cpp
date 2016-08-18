@@ -114,6 +114,7 @@ bool TaskEncodeSubstream<Sample>::run()
 
     StateWavefront *stateWavefront = h;
     StateEncode *stateEncode = h;
+    InputQueue *inputQueue = h;
     ThreadPool *threadPool = h;
 
     if(h[cu_qp_delta_enabled_flag()] && (h[CtbAddrInRs()] % h[PicWidthInCtbsY()] == 0))
@@ -123,12 +124,24 @@ bool TaskEncodeSubstream<Sample>::run()
 
     if(stateEncode->useRateControl && h[CtbAddrInRs()] == 0)
     {
+        bool isShotChange = this->stateEncodePicture->docket->isShotChange;
         int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+        int currentPoc = h[PicOrderCntVal()];
         int sopSize = this->stateEncodePicture->docket->currentGopSize;
         if(sopSize > 1)
             stateEncode->rateControlEngine->setSopSize(sopSize);
+
+        if (currentPoc && ((currentPoc % stateEncode->rateControlEngine->getTotalFrames()) == 0 || isShotChange))
+        {
+            stateEncode->rateControlEngine->resetSequenceController(!isShotChange);
+        }
+
         if(h[slice_type()] == I)
         {
+            if(isShotChange)
+            {
+                stateEncode->rateControlEngine->reset();
+            }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
             stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo);
             stateEncode->rateControlEngine->initNewSop();
@@ -150,6 +163,11 @@ bool TaskEncodeSubstream<Sample>::run()
         h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
         this->stateEncodePicture->reciprocalLambda.set(1.0 / this->stateEncodePicture->lambda);
         this->stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / this->stateEncodePicture->lambda);
+#if WRITE_RC_LOG
+        char data[100];
+        sprintf(data, "| %06d | %10d | %9.2f | %4d |", this->stateEncodePicture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(), this->stateEncodePicture->lambda, currentQP);
+        stateEncode->rateControlEngine->writetoLogFile(data);
+#endif
     }
 
     while (h[CtbAddrInRs()] != this->end)
@@ -195,8 +213,13 @@ bool TaskEncodeSubstream<Sample>::run()
     {
         // Only set coding rate at the end of one frame
         BitWriter *bitWrite = h;
-        size_t rate = (bitWrite->pos()) << 3;
+        size_t rate = (bitWrite->data->size()) << 3;
         stateEncode->rateControlEngine->setCodingBits(static_cast<int>(rate));
+#if WRITE_RC_LOG
+        char data[100];
+        sprintf(data, " %10d |", (int)rate);
+        stateEncode->rateControlEngine->writetoLogFile(data);
+#endif
     }
 
     threadPool->lock();
