@@ -32,6 +32,7 @@ For more information, contact us at info @ turingcodec.org.
 #include <fstream>
 #include <list>
 #include <array>
+#include <map>
 #include "HevcMath.h"
 #include "EstimateIntraComplexity.h"
 
@@ -50,11 +51,11 @@ For more information, contact us at info @ turingcodec.org.
 #define ALPHA_INTRA        6.7542
 #define BETA_INTRA         1.7860
 #define MAX_NUM_LEVELS     6
-#define CTU_SMOOT_WINDOW   4
+#define CTU_SMOOTH_WINDOW  4
 #define BISECTION_MAX_IT   40
 #define SOP_ADAPTIVE       0
 #define BETA_INTRA_MAD     1.2517
-#define WRITE_RC_LOG       0
+#define WRITE_RC_LOG       1
 
 using namespace std;
 
@@ -122,7 +123,7 @@ public:
         int underflowLevel = m_cpbSize * 0.1;
         if(estimatedCpbFullness - currentBitsPerPicture < underflowLevel)
         {
-            currentBitsPerPicture = estimatedCpbFullness - underflowLevel;
+            currentBitsPerPicture = max<int>(200, estimatedCpbFullness - underflowLevel);
         }
     }
 };
@@ -379,9 +380,8 @@ public:
 
     void updateSopController(int bitsSpent);
 
-    int allocateRateCurrentPicture(int sequenceLevelFramesLeft, int level);
+    int allocateRateCurrentPicture(int level);
 
-    int getFramesLeft() { return m_framesLeft; }
 };
 
 class SequenceController
@@ -390,12 +390,13 @@ private:
     double  m_targetRate;
     int     m_smoothingWindow;
     int     m_totalFrames;
-    int64_t m_framesLeft;
+    int     m_codedFrames;
+    int     m_bitsSpent;
     double  m_frameRate;
     int     m_sopSize;
     double  m_averageRate;
     double  m_averageBpp;
-    int64_t m_bitsPerPicture;
+    int     m_bitsPerPicture;
     int64_t m_bitsLeft;
     int64_t m_targetBits;
     int     m_pixelsPerPicture;
@@ -436,7 +437,6 @@ private:
 public:
     SequenceController() : m_targetRate(0),
     m_smoothingWindow(40),
-    m_framesLeft(0),
     m_frameRate(0),
     m_sopSize(8),
     m_averageRate(0),
@@ -460,7 +460,9 @@ public:
     m_ctusLeft(0),
     m_picHeightInCtbs(0),
     m_picWidhtInCtbs(0),
-    m_remainingCostIntra(0.0)
+    m_remainingCostIntra(0.0),
+    m_codedFrames(0),
+    m_bitsSpent(0)
     {
     }
 
@@ -558,7 +560,7 @@ public:
             m_frameWeight = m_sopWeight[m_sopSize-2][3];
     }
 
-    void reset();
+    void resetSequenceControllerMemory();
 
     void initCpbInfo(int cpbMaxSize)
     {
@@ -583,9 +585,10 @@ public:
         return m_cpbControllerEngine.getCpbStatus();
     }
 
-    void resetSequenceController(bool carryForward)
+    void resetSequenceControllerState(bool carryForward)
     {
-        m_framesLeft = m_totalFrames;
+        m_codedFrames = 0;
+        m_bitsSpent = 0;
         if(carryForward)
         {
             m_bitsLeft = m_targetBits + (int)((double)m_bitsLeft * 0.1);

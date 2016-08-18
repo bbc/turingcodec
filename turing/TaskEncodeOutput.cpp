@@ -253,7 +253,7 @@ bool TaskEncodeOutput<H>::run()
                     stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
 #if WRITE_RC_LOG
                     char data[100];
-                    sprintf(data, " %10d | %10d \n", (int)rate, stateEncode->rateControlEngine->getCpbFullness());
+                    sprintf(data, " %10d | %10d |\n", (int)rate, stateEncode->rateControlEngine->getCpbFullness());
                     stateEncode->rateControlEngine->writetoLogFile(data);
 #endif
                 }

@@ -133,14 +133,14 @@ bool TaskEncodeSubstream<Sample>::run()
 
         if (currentPoc && ((currentPoc % stateEncode->rateControlEngine->getTotalFrames()) == 0 || isShotChange))
         {
-            stateEncode->rateControlEngine->resetSequenceController(!isShotChange);
+            stateEncode->rateControlEngine->resetSequenceControllerState(!isShotChange);
         }
 
         if(h[slice_type()] == I)
         {
             if(isShotChange)
             {
-                stateEncode->rateControlEngine->reset();
+                stateEncode->rateControlEngine->resetSequenceControllerMemory();
             }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
             stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo);

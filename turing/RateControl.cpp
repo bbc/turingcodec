@@ -282,7 +282,7 @@ void SOPController::updateSopController(int bitsSpent)
     m_framesLeft--;
 }
 
-int SOPController::allocateRateCurrentPicture(int sequenceLevelFramesLeft, int level)
+int SOPController::allocateRateCurrentPicture(int level)
 {
     int currentPicPosition = m_size - m_framesLeft;
     int currentPicRatio    = m_weight[currentPicPosition];
@@ -301,10 +301,7 @@ int SOPController::allocateRateCurrentPicture(int sequenceLevelFramesLeft, int l
         picTargetBits = 100; // Same as in HM
     }
 
-    if(sequenceLevelFramesLeft > 16)
-    {
-        picTargetBits = static_cast<int>(0.1 * (double)picTargetBits + 0.9 * (double)m_weight[currentPicPosition]);
-    }
+    picTargetBits = static_cast<int>(0.1 * (double)picTargetBits + 0.9 * (double)m_weight[currentPicPosition]);
 
     if( picTargetBits < headerBits + 100 )
     {
@@ -380,7 +377,6 @@ SequenceController::SequenceController(double targetRate,
     m_smoothingWindow  = static_cast<int>(frameRate);
     int totalFrames    = intraPeriod != 1 ? intraPeriod : ((static_cast<int>(frameRate) + 4)/8)*8;
     m_totalFrames      = totalFrames;
-    m_framesLeft       = totalFrames;
     m_frameRate        = frameRate;
     m_sopSize          = sopSize;
 
@@ -449,6 +445,9 @@ SequenceController::SequenceController(double targetRate,
 
     m_remainingCostIntra = 0.0;
 
+    m_codedFrames = 0;
+    m_bitsSpent = 0;
+
 #if WRITE_RC_LOG
     m_logFile.open("rcLogFileCpb.txt", ios::out);
     m_logFile<<"---------------------------------------------------------------------------------\n";
@@ -460,9 +459,8 @@ SequenceController::SequenceController(double targetRate,
 
 void SequenceController::initNewSop()
 {
-    int64_t realInfluencePicture  = std::min<int64_t>(m_smoothingWindow, m_framesLeft);
-    int64_t bitsStillToBeSpent = static_cast<int64_t>(m_bitsPerPicture * (m_framesLeft - realInfluencePicture));
-    int currentBitsPerPicture = static_cast<int>((m_bitsLeft - bitsStillToBeSpent)/(int64_t)realInfluencePicture);
+    int realInfluencePicture  = m_smoothingWindow;
+    int currentBitsPerPicture = (m_bitsPerPicture * (m_codedFrames + m_smoothingWindow) - m_bitsSpent) / realInfluencePicture;
     int currentBitsSop = currentBitsPerPicture * m_sopSize;
 
     if(currentBitsSop < 200)
@@ -541,7 +539,7 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel)
 {
     CodedPicture &codedPictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     codedPictureAtLevel.setLevel(currentPictureLevel);
-    int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(m_framesLeft, currentPictureLevel);
+    int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(currentPictureLevel);
 
     // Cpb correction
     m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
@@ -560,7 +558,8 @@ void SequenceController::updateSequenceController(int bitsSpent, int qp, double 
 {
     // Update the bit budget and frames to be encoded at sequence and SOP levels
     m_bitsLeft -= static_cast<int64_t>(bitsSpent);
-    m_framesLeft--;
+    m_codedFrames++;
+    m_bitsSpent += bitsSpent;
 
     int currentPictureLevel = isIntra ? 0 : sopLevel;
 
@@ -687,7 +686,7 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     m_remainingCostIntra = (double)cost;
 
     // Get average bits left
-    int averageBitsLeft = static_cast<int>(m_bitsLeft / static_cast<int64_t>(m_framesLeft));
+    int averageBitsLeft = static_cast<int>(m_bitsLeft / static_cast<int64_t>(m_totalFrames - m_codedFrames));
 
     // Refine the bits estimate for intra
     double alpha=0.25, beta=0.5582;
@@ -752,7 +751,7 @@ double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
     int avgBits = 0;
     if(isIntraSlice)
     {
-        int bitrateWindow = std::min<int>(4, m_ctusLeft);
+        int bitrateWindow = std::min<int>(CTU_SMOOTH_WINDOW, m_ctusLeft);
         double MAD        = m_ctuControllerEngine[ctbAddrInRs].getCostIntra();
 
         int pictureBitsLeft = m_pictureControllerEngine->getBitsLeft();
@@ -774,7 +773,7 @@ double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
         {
             totalWeight += m_ctuControllerEngine[ctuIdx].getCtuWeight();
         }
-        int influence = std::min<int>(CTU_SMOOT_WINDOW, m_ctusLeft);
+        int influence = std::min<int>(CTU_SMOOTH_WINDOW, m_ctusLeft);
         const double currentCtuWeight = m_ctuControllerEngine[ctbAddrInRs].getCtuWeight();
         const int pictureBitsLeft = m_pictureControllerEngine->getBitsLeft();
         avgBits = (int)(currentCtuWeight - (totalWeight - pictureBitsLeft) / influence + 0.5);
@@ -1074,7 +1073,7 @@ void SequenceController::getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAd
     m_ctuControllerEngine[ctbAddrInRs].setCtuQp(qp);
 }
 
-void SequenceController::reset()
+void SequenceController::resetSequenceControllerMemory()
 {
     // Reset the buffers used for prediction and parameter smoothing
     m_dataStorageEngine->resetPreviousCodedPicturesBuffer();
