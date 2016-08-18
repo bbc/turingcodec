@@ -56,7 +56,6 @@ struct SampleType
 };
 
 
-// review: naming - perhaps combine functionality with ReconstructedPicture
 template <typename T>
 struct StateReconstructedPicture :
     ReconstructedPictureBase
@@ -165,17 +164,6 @@ struct Access<RefPicList, S, typename std::enable_if<std::is_base_of<StatePictur
     static Type get(RefPicList rpl, StatePicture &s)
     {
         return s.refPicList[rpl.x];
-    }
-};
-
-template <class S>
-struct Access<ReconstructedPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(ReconstructedPicture, StateReconstructedPicture<Sample> &s)
-    {
-        return *s.picture;
     }
 };
 

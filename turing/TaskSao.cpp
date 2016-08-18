@@ -54,7 +54,8 @@ bool TaskSao<H>::blocked()
     if (ry < h[PicHeightInCtbsY()] - 1) ++ry;
 
     // Blocked by deblock task? (bottom-right CTU not ready)
-    if (!(*this->syncIn)(rx, ry)) return true;
+    if (!(*this->syncIn)(rx, ry)) 
+        return true;
 
     return false;
 }
@@ -69,7 +70,8 @@ bool TaskSao<H>::run()
 
     ThreadPool *threadPool = h;
 
-    Picture<Sample> *picture = &h[ReconstructedPicture()];
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+    Picture<Sample> *picture = stateReconstructedPicture->picture.get();
     Picture<Sample> *saoPicture = &h[SaoPicture()];
     while (true)
     {

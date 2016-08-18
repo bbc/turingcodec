@@ -94,7 +94,7 @@ bool deriveCollocatedMotionVectors(H &h2, PuData &puData, StateCollocatedMotion 
         const MotionVector mvCol = puDataCol.mv(listCol);
         int const refIdxCol = listCol ? puDataCol.refIdx(L1) : puDataCol.refIdx(L0);
 
-        const bool longTermRefPicCol = stateCollocatedMotion.getReference(puDataCol, listCol) == Reference::LONG_TERM;
+        const bool longTermRefPicCol = stateCollocatedMotion.getReference(puDataCol, listCol) == LONG_TERM;
 
         if (LongTermRefPic(h[RefPicList(refList)][refIdxLX]) != longTermRefPicCol)
         {
@@ -270,8 +270,8 @@ void predictMvp(H &h, int refList, int refIdxLX)
             }
             if (availableFlagLXA == 1
                 && DiffPicOrderCnt(h, h[RefPicListA][refIdxA], h[RefPicList(X)][refIdxLX]) != 0
-                && h[RefPicListA][refIdxA].reference == Reference::SHORT_TERM
-                && h[RefPicList(X)][refIdxLX].reference == Reference::SHORT_TERM)
+                && h[RefPicListA][refIdxA].reference == SHORT_TERM
+                && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
             {
                 int const tD = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicListA][refIdxA]);
                 int const tB = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicList(X)][refIdxLX]);
@@ -354,8 +354,8 @@ void predictMvp(H &h, int refList, int refIdxLX)
                 }
 
                 if (availableFlagLXB == 1 && DiffPicOrderCnt(h, h[RefPicListB][refIdxB], h[RefPicList(X)][refIdxLX]) != 0
-                    && h[RefPicListB][refIdxB].reference == Reference::SHORT_TERM
-                    && h[RefPicList(X)][refIdxLX].reference == Reference::SHORT_TERM)
+                    && h[RefPicListB][refIdxB].reference == SHORT_TERM
+                    && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
                 {
                     int const tD = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicListB][refIdxB]);
                     int const tB = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicList(X)][refIdxLX]);

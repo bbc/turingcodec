@@ -243,11 +243,10 @@ struct Decode<residual_coding>
 
         const int nCbS = 1 << rc.log2TrafoSize;
 
-        auto &reconstructed = h[ReconstructedPicture()];
-        auto recSamples = reconstructed(rc.x0, rc.y0, rc.cIdx);
+    using Sample = typename SampleType<H>::Type;
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+    auto recSamples = (*stateReconstructedPicture->picture)(rc.x0, rc.y0, rc.cIdx);
         auto predSamples = recSamples;
-
-        typedef typename decltype(recSamples)::Type Sample;
 
         auto const bitDepth = rc.cIdx ? h[BitDepthC()] : h[BitDepthY()];
 

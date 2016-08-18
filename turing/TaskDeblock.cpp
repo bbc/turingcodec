@@ -73,7 +73,8 @@ bool TaskDeblock<H>::run()
     //TODO: Review invocation order of this statement in SyntaxRbsb.hpp
     h[slice_deblocking_filter_disabled_flag()] = h[pps_deblocking_filter_disabled_flag()];
 
-    Picture<Sample> *picture = &h[ReconstructedPicture()];
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+    Picture<Sample> *picture = stateReconstructedPicture->picture.get();
 
     while (true)
     {
