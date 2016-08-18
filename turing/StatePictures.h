@@ -67,8 +67,6 @@ struct DeletePicture
     PicOrderCnt poc;
 };
 
-// invoked when DPB has been emptied
-struct DpbClear { };
 
 // Request a newly allocated picture: this will be returned as a std::shared_ptr<S> where S is derived from StatePicture
 struct NewPicture
@@ -159,29 +157,6 @@ struct StatePicturesBase
     static const char *streamTypeCabac() { static const char *n = "CABAC"; return n; }
     static const char *streamTypeSei() { static const char *n = "SEI"; return n; }
 };
-
-
-template <class Sample>
-void fillRectangle(Raster<Sample> p, Sample value, int width, int height)
-{
-    for (int y = 0; y<height; ++y)
-    {
-        for (int x = 0; x<width; ++x)
-        {
-            p(x, y) = value;
-        }
-    }
-}
-
-
-template <class Sample>
-static void padPicture(Picture<Sample> &picture)
-{
-    const int pad = 80; // todo: be more intelligent
-    Padding::padImage<Sample>(&picture[0](0, 0), picture[0].width, picture[0].height, (int)picture[0].stride, pad);
-    Padding::padImage<Sample>(&picture[1](0, 0), picture[1].width, picture[1].height, (int)picture[1].stride, pad / 2);
-    Padding::padImage<Sample>(&picture[2](0, 0), picture[2].width, picture[2].height, (int)picture[2].stride, pad / 2);
-}
 
 
 template <class Picture, class Enable=void>
@@ -831,11 +806,6 @@ struct StatePictures :
                     this->bumpingProcess(h);
                 }
             }
-        }
-
-        if (this->dpb.empty())
-        {
-            h(DpbClear());
         }
     }
 

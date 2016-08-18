@@ -1762,15 +1762,6 @@ struct Write<DeletePicture>
 };
 
 
-template <>
-struct Write<DpbClear>
-{
-    template <class H> static void go(const DpbClear &f, H &h)
-    {
-    }
-};
-
-
 template <> struct Write<pic_timing>
 {
     template <class H> static void go(pic_timing e, H &h)

@@ -3322,13 +3322,6 @@ struct Read<DeletePicture>
     }
 };
 
-template <>
-struct Read<DpbClear>
-{
-    template <class H> static void go(DpbClear, H &)
-    {
-    }
-};
 
 template <>
 struct Read<MotionCand>

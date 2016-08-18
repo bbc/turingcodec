@@ -23,6 +23,7 @@ For more information, contact us at info @ turingcodec.org.
 
 #pragma once
 
+#include "Padding.h"
 #include <cstring>
 #include <cstring>
 #include <algorithm>
@@ -94,6 +95,16 @@ namespace Padding {
                 std::memcpy(pVerticalPad + i*stride, pVerticalPad, widthOverall * sizeof(T));
     }
 
+}
+
+
+template <class Sample>
+static void padPicture(Picture<Sample> &picture)
+{
+    const int pad = 80; // todo: be more intelligent
+    Padding::padImage<Sample>(&picture[0](0, 0), picture[0].width, picture[0].height, (int)picture[0].stride, pad);
+    Padding::padImage<Sample>(&picture[1](0, 0), picture[1].width, picture[1].height, (int)picture[1].stride, pad / 2);
+    Padding::padImage<Sample>(&picture[2](0, 0), picture[2].width, picture[2].height, (int)picture[2].stride, pad / 2);
 }
 
 #endif

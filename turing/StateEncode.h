@@ -800,7 +800,7 @@ struct StateEncode :
                                 {
                                     auto &top = *dptop.picture;
                                     auto &bottom = *dpbottom.picture;
-                                    dptop.picture->writeFields(this->fileOutYuvFrames, top, bottom);
+                                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)
@@ -829,7 +829,7 @@ struct StateEncode :
                                 {
                                     auto &top = *dptop.picture;
                                     auto &bottom = *dpbottom.picture;
-                                    dptop.picture->writeFields(this->fileOutYuvFrames, top, bottom);
+                                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)
