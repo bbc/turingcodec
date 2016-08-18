@@ -279,7 +279,7 @@ struct ReconstructedPicture { };
 struct SaoPicture { };
 struct DeblockPicture { };
 template <typename T>
-struct ReconstructedPicture2;
+struct StateReconstructedPicture;
 
 
 

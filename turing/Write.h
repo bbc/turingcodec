@@ -863,7 +863,7 @@ struct Encode<coding_quadtree>
             const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
             StateEncodePicture *stateEncodePicture = h;
             PictureWrapper &orgPic = *stateEncodePicture->docket->picture;
-            ReconstructedPicture2<Sample> *recPic = h;
+            StateReconstructedPicture<Sample> *recPic = h;
             encSao->rdSao<Sample>(h, orgPic, recPic, rx, ry);
             delete encSao;
         }

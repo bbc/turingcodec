@@ -284,7 +284,7 @@ public :
     }
 
     template <typename Sample, class H>
-    void saoRdEstimateLuma(H &h, PictureWrapper &orgPicWrapper, ReconstructedPicture2<Sample> *recPic)
+    void saoRdEstimateLuma(H &h, PictureWrapper &orgPicWrapper, StateReconstructedPicture<Sample> *recPic)
     {
         StateEncode* stateEncode = h;
         const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
@@ -526,7 +526,7 @@ public :
     }
 
     template <typename Sample, class H>
-    void saoRdEstimateChroma(H &h, PictureWrapper &orgPicWrapper, ReconstructedPicture2<Sample> *recPic)
+    void saoRdEstimateChroma(H &h, PictureWrapper &orgPicWrapper, StateReconstructedPicture<Sample> *recPic)
     {
         StateEncode* stateEncode = h;
         const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
@@ -814,7 +814,7 @@ public :
     }
 
     template <typename Sample, class H>
-    int  computeSaoDistortion(H &h, PictureWrapper &orgPicWrapper, ReconstructedPicture2<Sample> *currPic, int rx, int ry)
+    int  computeSaoDistortion(H &h, PictureWrapper &orgPicWrapper, StateReconstructedPicture<Sample> *currPic, int rx, int ry)
     {
         StateEncode* stateEncode = h;
         LoopFilter::Ctu *ctu = new LoopFilter::Ctu();
@@ -947,7 +947,7 @@ public :
     }
 
     template <typename Sample, class H>
-    void rdSao(H &h, PictureWrapper& orgPic, ReconstructedPicture2<Sample> *recPic, int rx, int ry)
+    void rdSao(H &h, PictureWrapper& orgPic, StateReconstructedPicture<Sample> *recPic, int rx, int ry)
     {
         StateEncode* stateEncode = h;
         Candidate<Sample> *candidate = h;

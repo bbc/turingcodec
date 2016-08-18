@@ -1277,7 +1277,7 @@ template <class H> static void searchMotionUni(H &h, int refList)
         ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
         auto const input = pictureInput(pu->x0, pu->y0, 0);
-        auto &reconstructedPicture = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(mvdc.refList)].dp->reconstructedPicture);
+        auto &reconstructedPicture = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(mvdc.refList)].dp->reconstructedPicture);
         Picture<Sample> &pictureReference = *reconstructedPicture.picture;
         auto const reference = pictureReference(pu->x0, pu->y0, 0);
         auto mv = best.mv;
@@ -1360,7 +1360,7 @@ struct StateMeFullPel
         ThreePlanes<Sample> &picture = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
         this->src = Raster<Sample const>(picture[0], pu.x0, pu.y0);
 
-        auto &referencePicture = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(refList)][0].dp->reconstructedPicture);
+        auto &referencePicture = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(refList)][0].dp->reconstructedPicture);
         this->ref = Raster<Sample const>((*referencePicture.picture)[0], pu.x0, pu.y0);
 
         this->lambda.set(getReciprocalSqrtLambda(h));
@@ -1442,7 +1442,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
 
         auto refListOther = 1 - mvdc.refList;
 
-        auto &referencePictureOther = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(1 - mvdc.refList)][puData.refIdx(refListOther)].dp->reconstructedPicture);
+        auto &referencePictureOther = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(1 - mvdc.refList)][puData.refIdx(refListOther)].dp->reconstructedPicture);
         auto reference = (*referencePictureOther.picture)(pu->x0, pu->y0, 0);
 
         auto mv = puData.mv(refListOther);
@@ -1535,7 +1535,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
     }
 
     // fractional vector refinement
-    auto &pictureReference = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(int(mvdc.refList))].dp->reconstructedPicture);
+    auto &pictureReference = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(int(mvdc.refList))].dp->reconstructedPicture);
     auto const reference = (*pictureReference.picture)(pu->x0, pu->y0, 0);
 
     if (speed->doHalfPelRefinement())

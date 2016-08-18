@@ -795,7 +795,7 @@ namespace LoopFilter
         void applySaoCTU(H &h, int rx, int ry)
         {
             const int nCtbS = 1 << h[CtbLog2SizeY()];
-            ReconstructedPicture2<Sample> *reconstructedPicture = h;
+            StateReconstructedPicture<Sample> *reconstructedPicture = h;
             auto &recPicture = *reconstructedPicture->picture;
             auto &saoPicture = *reconstructedPicture->saoPicture;
 

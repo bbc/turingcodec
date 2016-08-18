@@ -202,7 +202,7 @@ struct SetupReconstructedPicture<Picture, typename std::enable_if<std::is_base_o
 {
     typedef typename Picture::Sample Sample;
 
-    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h)
     {
         const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
         ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
@@ -215,7 +215,7 @@ struct SetupSaoPicture<Picture, typename std::enable_if<std::is_base_of<Reconstr
 {
     typedef typename Picture::Sample Sample;
 
-    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h)
     {
         const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
         ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
@@ -228,7 +228,7 @@ struct SetupDeblockPicture<Picture, typename std::enable_if<std::is_base_of<Reco
 {
     typedef typename Picture::Sample Sample;
 
-    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h)
     {
         const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
         ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
@@ -254,9 +254,9 @@ template <class Picture> struct GeneratePicture
     }
 };
 
-template <typename Sample> struct GeneratePicture<ReconstructedPicture2<Sample>>
+template <typename Sample> struct GeneratePicture<StateReconstructedPicture<Sample>>
 {
-    template <class H> static void go(ReconstructedPicture2<Sample> &dp, H &h)
+    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h)
     {
         const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
         Picture<Sample> *picture = new Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
@@ -1127,7 +1127,7 @@ template <typename Sample, class H> static void finishPicture(H h)
 {
     StatePicture *statePicture2 = h;
 
-    ReconstructedPicture2<Sample> *reconstructedPicture = h;
+    StateReconstructedPicture<Sample> *reconstructedPicture = h;
     auto &picture = *reconstructedPicture->picture;
 
     Profiler::Timers *timers = h;

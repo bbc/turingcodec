@@ -60,13 +60,13 @@ template <> struct Decode<slice_segment_data>
 
         if (h[first_slice_segment_in_pic_flag()])
         {
-            auto *p = new ReconstructedPicture2<Sample>;
+            auto *p = new StateReconstructedPicture<Sample>;
             const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
             p->picture.reset(new Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32));
             statePicture->reconstructedPicture.reset(p);
         }
 
-        auto *p = static_cast<ReconstructedPicture2<Sample> *>(statePicture->reconstructedPicture.get());
+        auto *p = static_cast<StateReconstructedPicture<Sample> *>(statePicture->reconstructedPicture.get());
         auto hPicture = h.extend(p);
         Read<slice_segment_data>::go(e, hPicture);
     }
@@ -82,12 +82,12 @@ template <> struct Decode<JustDecoded>
 
         if (h[BitDepthY()] > 8 || h[BitDepthC()] > 8)
         {
-            auto *derived = dynamic_cast<ReconstructedPicture2<uint16_t> *>(base);
+            auto *derived = dynamic_cast<StateReconstructedPicture<uint16_t> *>(base);
             finishPicture<uint16_t>(h.extend(derived));
         }
         else
         {
-            auto *derived = dynamic_cast<ReconstructedPicture2<uint8_t> *>(base);
+            auto *derived = dynamic_cast<StateReconstructedPicture<uint8_t> *>(base);
             finishPicture<uint8_t>(h.extend(derived));
         }
     }
@@ -105,12 +105,12 @@ template <> struct Decode<OutputPicture>
 
         if (h[BitDepthY()] > 8 || h[BitDepthC()] > 8)
         {
-            auto &dp = dynamic_cast<ReconstructedPicture2<uint16_t> &>(*pic.reconstructedPicture);
+            auto &dp = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*pic.reconstructedPicture);
             stateDecode->deliver(dp, h[chroma_format_idc()], h[BitDepthY()], h[BitDepthC()]);
         }
         else
         {
-            auto &dp = dynamic_cast<ReconstructedPicture2<uint8_t> &>(*pic.reconstructedPicture);
+            auto &dp = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*pic.reconstructedPicture);
             stateDecode->deliver(dp, h[chroma_format_idc()], h[BitDepthY()], h[BitDepthC()]);
         }
     }
@@ -160,7 +160,7 @@ struct Decode<Process<prediction_unit>>
         statePicture->loopFilterPicture->processPu(h, *pu);
 
         using Sample = typename SampleType<H>::Type;
-        ReconstructedPicture2<Sample> *stateReconstructedPicture = h;
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
         predictInter(*stateReconstructedPicture->picture, *pu, h);
     }
 };

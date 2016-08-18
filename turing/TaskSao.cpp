@@ -166,7 +166,7 @@ bool TaskSao<H>::run()
     {
         StateEncode *stateEncode = h;
         StatePicture *statePicture = h;
-        ReconstructedPicture2<Sample> *currPic = h;
+        StateReconstructedPicture<Sample> *currPic = h;
         if (stateEncode->psnrAnalysis)
         {
             StateEncodePicture *stateEncodePicture = h;

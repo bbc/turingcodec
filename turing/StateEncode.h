@@ -604,7 +604,7 @@ struct StateEncodePicture :
 template <class Sample>
 struct StateEncodePicture2 :
     StateEncodePicture,
-    ReconstructedPicture2<Sample>
+    StateReconstructedPicture<Sample>
     {
         using StateEncodePicture::StateEncodePicture;
     };
@@ -751,12 +751,12 @@ struct StateEncode :
         {
             if (bpp == 8)
             {
-                ReconstructedPicture2<uint8_t> &dp = dynamic_cast<ReconstructedPicture2<uint8_t> &>(statePicture);
+                StateReconstructedPicture<uint8_t> &dp = dynamic_cast<StateReconstructedPicture<uint8_t> &>(statePicture);
                 o << *dp.picture;
             }
             else if (bpp == 16)
             {
-                ReconstructedPicture2<uint16_t> &dp = dynamic_cast<ReconstructedPicture2<uint16_t> &>(statePicture);
+                StateReconstructedPicture<uint16_t> &dp = dynamic_cast<StateReconstructedPicture<uint16_t> &>(statePicture);
                 o << *dp.picture;
             }
             else
@@ -790,8 +790,8 @@ struct StateEncode :
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            ReconstructedPicture2<uint8_t> &dptop = dynamic_cast<ReconstructedPicture2<uint8_t> &>(*this->decodedPictures[0]);
-                            ReconstructedPicture2<uint8_t> &dpbottom = dynamic_cast<ReconstructedPicture2<uint8_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint8_t> &dptop = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint8_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {
@@ -819,8 +819,8 @@ struct StateEncode :
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            ReconstructedPicture2<uint16_t> &dptop = dynamic_cast<ReconstructedPicture2<uint16_t> &>(*this->decodedPictures[0]);
-                            ReconstructedPicture2<uint16_t> &dpbottom = dynamic_cast<ReconstructedPicture2<uint16_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint16_t> &dptop = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint16_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {

@@ -151,8 +151,8 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
     // DPB state update - may bump pictures...
     h(PictureBegin());
 
-    auto *p = new ReconstructedPicture2<Sample>;
-    ReconstructedPicture2<Sample> *reconstructedPicture = h;
+    auto *p = new StateReconstructedPicture<Sample>;
+    StateReconstructedPicture<Sample> *reconstructedPicture = h;
     p->picture = reconstructedPicture->picture;
     p->saoPicture = reconstructedPicture->saoPicture;
     p->deblockPicture = reconstructedPicture->deblockPicture;

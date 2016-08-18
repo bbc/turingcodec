@@ -58,7 +58,7 @@ struct SampleType
 
 // review: naming - perhaps combine functionality with ReconstructedPicture
 template <typename T>
-struct ReconstructedPicture2 :
+struct StateReconstructedPicture :
     ReconstructedPictureBase
     {
         typedef T Sample;
@@ -173,7 +173,7 @@ struct Access<ReconstructedPicture, S, typename std::enable_if<std::is_base_of<R
 {
     typedef typename S::Sample Sample;
     typedef Picture<Sample> &Type;
-    static Type get(ReconstructedPicture, ReconstructedPicture2<Sample> &s)
+    static Type get(ReconstructedPicture, StateReconstructedPicture<Sample> &s)
     {
         return *s.picture;
     }
@@ -184,7 +184,7 @@ struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<Reconstruct
 {
     typedef typename S::Sample Sample;
     typedef Picture<Sample> &Type;
-    static Type get(SaoPicture, ReconstructedPicture2<Sample> &s)
+    static Type get(SaoPicture, StateReconstructedPicture<Sample> &s)
     {
         return *s.saoPicture;
     }
@@ -195,7 +195,7 @@ struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<Reconst
 {
     typedef typename S::Sample Sample;
     typedef Picture<Sample> &Type;
-    static Type get(DeblockPicture, ReconstructedPicture2<Sample> &s)
+    static Type get(DeblockPicture, StateReconstructedPicture<Sample> &s)
     {
         return *s.deblockPicture;
     }
@@ -206,7 +206,7 @@ struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<R
 {
     typedef typename S::Sample Sample;
     typedef Raster<Sample> Type;
-    static Type get(ReconstructedSamples e, ReconstructedPicture2<Sample> &s)
+    static Type get(ReconstructedSamples e, StateReconstructedPicture<Sample> &s)
     {
         return (*s.picture)(e.x, e.y, e.cIdx);
     }
