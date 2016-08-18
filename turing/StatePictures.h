@@ -41,6 +41,11 @@ struct Sps;
 struct Vps;
 struct Pps;
 
+
+// invoked after headers parsed but before beginning to process current picture
+struct PictureBegin {};
+
+
 // invoked as soon as a picture is decoded
 struct JustDecoded
 {

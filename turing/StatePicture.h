@@ -39,6 +39,17 @@ struct StateReconstructedPictureBase
 };
 
 
+template <typename T>
+struct StateReconstructedPicture :
+    StateReconstructedPictureBase
+{
+    typedef T Sample;
+    std::shared_ptr<Picture<T>> picture;
+    std::shared_ptr<Picture<T>> saoPicture;
+    std::shared_ptr<Picture<T>> deblockPicture;
+    ThreePlanes<T> conformanceWindow;
+};
+
 // metafunction to retrieve sample type from handler type
 template <class H>
 struct SampleType
@@ -47,17 +58,6 @@ struct SampleType
     static_assert(std::is_same<Type, uint8_t>::value || std::is_same<Type, uint16_t>::value, "");
 };
 
-
-template <typename T>
-struct StateReconstructedPicture :
-    StateReconstructedPictureBase
-    {
-        typedef T Sample;
-        std::shared_ptr<Picture<T>> picture;
-        std::shared_ptr<Picture<T>> saoPicture;
-        std::shared_ptr<Picture<T>> deblockPicture;
-        ThreePlanes<T> conformanceWindow;
-    };
 
 // Decoder or encoder state that persists while working on a particular video frame
 struct StatePicture :

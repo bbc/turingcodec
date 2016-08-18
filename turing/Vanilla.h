@@ -31,8 +31,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "GlobalState.h"
 
 
-struct PictureBegin { };
-
 template <class F> struct Vanilla;
 
 template <>
