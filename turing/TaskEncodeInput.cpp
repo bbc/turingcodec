@@ -129,9 +129,6 @@ void setupSliceHeader(H &h, const InputQueue::Docket *docket)
 }
 
 
-template <> struct Encode<PictureBegin> : Vanilla<PictureBegin> { };
-
-
 template <class H>
 template <typename Sample>
 void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std::shared_ptr<InputQueue::Docket> docket, H &hh)
@@ -149,7 +146,7 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
     setupSliceHeader(h, response.picture->docket.get());
     // DPB state update - may bump pictures...
-    h(PictureBegin());
+    statePictures->sliceHeaderDone(h);
 
     auto *p = new StateReconstructedPicture<Sample>;
     StateReconstructedPicture<Sample> *reconstructedPicture = h;

@@ -31,19 +31,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "GlobalState.h"
 
 
-template <class F> struct Vanilla;
-
-template <>
-struct Vanilla<PictureBegin>
-{
-    template <class H> static void go(PictureBegin, H &h)
-    {
-        StatePictures *statePictures = h;
-        statePictures->sliceHeaderDone(h);
-    }
-};
-
-
 template <class H>
 void sliceHeaderDone2(H &h)
 {

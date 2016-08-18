@@ -43,13 +43,13 @@ For more information, contact us at info @ turingcodec.org.
 #include <fstream>
 
 
-// review: shouldn't be here
+ // review: shouldn't be here
 template <class F>
 struct Decode;
 
 
 // checks just-decoded element value, may throw Abort if it's bad
-template <class V, class H, class Enable=void>
+template <class V, class H, class Enable = void>
 struct ReadCheck
 {
     static void go(V, H &, const typename ValueType<V>::Type &)
@@ -93,8 +93,8 @@ struct CabacState
 template <class F>
 struct Read :
     Syntax<F>
-    {
-    };
+{
+};
 
 
 template <>
@@ -355,7 +355,7 @@ struct ReadI
     }
 };
 
-template <class V> struct Read<Element<V, i>> : ReadI<V, i>{};
+template <class V> struct Read<Element<V, i>> : ReadI<V, i> {};
 
 
 
@@ -385,8 +385,8 @@ struct ReadUe
 template <class V>
 struct Read<Element<V, ue>> :
     ReadUe<V>
-    {
-    };
+{
+};
 
 
 template <class V>
@@ -453,8 +453,8 @@ struct GetCtxInc<H, split_cu_flag>
         coding_quadtree cqt = *static_cast<coding_quadtree *>(h);
 
         return
-                (snake.get<Left>(e.x0 - 1, e.y0, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0) +
-                (snake.get<Up>(e.x0, e.y0 - 1, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0);
+            (snake.get<Left>(e.x0 - 1, e.y0, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0) +
+            (snake.get<Up>(e.x0, e.y0 - 1, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0);
     }
 };
 
@@ -816,7 +816,7 @@ struct Read<residual_coding>
     {
         ResidualCodingState residualCodingState(hParent);
 
-        auto h =  hParent.extend(&residualCodingState);
+        auto h = hParent.extend(&residualCodingState);
 
         const int sizeS = 1 << (rc.log2TrafoSize - 2);
         for (int yS = 0; yS < sizeS; ++yS)
@@ -940,11 +940,11 @@ struct ReadSaoTypeIdx
 };
 
 template <>
-struct Read<Element<sao_type_idx_luma, ae>> : ReadSaoTypeIdx<sao_type_idx_luma>{};
+struct Read<Element<sao_type_idx_luma, ae>> : ReadSaoTypeIdx<sao_type_idx_luma> {};
 
 
 template <>
-struct Read<Element<sao_type_idx_chroma, ae>> : ReadSaoTypeIdx<sao_type_idx_chroma>{};
+struct Read<Element<sao_type_idx_chroma, ae>> : ReadSaoTypeIdx<sao_type_idx_chroma> {};
 
 
 template <>
@@ -987,11 +987,11 @@ struct ReadFixedLengthBypass
 
 
 template <>
-struct Read<Element<sao_offset_sign, ae>> : ReadFixedLengthBypass<sao_offset_sign, 1>{};
+struct Read<Element<sao_offset_sign, ae>> : ReadFixedLengthBypass<sao_offset_sign, 1> {};
 
 
 template <>
-struct Read<Element<sao_band_position, ae>> : ReadFixedLengthBypass<sao_band_position, 5>{};
+struct Read<Element<sao_band_position, ae>> : ReadFixedLengthBypass<sao_band_position, 5> {};
 
 
 template <>
@@ -1154,7 +1154,7 @@ struct Read<Element<split_cu_flag, ae>>
 
 
 template <>
-struct Read<Element<cu_transquant_bypass_flag, ae>> : DecisionLength1<cu_transquant_bypass_flag>{};
+struct Read<Element<cu_transquant_bypass_flag, ae>> : DecisionLength1<cu_transquant_bypass_flag> {};
 
 
 
@@ -1166,8 +1166,8 @@ struct Read<Element<cu_skip_flag, ae>>
         coding_quadtree *cqt = h;
 
         const int ctxInc =
-                h[cu_skip_flag(fun.v.x0 - 1, fun.v.y0)] +
-                h[cu_skip_flag(fun.v.x0, fun.v.y0 - 1)];
+            h[cu_skip_flag(fun.v.x0 - 1, fun.v.y0)] +
+            h[cu_skip_flag(fun.v.x0, fun.v.y0 - 1)];
 
         int binVal;
         h(DecodeDecision<cu_skip_flag>(&binVal, ctxInc));
@@ -1294,7 +1294,7 @@ struct Read<Element<part_mode, ae>>
 
 
 template <>
-struct Read<Element<prev_intra_luma_pred_flag, ae>> : DecisionLength1<prev_intra_luma_pred_flag>{};
+struct Read<Element<prev_intra_luma_pred_flag, ae>> : DecisionLength1<prev_intra_luma_pred_flag> {};
 
 
 template <>
@@ -1421,7 +1421,7 @@ struct Read<prediction_unit>
 
         processPredictionUnit(h, pu, puData, stateSubstream->partIdx, h[merge_idx(xPb, yPb)]);
 
-    h(Process<prediction_unit>());
+        h(Process<prediction_unit>());
 
         cursor->commit(pu, h[MinCbLog2SizeY()] - 1);
 
@@ -1560,19 +1560,19 @@ struct Read<mvd_coding>
 
 
 template <>
-struct Read<Element<abs_mvd_greater0_flag, ae>> : DecisionLength1<abs_mvd_greater0_flag>{};
+struct Read<Element<abs_mvd_greater0_flag, ae>> : DecisionLength1<abs_mvd_greater0_flag> {};
 
 
 template <>
-struct Read<Element<abs_mvd_greater1_flag, ae>> : DecisionLength1<abs_mvd_greater1_flag>{};
+struct Read<Element<abs_mvd_greater1_flag, ae>> : DecisionLength1<abs_mvd_greater1_flag> {};
 
 
 template <>
-struct Read<Element<mvp_l0_flag, ae>> : DecisionLength1<mvp_l0_flag>{};
+struct Read<Element<mvp_l0_flag, ae>> : DecisionLength1<mvp_l0_flag> {};
 
 
 template <>
-struct Read<Element<mvp_l1_flag, ae>> : DecisionLength1<mvp_l1_flag>{};
+struct Read<Element<mvp_l1_flag, ae>> : DecisionLength1<mvp_l1_flag> {};
 
 
 
@@ -1588,13 +1588,13 @@ struct ReadRefIdx
             int binVal;
             switch (binIdx)
             {
-                case 0:
-                case 1:
-                    h(DecodeDecision<V>(&binVal, binIdx));
-                    break;
-                default:
-                    h(DecodeBypass<V>(&binVal));
-                    break;
+            case 0:
+            case 1:
+                h(DecodeDecision<V>(&binVal, binIdx));
+                break;
+            default:
+                h(DecodeBypass<V>(&binVal));
+                break;
             }
             if (!binVal) break;
         }
@@ -1604,14 +1604,14 @@ struct ReadRefIdx
 
 template <>
 struct Read<Element<ref_idx_l0, ae>> :
-ReadRefIdx<ref_idx_l0, num_ref_idx_l0_active_minus1>
+    ReadRefIdx<ref_idx_l0, num_ref_idx_l0_active_minus1>
 {
 };
 
 
 template <>
 struct Read<Element<ref_idx_l1, ae>> :
-ReadRefIdx<ref_idx_l1, num_ref_idx_l1_active_minus1>
+    ReadRefIdx<ref_idx_l1, num_ref_idx_l1_active_minus1>
 {
 };
 
@@ -1645,7 +1645,7 @@ struct Read<Element<abs_mvd_minus2, ae>>
 
 
 template <>
-struct Read<Element<mvd_sign_flag, ae>> : ReadFixedLengthBypass<mvd_sign_flag, 1>{};
+struct Read<Element<mvd_sign_flag, ae>> : ReadFixedLengthBypass<mvd_sign_flag, 1> {};
 
 
 template <>
@@ -1887,7 +1887,7 @@ struct LastSigCoeffPrefix
 
 template <>
 struct Read<Element<last_sig_coeff_x_prefix, ae>> :
-LastSigCoeffPrefix<last_sig_coeff_x_prefix>
+    LastSigCoeffPrefix<last_sig_coeff_x_prefix>
 {
 };
 
@@ -1903,9 +1903,9 @@ int computeLast(H &h)
     else
     {
         return
-                (1 << ((h[Prefix()] >> 1) - 1))
-                * (2 + (h[Prefix()] & 1))
-                + h[Suffix()];
+            (1 << ((h[Prefix()] >> 1) - 1))
+            * (2 + (h[Prefix()] & 1))
+            + h[Suffix()];
     }
 }
 
@@ -1935,13 +1935,13 @@ void setLast(H &h)
 template <>
 struct Read<Element<last_sig_coeff_y_prefix, ae>> :
     LastSigCoeffPrefix<last_sig_coeff_y_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_y_prefix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_y_prefix, ae> fun, H &h)
-        {
-            LastSigCoeffPrefix<last_sig_coeff_y_prefix>::go(fun, h);
-            if (h[last_sig_coeff_x_prefix()] <= 3 && h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
-        }
-    };
+        LastSigCoeffPrefix<last_sig_coeff_y_prefix>::go(fun, h);
+        if (h[last_sig_coeff_x_prefix()] <= 3 && h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
+    }
+};
 
 
 template <class V, class Prefix>
@@ -1966,25 +1966,25 @@ struct LastSigCoeffSuffix
 template <>
 struct Read<Element<last_sig_coeff_x_suffix, ae>> :
     LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_x_suffix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_x_suffix, ae> fun, H &h)
-        {
-            LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>::go(fun, h);
-            if (h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
-        }
-    };
+        LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>::go(fun, h);
+        if (h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
+    }
+};
 
 
 template <>
 struct Read<Element<last_sig_coeff_y_suffix, ae>> :
     LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_y_suffix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_y_suffix, ae> fun, H &h)
-        {
-            LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>::go(fun, h);
-            setLast(h);
-        }
-    };
+        LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>::go(fun, h);
+        setLast(h);
+    }
+};
 
 
 template <>
@@ -2059,10 +2059,10 @@ struct Read<Element<sig_coeff_flag, ae>>
         {
             const int ctxIdxMap[16] =
             {
-                    0, 1, 4, 5,
-                    2, 3, 4, 5,
-                    6, 6, 8, 8,
-                    7, 7, 8, 8
+                0, 1, 4, 5,
+                2, 3, 4, 5,
+                6, 6, 8, 8,
+                7, 7, 8, 8
             };
             sigCtx = ctxIdxMap[(yC << 2) + xC];
         }
@@ -2227,7 +2227,7 @@ struct Read<Element<coeff_abs_level_greater2_flag, ae>>
 
 
 template <>
-struct Read<Element<coeff_sign_flag, ae>> : ReadFixedLengthBypass<coeff_sign_flag, 1>{};
+struct Read<Element<coeff_sign_flag, ae>> : ReadFixedLengthBypass<coeff_sign_flag, 1> {};
 
 
 template <>
@@ -2258,8 +2258,7 @@ struct Read<Element<coeff_abs_level_remaining, ae>>
         {
             ++prefix;
             h(DecodeBypass<coeff_abs_level_remaining>(&codeWord));
-        }
-        while (codeWord);
+        } while (codeWord);
 
         codeWord = 1 - codeWord;
         prefix -= codeWord;
@@ -2360,7 +2359,7 @@ struct Read<CodedVideoSequence>
     {
         auto statePictures = &h[Concrete<StatePicturesBase>()];
 
-        ++ statePictures->codedVideoSequenceId;
+        ++statePictures->codedVideoSequenceId;
         statePictures->posEndCvs = h[::Stream()].len;
 
         while (!h[::Stop()] && h[::Stream()].state.pos < statePictures->posEndCvs)
@@ -2537,14 +2536,14 @@ struct AccessCbfRead
 template <class S>
 struct Access<cbf_cb, S, typename std::enable_if<std::is_base_of<ChromaCbf, S>::value>::type> :
     AccessCbfRead<cbf_cb, 1>
-    {
-    };
+{
+};
 
 template <class S>
 struct Access<cbf_cr, S, typename std::enable_if<std::is_base_of<ChromaCbf, S>::value>::type> :
     AccessCbfRead<cbf_cr, 2>
-    {
-    };
+{
+};
 
 
 
@@ -2556,8 +2555,8 @@ struct RbspState :
     ChromaCbf,
     ValueHolder<cbf_luma>,
     ValueHolder<rqt_root_cbf>
-    {
-    };
+{
+};
 
 template <class S>
 struct Access<Stream, S, typename std::enable_if<std::is_base_of<RbspState, S>::value>::type>
@@ -2583,9 +2582,9 @@ struct Read<video_parameter_set_rbsp>
     template <class H> static void go(const video_parameter_set_rbsp &fun, H &h0)
     {
         std::shared_ptr<Vps> vps(new Vps());
-        auto hh =  h0.extend(&*vps);
-        auto hhh =  hh.extend(&vps->ptl);
-        auto h =  hhh.extend(&vps->hrdArray);
+        auto hh = h0.extend(&*vps);
+        auto hhh = hh.extend(&vps->ptl);
+        auto h = hhh.extend(&vps->hrdArray);
 
         try
         {
@@ -2619,7 +2618,7 @@ struct Read<hrd_parameters>
 
         hrdArray.hrd.push_back(Hrd());
 
-        auto h2 =  h.extend(&hrdArray.hrd.back());
+        auto h2 = h.extend(&hrdArray.hrd.back());
 
         for (int i = 0; i <= fun.maxNumSubLayersMinus1; i++)
         {
@@ -2640,7 +2639,7 @@ struct Read<sub_layer_hrd_parameters>
 
         hrd.sublayers.push_back(Hrd::SubLayer());
 
-        auto h2 =  h.extend(&hrd.sublayers.back());
+        auto h2 = h.extend(&hrd.sublayers.back());
 
         Syntax<sub_layer_hrd_parameters>::go(fun, h2);
     }
@@ -2653,10 +2652,10 @@ struct Read<seq_parameter_set_rbsp>
     template <class H> static void go(const seq_parameter_set_rbsp &fun, H &h1)
     {
         std::shared_ptr<Sps> sps(new Sps());
-        auto h2 =  h1.extend(&*sps);
-        auto h3 =  h2.extend(&sps->scalingListState);
-        auto h4 =  h3.extend(&sps->ptl);
-        auto h =  h4.extend(&sps->hrdArray);
+        auto h2 = h1.extend(&*sps);
+        auto h3 = h2.extend(&sps->scalingListState);
+        auto h4 = h3.extend(&sps->ptl);
+        auto h = h4.extend(&sps->hrdArray);
 
         try
         {
@@ -2688,8 +2687,8 @@ struct Read<pic_parameter_set_rbsp>
     {
         std::shared_ptr<Pps> pps(new Pps());
 
-        auto h1 =  h2.extend(&*pps);
-        auto h =  h1.extend(&pps->scalingListState);
+        auto h1 = h2.extend(&*pps);
+        auto h = h1.extend(&pps->scalingListState);
 
         h[uniform_spacing_flag()] = 1;
         h[loop_filter_across_tiles_enabled_flag()] = 1;
@@ -2727,7 +2726,7 @@ struct Read<short_term_ref_pic_set>
     template <class H> static void go(const short_term_ref_pic_set &fun, H &h1)
     {
         Strps strps;
-        auto h =  h1.extend(&strps);
+        auto h = h1.extend(&strps);
 
         h[delta_idx_minus1()] = 0;
         h[inter_ref_pic_set_prediction_flag()] = 0;
@@ -2862,7 +2861,12 @@ struct Read<Element<num_ref_idx_active_override_flag, u>>
 };
 
 
-template <> struct Read<PictureBegin> : Vanilla<PictureBegin> {};
+template <> struct Read<PictureBegin>
+{
+    template <class H> static void go(PictureBegin e, H &h)
+    {
+    }
+};
 
 
 template <>
@@ -2870,8 +2874,10 @@ struct Read<slice_segment_data>
 {
     template <class H> static void go(const slice_segment_data &fun, H &h)
     {
-        h(PictureBegin());
-
+        {
+            StatePictures *statePictures = h;
+            statePictures->sliceHeaderDone(h);
+        }
         auto statePictures = &h[Concrete<StatePicturesBase>()];
         statePictures->sliceHeaderValid = true; // move this into sliceHeaderDone() ?
 
@@ -2903,7 +2909,7 @@ struct Read<slice_segment_data>
         statePicturesBase->streamType = StatePicturesBase::streamTypeCabac();
 
         StateSubstream stateSubstream(h);
-        auto h2 =  h.extend(&stateSubstream);
+        auto h2 = h.extend(&stateSubstream);
 
         if (!h2[dependent_slice_segment_flag()])
         {
