@@ -238,14 +238,15 @@ class CtuController
 {
 private:
     int m_codedBits;
-    int m_ctuQp;
     int m_targetBits;
+    int m_targetBitsEst;
+    int m_ctuQp;
     double m_ctuLambda;
     double m_ctuWeight;
     int m_numberOfPixels;
     double m_costIntra;
-    int m_targetBitsLeft;
     bool m_isValid;       // non fully skipped CTU
+    bool m_finished;
 
 public:
 
@@ -256,12 +257,14 @@ public:
     m_ctuWeight(1.0),
     m_targetBits(0),
     m_numberOfPixels(0),
-    m_targetBitsLeft(0),
-    m_isValid(false) {}
+    m_isValid(false),
+    m_targetBitsEst(0),
+    m_finished(false) {}
+
     void setCodedBits(int bits)        { m_codedBits      = bits;   }
     void setCtuQp(int qp)              { m_ctuQp          = qp;     }
     void setTargetBits(int bits)       { m_targetBits     = bits;   }
-    void setTargetBitsLeft(int bits)   { m_targetBitsLeft = bits;   }
+    void setTargetBitsEst(int bits)    { m_targetBitsEst  = bits;   }
     void setCtuLambda(double lambda)   { m_ctuLambda      = lambda; }
     void setCtuWeight(double weight)   { m_ctuWeight      = weight; }
     void setNumberOfPixels(int pixels) { m_numberOfPixels = pixels; }
@@ -271,56 +274,69 @@ public:
     {
         m_isValid       |= flag;
     }
+    void setFinishedFlag(bool flag)    { m_finished       = flag;   }
 
     int     getCodedBits()             { return m_codedBits;        }
     int     getCtuQp()                 { return m_ctuQp;            }
     int     getTargetBits()            { return m_targetBits;       }
-    int     getTargetBitsLeft()        { return m_targetBitsLeft;   }
+    int     getTargetBitsEst()         { return m_targetBitsEst;    }
     double  getCtuLambda()             { return m_ctuLambda;        }
     double  getCtuWeight()             { return m_ctuWeight;        }
     int     getNumberOfPixels()        { return m_numberOfPixels;   }
     double  getCostIntra()             { return m_costIntra;        }
     bool    getValidityFlag()          { return m_isValid;          }
+    bool    getFinishedFlag()          { return m_finished;         }
 };
 
 class PictureController
 {
 private:
     int m_targetBits;
-    int m_bitsLeft;
     int m_pixelsPerPicture;
+    int m_pictureHeightInCtbs;
+    int m_pictureWidthInCtbs;
+    int m_pictureSizeInCtbs;
+    int m_ctusLeft;
+    int m_ctusCoded;
+    int m_totalCostIntra;
     double m_averageBpp;
     double m_alphaUpdateStep;
     double m_betaUpdateStep;
-    DataStorage * m_dataStorageAccess;
+    DataStorage   *m_dataStorageAccess;
+    CtuController *m_ctuControllerEngine;
+
+    void getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeigth);
 
 public:
     PictureController() :
     m_targetBits(0),
-    m_bitsLeft(0),
     m_pixelsPerPicture(0),
     m_averageBpp(0.0),
     m_alphaUpdateStep(ALPHA_UPDATE_STEP),
     m_betaUpdateStep(BETA_UPDATE_STEP),
-    m_dataStorageAccess(0) {}
+    m_dataStorageAccess(0),
+    m_ctuControllerEngine(0),
+    m_pictureHeightInCtbs(0),
+    m_pictureWidthInCtbs(0),
+    m_pictureSizeInCtbs(0),
+    m_ctusCoded(0),
+    m_ctusLeft(0),
+    m_totalCostIntra(0) {}
 
-    PictureController(DataStorage *storageAccess) :
-    m_targetBits(0),
-    m_bitsLeft(0),
-    m_pixelsPerPicture(0),
-    m_averageBpp(0.0),
-    m_alphaUpdateStep(ALPHA_UPDATE_STEP),
-    m_betaUpdateStep(BETA_UPDATE_STEP),
-    m_dataStorageAccess(storageAccess) {}
+    PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp);
+
+    PictureController(DataStorage *storageAccess, EstimateIntraComplexity &icInfo, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp);
+
+    ~PictureController()
+    {
+        if(m_ctuControllerEngine)
+            delete[] m_ctuControllerEngine;
+    }
 
     void updateLambdaModelIntra(double &alpha,
                                 double &beta,
                                 CodedPicture &picture,
                                 int actualBits);
-
-    void initPictureController(int targetBits,
-                               int pixelsPerPicture,
-                               double averageBpp);
 
     double estimateLambda(int level, bool isIntra);
 
@@ -329,13 +345,31 @@ public:
                                  bool isIntra,
                                  double &lastCodedLambda);
 
-    void setBitsIntra(int bits,
-                      int pixelsCount);
-    int    getBitsLeft()            { return m_bitsLeft;        }
     double getAlphaUpdateStep()     { return m_alphaUpdateStep; }
     double getBetaUpdateStep()      { return m_betaUpdateStep;  }
-    void   updateBitsLeft(int bits) { m_bitsLeft -= bits;       }
     int    getPictureTargetBits()   { return m_targetBits;      }
+    void   updateCtuValidityFlag(bool flag, int ctuIdx)
+    {
+        assert(ctuIdx < m_pictureSizeInCtbs);
+        m_ctuControllerEngine[ctuIdx].updateValidityFlag(flag);
+    }
+    void   setCtuValidityFlag(bool flag, int ctuIdx)
+    {
+        assert(ctuIdx < m_pictureSizeInCtbs);
+        m_ctuControllerEngine[ctuIdx].setValidityFlag(flag);
+    }
+    int    getCtuStoredQp(int ctuIdx)
+    {
+        assert(ctuIdx < m_pictureSizeInCtbs);
+        return m_ctuControllerEngine[ctuIdx].getCtuQp();
+    }
+    double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
+    double getCtuEstLambda(double bpp, int ctbAddrInRs, int pictureLevel);
+    int    getCtuEstQp(int ctbAddrInRs, int pictureLevel);
+    void   updateCtuController(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel);
+    void   getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
+    void   getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp);
+    int    getFinishedCtus();
 };
 
 class SOPController
@@ -413,22 +447,20 @@ private:
     int    m_baseQp;
     SOPController     *m_sopControllerEngine;
     DataStorage       *m_dataStorageEngine;
-    PictureController *m_pictureControllerEngine;
-    CtuController     *m_ctuControllerEngine;
+    map<int, PictureController*> m_pictureControllerEngine;
     CpbInfo            m_cpbControllerEngine;
     double m_lastCodedPictureLambda;
     int    m_currentCodingBits;
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
-    int    m_picWidhtInCtbs;
-    int    m_ctusLeft;
-    int    m_ctusCoded;
-    double m_remainingCostIntra;
+    int    m_picWidthInCtbs;
+    int    m_picHeight;
+    int    m_picWidth;
+    int    m_ctuSize;
 #if WRITE_RC_LOG
     ofstream m_logFile;
 #endif
 
-    void   resetCtuController();
 #if SOP_ADAPTIVE
     void   computeEquationCoefficients(double *coefficient, double *exponent, double *lambdaRatio);
     double solveEquationWithBisection (double *coefficient, double *exponent, double targetBpp);
@@ -453,16 +485,14 @@ public:
     m_currentCodingBits(0),
     m_dataStorageEngine(0),
     m_sopControllerEngine(0),
-    m_pictureControllerEngine(0),
-    m_ctuControllerEngine(0),
     m_picSizeInCtbsY(0),
-    m_ctusCoded(0),
-    m_ctusLeft(0),
     m_picHeightInCtbs(0),
-    m_picWidhtInCtbs(0),
-    m_remainingCostIntra(0.0),
+    m_picWidthInCtbs(0),
     m_codedFrames(0),
-    m_bitsSpent(0)
+    m_bitsSpent(0),
+    m_picHeight(0),
+    m_picWidth(0),
+    m_ctuSize(0)
     {
     }
 
@@ -482,10 +512,7 @@ public:
             delete m_dataStorageEngine;
         if(m_sopControllerEngine)
             delete m_sopControllerEngine;
-        if(m_pictureControllerEngine)
-            delete m_pictureControllerEngine;
-        if(m_ctuControllerEngine)
-            delete[] m_ctuControllerEngine;
+        m_pictureControllerEngine.clear();
 #if WRITE_RC_LOG
         if(m_logFile)
             m_logFile.close();
@@ -494,13 +521,13 @@ public:
 
     void initNewSop();
 
-    void pictureRateAllocation(int currentPictureLevel);
+    void pictureRateAllocation(int currentPictureLevel, int poc);
 
-    void updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel);
+    void updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel, int poc);
 
     int getBaseQp() { return m_baseQp; }
 
-    double estimatePictureLambda(bool isIntra, int sopLevel);
+    double estimatePictureLambda(bool isIntra, int sopLevel, int poc);
 
     int deriveQpFromLambda(double lambda, bool isIntra, int sopLevel);
 
@@ -509,35 +536,41 @@ public:
         m_currentCodingBits = codingBits;
     }
 
-    void pictureRateAllocationIntra(EstimateIntraComplexity &icInfo);
+    void pictureRateAllocationIntra(EstimateIntraComplexity &icInfo, int poc);
 
     void setHeaderBits(int bits, bool isIntra, int sopLevel);
 
-    double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
+    double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc);
 
-    double getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel);
-    void   getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp);
+    double getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel, int poc);
+    void   getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp, int poc);
 
-    int    getCtuEstQp(int ctbAddrInRs, int currentPictureLevel);
+    int    getCtuEstQp(int ctbAddrInRs, int currentPictureLevel, int poc);
 
-    void   updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel);
+    void   updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc);
 
-    void   updateValidityFlag(bool flag, int ctuIdx)
+    void   updateValidityFlag(bool flag, int ctuIdx, int poc)
     {
-        m_ctuControllerEngine[ctuIdx].updateValidityFlag(flag);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        currentPictureController->second->updateCtuValidityFlag(flag, ctuIdx);
     }
 
-    void setValidityFlag(bool flag, int ctuIdx)
+    void setValidityFlag(bool flag, int ctuIdx, int poc)
     {
-        m_ctuControllerEngine[ctuIdx].setValidityFlag(flag);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        currentPictureController->second->setCtuValidityFlag(flag, ctuIdx);
     }
 
-    int getCtuStoredQp(int ctuIdx)
+    int getCtuStoredQp(int ctuIdx, int poc)
     {
-        return m_ctuControllerEngine[ctuIdx].getCtuQp();
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        currentPictureController->second->getCtuStoredQp(ctuIdx);
     }
 
-    void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
+    void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda, int poc);
 
     void setSopSize(int size)
     {
@@ -573,12 +606,13 @@ public:
         m_logFile<<s;
         m_logFile.flush();
     }
-#endif
-
-    int getPictureTargetBits()
+    int getPictureTargetBits(int poc)
     {
-        return m_pictureControllerEngine->getPictureTargetBits();
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        return currentPictureController->second->getPictureTargetBits();
     }
+#endif
 
     int getCpbFullness()
     {

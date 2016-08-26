@@ -747,19 +747,19 @@ struct Encode<coding_quadtree>
                     StateEncodePicture *stateEncodePicture = h;
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     bool isIntraSlice = h[slice_type()] == I;
-                    stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()]);
-                    double bpp = stateEncode->rateControlEngine->getCtuTargetBits(isIntraSlice, h[CtbAddrInRs()]);
+                    stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    double bpp = stateEncode->rateControlEngine->getCtuTargetBits(isIntraSlice, h[CtbAddrInRs()], h[PicOrderCntVal()]);
                     double estLambda;
                     int qp;
 
                     if(isIntraSlice)
                     {
-                        stateEncode->rateControlEngine->getCtuEstLambdaAndQp(bpp, h[SliceQpY()], h[CtbAddrInRs()], estLambda, qp);
+                        stateEncode->rateControlEngine->getCtuEstLambdaAndQp(bpp, h[SliceQpY()], h[CtbAddrInRs()], estLambda, qp, h[PicOrderCntVal()]);
                     }
                     else
                     {
-                        estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()], currentPictureLevel);
-                        qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()], currentPictureLevel);
+                        estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
+                        qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
                     }
 
                     stateEncodePicture->lambda = estLambda;
@@ -935,7 +935,7 @@ struct Encode<coding_quadtree>
                 int currentPictureLevel = stateEncodePicture->docket->sopLevel;
 
                 // Update the rate controller engine
-                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel);
+                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
             }
 
             // review: test should pass even if this flag set
@@ -1008,7 +1008,7 @@ struct Write<coding_unit>
             int QpY;
             // Review for intra RC
             if(stateEncode->useRateControl)
-                QpY = stateEncode->rateControlEngine->getCtuStoredQp(h[CtbAddrInRs()]);
+                QpY = stateEncode->rateControlEngine->getCtuStoredQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
             else
                 QpY = h[SliceQpY()];
 
@@ -1061,7 +1061,7 @@ struct Write<coding_unit>
             StateEncode *stateEncode = h;
             if(stateEncode->useRateControl && h[slice_type()] != I)
             {
-                stateEncode->rateControlEngine->updateValidityFlag(!(h[current(cu_skip_flag(cu.x0, cu.y0))]), h[CtbAddrInRs()]);
+                stateEncode->rateControlEngine->updateValidityFlag(!(h[current(cu_skip_flag(cu.x0, cu.y0))]), h[CtbAddrInRs()], h[PicOrderCntVal()]);
             }
         }
 

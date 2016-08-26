@@ -143,7 +143,7 @@ bool TaskEncodeSubstream<Sample>::run()
                 stateEncode->rateControlEngine->resetSequenceControllerMemory();
             }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
-            stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo);
+            stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo, h[PicOrderCntVal()]);
             stateEncode->rateControlEngine->initNewSop();
         }
         else
@@ -153,10 +153,10 @@ bool TaskEncodeSubstream<Sample>::run()
                 // New SOP starts, set the rate budget for GOP and this current picture
                 stateEncode->rateControlEngine->initNewSop();
             }
-            stateEncode->rateControlEngine->pictureRateAllocation(currentPictureLevel);
+            stateEncode->rateControlEngine->pictureRateAllocation(currentPictureLevel, h[PicOrderCntVal()]);
         }
         // Compute lambda
-        this->stateEncodePicture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I, currentPictureLevel);
+        this->stateEncodePicture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
 
         // Derive QP from lambda
         int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(this->stateEncodePicture->lambda, h[slice_type()] == I, currentPictureLevel);
@@ -165,7 +165,7 @@ bool TaskEncodeSubstream<Sample>::run()
         this->stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / this->stateEncodePicture->lambda);
 #if WRITE_RC_LOG
         char data[100];
-        sprintf(data, "| %06d | %10d | %9.2f | %4d |", this->stateEncodePicture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(), this->stateEncodePicture->lambda, currentQP);
+        sprintf(data, "| %06d | %10d | %9.2f | %4d |", this->stateEncodePicture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(h[PicOrderCntVal()]), this->stateEncodePicture->lambda, currentQP);
         stateEncode->rateControlEngine->writetoLogFile(data);
 #endif
     }

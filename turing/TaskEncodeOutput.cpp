@@ -238,26 +238,6 @@ bool TaskEncodeOutput<H>::run()
 
                 response.keyframe = writeOut(h);
 
-                if(stateEncode->useRateControl)
-                {
-                    NalWriter *nalWriter = h;
-                    size_t rate = (nalWriter->data->size()) << 3;
-                    bool isIntra = h[slice_type()] == I;
-                    int averageQp = NON_VALID_QP;
-                    double averageLambda = NON_VALID_LAMBDA;
-                    if(!isIntra)
-                        stateEncode->rateControlEngine->getAveragePictureQpAndLambda(averageQp, averageLambda);
-
-                    StateEncodePicture *stateEncodePicture = h;
-                    int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-                    stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
-#if WRITE_RC_LOG
-                    char data[100];
-                    sprintf(data, " %10d | %10d |\n", (int)rate, stateEncode->rateControlEngine->getCpbFullness());
-                    stateEncode->rateControlEngine->writetoLogFile(data);
-#endif
-                }
-
                 response.done = true;
                 stateEncode->responsesAvailable.notify_all();
             }

@@ -524,6 +524,26 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 std::cout.flush();
             }
 
+            if(this->stateEncode.useRateControl)
+            {
+                auto &h = *response.picture;
+                size_t rate = (bytes) << 3;
+                bool isIntra = h[slice_type()] == I;
+                int averageQp = NON_VALID_QP;
+                double averageLambda = NON_VALID_LAMBDA;
+                int poc = h[PicOrderCntVal()];
+                if(!isIntra)
+                    stateEncode.rateControlEngine->getAveragePictureQpAndLambda(averageQp, averageLambda, poc);
+
+                int currentPictureLevel = response.picture->docket->sopLevel;
+                stateEncode.rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel, poc);
+#if WRITE_RC_LOG
+                char data[100];
+                sprintf(data, " %10d | %10d |\n", (int)rate, stateEncode.rateControlEngine->getCpbFullness());
+                stateEncode.rateControlEngine->writetoLogFile(data);
+#endif
+            }
+
             ++this->frameCount;
             this->byteCount += bytes;
 
