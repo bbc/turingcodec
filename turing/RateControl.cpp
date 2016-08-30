@@ -109,11 +109,6 @@ PictureController::PictureController(DataStorage *storageAccess, EstimateIntraCo
 
             const int estimatedBits = (int)((double)m_targetBits * (double)costIntraCtu / (double)cost);
             m_ctuControllerEngine[ctuIdx].setTargetBitsEst(estimatedBits);
-
-            m_ctuControllerEngine[ctuIdx].setCodedBits(0);
-            m_ctuControllerEngine[ctuIdx].setCtuLambda(NON_VALID_LAMBDA);
-            m_ctuControllerEngine[ctuIdx].setCtuWeight(1.0);
-            m_ctuControllerEngine[ctuIdx].setTargetBits(0);
         }
     }
 
@@ -257,12 +252,13 @@ double PictureController::estimateLambda(int level, bool isIntra)
     return lambda;
 }
 
-void PictureController::updatePictureController(int bitsSpent,
-                                                int currentLevel,
+void PictureController::updatePictureController(int currentLevel,
                                                 bool isIntra,
                                                 double &lastCodedLambda)
 {
     CodedPicture &currentPicture = m_dataStorageAccess->getPictureAtLevel(currentLevel);
+
+    const int bitsSpent = getTotalCodingBits();
 
     double currentAlpha = currentPicture.getAlpha();
     double currentBeta  = currentPicture.getBeta();
@@ -399,33 +395,6 @@ double PictureController::getCtuEstLambda(double bpp, int ctbAddrInRs, int pictu
     CodedPicture &currentPicture = m_dataStorageAccess->getPictureAtLevel(pictureLevel);
     const double pictureLambda = currentPicture.getLambda();
 
-    double neighbourLambda = NON_VALID_LAMBDA;
-
-    // Clip the lambda value by proceeding backward through the wavefront
-    int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
-    int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - 1;
-
-    for(int r = rowStart; r >= 0; r--)
-    {
-        for(int c = colStart; c >= 0; c--)
-        {
-            int currentIdx = r*m_pictureWidthInCtbs + c;
-            assert(0 <= currentIdx && currentIdx < m_pictureSizeInCtbs);
-            const double ctuLambda = m_ctuControllerEngine[currentIdx].getCtuLambda();
-            if(ctuLambda > 0)
-            {
-                neighbourLambda = ctuLambda;
-                break;
-            }
-        }
-        colStart = min<int>(m_pictureWidthInCtbs - 1, colStart + 1);
-    }
-
-//    if ( neighbourLambda > 0.0 )
-//    {
-//        estLambdaCtu = Clip3( neighbourLambda * pow( 2.0, -1.0/3.0 ), neighbourLambda * pow( 2.0, 1.0/3.0 ), estLambdaCtu );
-//    }
-
     if ( pictureLambda > 0.0 )
     {
         estLambdaCtu = Clip3( pictureLambda * pow( 2.0, -2.0/3.0 ), pictureLambda * pow( 2.0, 2.0/3.0 ), estLambdaCtu );
@@ -441,6 +410,8 @@ double PictureController::getCtuEstLambda(double bpp, int ctbAddrInRs, int pictu
     }
 
     m_ctuControllerEngine[ctbAddrInRs].setCtuLambda(estLambdaCtu);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / estLambdaCtu);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalSqrtLambda(1.0 / sqrt(estLambdaCtu));
     return estLambdaCtu;
 
 }
@@ -454,32 +425,6 @@ int PictureController::getCtuEstQp(int ctbAddrInRs, int pictureLevel)
 
     CodedPicture &currentPicture = m_dataStorageAccess->getPictureAtLevel(pictureLevel);
     int pictureQp = currentPicture.getQp();
-
-    // Clip the QP value by proceeding backward through the wavefront
-    int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
-    int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - 1;
-    int neighbourQP = NON_VALID_QP;
-
-    for(int r = rowStart; r >= 0; r--)
-    {
-        for(int c = colStart; c >=0; c--)
-        {
-            int currentIdx = r*m_pictureWidthInCtbs + c;
-            assert(0 <= currentIdx && currentIdx < m_pictureSizeInCtbs);
-            const int ctuQp = m_ctuControllerEngine[currentIdx].getCtuQp();
-            if ( ctuQp > NON_VALID_QP )
-            {
-                neighbourQP = ctuQp;
-                break;
-            }
-        }
-        colStart = min<int>(m_pictureWidthInCtbs - 1, colStart + 1);
-    }
-
-//    if ( neighbourQP > NON_VALID_QP )
-//    {
-//        ctuEstQp = Clip3( neighbourQP - 1, neighbourQP + 1, ctuEstQp );
-//    }
 
     ctuEstQp = Clip3( pictureQp - 2, pictureQp + 2, ctuEstQp );
 
@@ -596,35 +541,8 @@ void PictureController::getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrIn
     costPixelBased = pow(costPixelBased, BETA_INTRA_MAD);
     lambda = (alpha/256.0) * pow( costPixelBased/bpp, beta );
 
-    int clipNeighbourQP = NON_VALID_QP;
-
-    // Clip the QP value by proceeding backward through the wavefront
-    int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
-    int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - 1;
-    for(int r = rowStart; r >= 0; r--)
-    {
-        for(int c = colStart; c >= 0; c--)
-        {
-            int ctuIndex = r * m_pictureWidthInCtbs + c;
-            assert(0 <= ctuIndex && ctuIndex < m_pictureSizeInCtbs);
-            int ctuQp = m_ctuControllerEngine[ctuIndex].getCtuQp();
-            if (ctuQp > NON_VALID_QP)
-            {
-                clipNeighbourQP = ctuQp;
-                break;
-            }
-        }
-        colStart = min<int>(m_pictureSizeInCtbs - 1, colStart + 1);
-    }
-
-    int minQP = sliceQp - 2;
-    int maxQP = sliceQp + 2;
-
-//    if ( clipNeighbourQP > NON_VALID_QP )
-//    {
-//        maxQP = std::min<int>(clipNeighbourQP + 1, maxQP);
-//        minQP = std::max<int>(clipNeighbourQP - 1, minQP);
-//    }
+    const int minQP = sliceQp - 2;
+    const int maxQP = sliceQp + 2;
 
     double maxLambda = exp(((double)(maxQP+0.49)-13.7122)/4.2005);
     double minLambda = exp(((double)(minQP-0.49)-13.7122)/4.2005);
@@ -645,6 +563,17 @@ int PictureController::getFinishedCtus()
         counter += m_ctuControllerEngine[ctuIdx].getFinishedFlag();
     }
     return counter;
+}
+
+int PictureController::getTotalCodingBits()
+{
+    int total = 0;
+    for(int ctuIdx = 0; ctuIdx < m_pictureSizeInCtbs; ctuIdx++)
+    {
+        assert(m_ctuControllerEngine[ctuIdx].getFinishedFlag());
+        total += m_ctuControllerEngine[ctuIdx].getCodedBits();
+    }
+    return total;
 }
 
 int SOPController::getEstimatedHeaderBits(int level)
@@ -838,7 +767,6 @@ SequenceController::SequenceController(double targetRate,
         m_frameWeight = m_sopWeight[m_sopSize-2][3];
 
     m_lastCodedPictureLambda = 0.0;
-    m_currentCodingBits = 0;
     m_picHeight = picHeight;
     m_picWidth  = picWidth;
     m_ctuSize   = ctuSize;
@@ -963,12 +891,19 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel, int poc)
 
 }
 
-void SequenceController::updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel, int poc)
+void SequenceController::updateSequenceController(bool isIntra, int sopLevel, int poc)
 {
     // Update the bit budget and frames to be encoded at sequence and SOP levels
-    m_bitsLeft -= static_cast<int64_t>(bitsSpent);
+    auto currentPictureController = m_pictureControllerEngine.find(poc);
+    assert(currentPictureController != m_pictureControllerEngine.end());
+    const int codingBits = currentPictureController->second->getTotalCodingBits();
+    m_bitsLeft -= static_cast<int64_t>(codingBits);
     m_codedFrames++;
-    m_bitsSpent += bitsSpent;
+    m_bitsSpent += codingBits;
+    double lambda;
+    int qp;
+
+    currentPictureController->second->getAveragePictureQpAndLambda(qp, lambda);
 
     int currentPictureLevel = isIntra ? 0 : sopLevel;
 
@@ -976,17 +911,14 @@ void SequenceController::updateSequenceController(int bitsSpent, int qp, double 
 
     if(!isIntra)
     {
-        // Review for intra RC
         pictureAtLevel.setQp(qp);
         pictureAtLevel.setLambda(lambda);
     }
-
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
+    pictureAtLevel.setPoc(poc);
 
     if(!isIntra)
     {
-        m_sopControllerEngine->updateSopController(bitsSpent);
+        m_sopControllerEngine->updateSopController(codingBits);
     }
     else
     {
@@ -995,13 +927,12 @@ void SequenceController::updateSequenceController(int bitsSpent, int qp, double 
 
     m_dataStorageEngine->addCodedPicture(currentPictureLevel);
 
-    currentPictureController->second->updatePictureController(bitsSpent,
-                                                              currentPictureLevel,
+    currentPictureController->second->updatePictureController(currentPictureLevel,
                                                               isIntra,
                                                               m_lastCodedPictureLambda);
 
     // Update Cpb status
-    m_cpbControllerEngine.updateCpbStatus(bitsSpent);
+    m_cpbControllerEngine.updateCpbStatus(codingBits);
 
     // Delete the picture controller associated with this POC
     assert(m_pictureControllerEngine.erase(poc) == 1);
@@ -1104,11 +1035,17 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
 
 }
 
-void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel)
+void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel, int poc)
 {
-    int currentPictureLevel = isIntra ? 0 : sopLevel;
-    CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
-    pictureAtLevel.setHeaderBits(bits);
+    // First check if the current POC has already been stored in the previous coded pictures memory (it is done in a different thread)
+    const bool found = insertHeaderBitsData(bits, poc);
+    if(!found)
+    {
+        // Not found in the previous coded pictures, which means it is still being processed by the substream thread, so it's in the picture at level memory
+        int currentPictureLevel = isIntra ? 0 : sopLevel;
+        CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
+        pictureAtLevel.setHeaderBits(bits);
+    }
 }
 
 double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc)
@@ -1225,4 +1162,19 @@ void SequenceController::resetSequenceControllerMemory()
     m_dataStorageEngine->resetPreviousCodedPicturesBuffer();
     m_dataStorageEngine->resetCodedPicturesAtLevelMemory();
     m_dataStorageEngine->resetCodedCtuAtLevelMemory(m_picSizeInCtbsY);
+}
+
+bool SequenceController::insertHeaderBitsData(const int headerBits, const int poc)
+{
+    list<CodedPicture> &previousCodedPictures = m_dataStorageEngine->getPreviousCodedPictures();
+    list<CodedPicture>::iterator it;
+    for ( it = previousCodedPictures.begin(); it != previousCodedPictures.end(); it++ )
+    {
+       if((*it).getPoc() == poc)
+       {
+           (*it).setHeaderBits(headerBits);
+           return true;
+       }
+    }
+    return false;
 }

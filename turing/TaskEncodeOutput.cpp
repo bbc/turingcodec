@@ -170,7 +170,8 @@ bool writeOut(H &h)
     {
         StateEncodePicture *stateEncodePicture = h;
         int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-        stateEncode->rateControlEngine->setHeaderBits(static_cast<int>(rateAfter - rateBefore), h[slice_type()] == I, currentPictureLevel);
+        int poc = stateEncodePicture->docket->poc;
+        stateEncode->rateControlEngine->setHeaderBits(static_cast<int>(rateAfter - rateBefore), h[slice_type()] == I, currentPictureLevel, poc);
     }
 
     {

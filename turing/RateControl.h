@@ -154,6 +154,7 @@ private:
     double m_beta;
     int    m_level;
     double m_costIntra;
+    int    m_poc;
 
 public:
     CodedPicture() : m_codingBits(0),
@@ -163,7 +164,8 @@ public:
     m_alpha(INITIAL_ALPHA),
     m_beta(INITIAL_BETA),
     m_level(-1),
-    m_costIntra(0.0) {}
+    m_costIntra(0.0),
+    m_poc(-1) {}
 
     void setCodingBits(int bits)   { m_codingBits = bits; }
     void setHeaderBits(int bits)   { m_headerBits = bits; }
@@ -173,6 +175,7 @@ public:
     void setBeta(double  beta)     { m_beta  = beta;      }
     void setLevel(int level)       { m_level = level;     }
     void setCostIntra(double cost) { m_costIntra = cost;  }
+    void setPoc(int poc)           { m_poc = poc;         }
 
     double getAlpha()              { return m_alpha;      }
     double getBeta()               { return m_beta;       }
@@ -182,6 +185,7 @@ public:
     int    getHeaderBits()         { return m_headerBits; }
     int    getLevel()              { return m_level;      }
     double getCostIntra()          { return m_costIntra;  }
+    int    getPoc()                { return m_poc;        }
 };
 
 class DataStorage
@@ -242,9 +246,11 @@ private:
     int m_targetBitsEst;
     int m_ctuQp;
     double m_ctuLambda;
+    double m_ctuReciprocalLambda;
+    double m_ctuReciprocalSqrtLambda;
     double m_ctuWeight;
-    int m_numberOfPixels;
     double m_costIntra;
+    int m_numberOfPixels;
     bool m_isValid;       // non fully skipped CTU
     bool m_finished;
 
@@ -259,33 +265,39 @@ public:
     m_numberOfPixels(0),
     m_isValid(false),
     m_targetBitsEst(0),
-    m_finished(false) {}
+    m_finished(false),
+    m_ctuReciprocalLambda(NON_VALID_LAMBDA),
+    m_ctuReciprocalSqrtLambda(NON_VALID_LAMBDA) {}
 
-    void setCodedBits(int bits)        { m_codedBits      = bits;   }
-    void setCtuQp(int qp)              { m_ctuQp          = qp;     }
-    void setTargetBits(int bits)       { m_targetBits     = bits;   }
-    void setTargetBitsEst(int bits)    { m_targetBitsEst  = bits;   }
-    void setCtuLambda(double lambda)   { m_ctuLambda      = lambda; }
-    void setCtuWeight(double weight)   { m_ctuWeight      = weight; }
-    void setNumberOfPixels(int pixels) { m_numberOfPixels = pixels; }
-    void setCostIntra(double cost)     { m_costIntra      = cost;   }
-    void setValidityFlag(bool flag)    { m_isValid        = flag;   }
+    void setCodedBits(int bits)                   { m_codedBits      = bits;           }
+    void setCtuQp(int qp)                         { m_ctuQp          = qp;             }
+    void setTargetBits(int bits)                  { m_targetBits     = bits;           }
+    void setTargetBitsEst(int bits)               { m_targetBitsEst  = bits;           }
+    void setCtuLambda(double lambda)              { m_ctuLambda      = lambda;         }
+    void setCtuReciprocalLambda(double value)     { m_ctuReciprocalLambda = value;     }
+    void setCtuReciprocalSqrtLambda(double value) { m_ctuReciprocalSqrtLambda = value; }
+    void setCtuWeight(double weight)              { m_ctuWeight      = weight;         }
+    void setNumberOfPixels(int pixels)            { m_numberOfPixels = pixels;         }
+    void setCostIntra(double cost)                { m_costIntra      = cost;           }
+    void setValidityFlag(bool flag)               { m_isValid        = flag;           }
     void updateValidityFlag(bool flag)
     {
         m_isValid       |= flag;
     }
     void setFinishedFlag(bool flag)    { m_finished       = flag;   }
 
-    int     getCodedBits()             { return m_codedBits;        }
-    int     getCtuQp()                 { return m_ctuQp;            }
-    int     getTargetBits()            { return m_targetBits;       }
-    int     getTargetBitsEst()         { return m_targetBitsEst;    }
-    double  getCtuLambda()             { return m_ctuLambda;        }
-    double  getCtuWeight()             { return m_ctuWeight;        }
-    int     getNumberOfPixels()        { return m_numberOfPixels;   }
-    double  getCostIntra()             { return m_costIntra;        }
-    bool    getValidityFlag()          { return m_isValid;          }
-    bool    getFinishedFlag()          { return m_finished;         }
+    int     getCodedBits()               { return m_codedBits;               }
+    int     getCtuQp()                   { return m_ctuQp;                   }
+    int     getTargetBits()              { return m_targetBits;              }
+    int     getTargetBitsEst()           { return m_targetBitsEst;           }
+    double  getCtuLambda()               { return m_ctuLambda;               }
+    double  getCtuReciprocalLambda()     { return m_ctuReciprocalLambda;     }
+    double  getCtuReciprocalSqrtLambda() { return m_ctuReciprocalSqrtLambda; }
+    double  getCtuWeight()               { return m_ctuWeight;               }
+    int     getNumberOfPixels()          { return m_numberOfPixels;          }
+    double  getCostIntra()               { return m_costIntra;               }
+    bool    getValidityFlag()            { return m_isValid;                 }
+    bool    getFinishedFlag()            { return m_finished;                }
 };
 
 class PictureController
@@ -340,8 +352,7 @@ public:
 
     double estimateLambda(int level, bool isIntra);
 
-    void updatePictureController(int bitsSpent,
-                                 int currentLevel,
+    void updatePictureController(int currentLevel,
                                  bool isIntra,
                                  double &lastCodedLambda);
 
@@ -370,6 +381,22 @@ public:
     void   getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
     void   getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp);
     int    getFinishedCtus();
+    double getCtuLambda(int ctbAddrInRs)
+    {
+        assert(ctbAddrInRs < m_pictureSizeInCtbs);
+        return m_ctuControllerEngine[ctbAddrInRs].getCtuLambda();
+    }
+    double getCtuReciprocalLambda(int ctbAddrInRs)
+    {
+        assert(ctbAddrInRs < m_pictureSizeInCtbs);
+        return m_ctuControllerEngine[ctbAddrInRs].getCtuReciprocalLambda();
+    }
+    double getCtuReciprocalSqrtLambda(int ctbAddrInRs)
+    {
+        assert(ctbAddrInRs < m_pictureSizeInCtbs);
+        return m_ctuControllerEngine[ctbAddrInRs].getCtuReciprocalSqrtLambda();
+    }
+    int getTotalCodingBits();
 };
 
 class SOPController
@@ -450,7 +477,6 @@ private:
     map<int, PictureController*> m_pictureControllerEngine;
     CpbInfo            m_cpbControllerEngine;
     double m_lastCodedPictureLambda;
-    int    m_currentCodingBits;
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
     int    m_picWidthInCtbs;
@@ -465,6 +491,8 @@ private:
     void   computeEquationCoefficients(double *coefficient, double *exponent, double *lambdaRatio);
     double solveEquationWithBisection (double *coefficient, double *exponent, double targetBpp);
 #endif
+
+    bool insertHeaderBitsData(const int headerBits, const int poc);
 
 public:
     SequenceController() : m_targetRate(0),
@@ -482,7 +510,6 @@ public:
     m_baseQp(0),
     m_lastCodedPictureLambda(0.0),
     m_averageBpp(0.0),
-    m_currentCodingBits(0),
     m_dataStorageEngine(0),
     m_sopControllerEngine(0),
     m_picSizeInCtbsY(0),
@@ -523,7 +550,7 @@ public:
 
     void pictureRateAllocation(int currentPictureLevel, int poc);
 
-    void updateSequenceController(int bitsSpent, int qp, double lambda, bool isIntra, int sopLevel, int poc);
+    void updateSequenceController(bool isIntra, int sopLevel, int poc);
 
     int getBaseQp() { return m_baseQp; }
 
@@ -531,14 +558,9 @@ public:
 
     int deriveQpFromLambda(double lambda, bool isIntra, int sopLevel);
 
-    void setCodingBits(int codingBits)
-    {
-        m_currentCodingBits = codingBits;
-    }
-
     void pictureRateAllocationIntra(EstimateIntraComplexity &icInfo, int poc);
 
-    void setHeaderBits(int bits, bool isIntra, int sopLevel);
+    void setHeaderBits(int bits, bool isIntra, int sopLevel, int poc);
 
     double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc);
 
@@ -636,6 +658,25 @@ public:
     int getTotalFrames()
     {
         return m_totalFrames;
+    }
+
+    double getCtuLambda(int poc, int ctbAddrInRs)
+    {
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        return currentPictureController->second->getCtuLambda(ctbAddrInRs);
+    }
+    double getCtuReciprocalLambda(int poc, int ctbAddrInRs)
+    {
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        return currentPictureController->second->getCtuReciprocalLambda(ctbAddrInRs);
+    }
+    double getCtuReciprocalSqrtLambda(int poc, int ctbAddrInRs)
+    {
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        return currentPictureController->second->getCtuReciprocalSqrtLambda(ctbAddrInRs);
     }
 };
 

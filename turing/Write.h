@@ -761,10 +761,6 @@ struct Encode<coding_quadtree>
                         estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
                         qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
                     }
-
-                    stateEncodePicture->lambda = estLambda;
-                    stateEncodePicture->reciprocalLambda.set(1.0 / stateEncodePicture->lambda);
-                    stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / stateEncodePicture->lambda);
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, qp, 0);
                 }
                 else
@@ -868,7 +864,14 @@ struct Encode<coding_quadtree>
                 }
             }
 
-            Cost lambdaDistortion = getReciprocalLambda(h) * ssd;
+            Lambda reciprocalLambda = getReciprocalLambda(h);
+            StateEncode *stateEncode = h;
+            if(stateEncode->useRateControl)
+            {
+                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                reciprocalLambda.set(value);
+            }
+            Cost lambdaDistortion = reciprocalLambda * ssd;
             bool const ok = candidate.ContextsAndCost::lambdaDistortion == lambdaDistortion;
             if (!ok) std::cout << h[PicOrderCntVal()] << " " << cqt << " " << ssd << " " << lambdaDistortion << " " << candidate.ContextsAndCost::lambdaDistortion << "\n";
             ASSERT(ok && "distortion (or lambda) does not match that measured during searches");

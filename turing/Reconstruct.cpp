@@ -274,7 +274,15 @@ struct ReconstructIntraBlock
             // quantization
             if (stateEncode->rdoq)
             {
-                double lambda = static_cast<StateEncodePicture *>(h)->lambda;
+                double lambda;
+                if(stateEncode->useRateControl)
+                {
+                    lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                }
+                else
+                {
+                    lambda = static_cast<StateEncodePicture *>(h)->lambda;
+                }
                 Contexts *contexts = h;
                 bool isSdhEnabled = !!h[sign_data_hiding_enabled_flag()];
                 Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, bitDepth);
@@ -421,7 +429,15 @@ struct ReconstructIntraBlock
                     // quantization
                     if (stateEncode->rdoq)
                     {
-                        double lambda = static_cast<StateEncodePicture *>(h)->lambda;
+                        double lambda;
+                        if(stateEncode->useRateControl)
+                        {
+                            lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                        }
+                        else
+                        {
+                            lambda = static_cast<StateEncodePicture *>(h)->lambda;
+                        }
                         Contexts *contexts = h;
                         bool isSdhEnabled = !!h[sign_data_hiding_enabled_flag()];
                         Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, bitDepth);
@@ -511,8 +527,14 @@ struct ReconstructIntraBlock
                 *contextsAndCost = backupContextsAndCostClean;
 
                 // Compute lambdaDistortion with and without tskip
-                contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * getReciprocalLambda(h);
-                contextsCostTSkip.lambdaDistortion += backupSSDTSkip   * getReciprocalLambda(h);
+                Lambda reciprocalLambda = getReciprocalLambda(h);
+                if(stateEncode->useRateControl)
+                {
+                    double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    reciprocalLambda.set(value);
+                }
+                contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
+                contextsCostTSkip.lambdaDistortion += backupSSDTSkip   * reciprocalLambda;
 
                 if (contextsCostNoTSkip.cost2() < contextsCostTSkip.cost2())
                 {
@@ -724,7 +746,15 @@ template <class Cbf> struct ReconstructInterBlock
         {
             if (stateEncode->rdoq)
             {
-                double lambda = static_cast<StateEncodePicture*>(h)->lambda;
+                double lambda;
+                if(stateEncode->useRateControl)
+                {
+                    lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                }
+                else
+                {
+                    lambda = static_cast<StateEncodePicture*>(h)->lambda;
+                }
                 Contexts *contexts = h;
                 bool isSdhEnabled = !!h[sign_data_hiding_enabled_flag()];
                 Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, rc.cIdx ? h[BitDepthC()] : h[BitDepthY()]);
@@ -842,7 +872,15 @@ template <class Cbf> struct ReconstructInterBlock
                 // quantise
                 if (stateEncode->rdoq)
                 {
-                    double lambda = static_cast<StateEncodePicture*>(h)->lambda;
+                    double lambda;
+                    if(stateEncode->useRateControl)
+                    {
+                        lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    }
+                    else
+                    {
+                        lambda = static_cast<StateEncodePicture*>(h)->lambda;
+                    }
                     Contexts *contexts = h;
                     bool isSdhEnabled = h[sign_data_hiding_enabled_flag()];
                     Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, rc.cIdx ? h[BitDepthC()] : h[BitDepthY()]);
@@ -902,8 +940,14 @@ template <class Cbf> struct ReconstructInterBlock
             stateCodedData->transformTree.word0() = backupTuWord0;
 
             // compute lambdaDistortion with and without tskip
-            contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * getReciprocalLambda(h);
-            contextsCostTSkip.lambdaDistortion += backupSSDTSkip   * getReciprocalLambda(h);
+            Lambda reciprocalLambda = getReciprocalLambda(h);
+            if(stateEncode->useRateControl)
+            {
+                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                reciprocalLambda.set(value);
+            }
+            contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
+            contextsCostTSkip.lambdaDistortion += backupSSDTSkip   * reciprocalLambda;
 
             if (contextsCostNoTSkip.cost2() < contextsCostTSkip.cost2())
             {
@@ -971,8 +1015,14 @@ template <class Cbf> struct ReconstructInterBlock
 
                 // compute distortion components for RDO
                 // review: could measure distortion in transformed domain
-                contextsCostCbf1.lambdaDistortion += (stateEncodeSubstream->ssd[rc.cIdx]) * getReciprocalLambda(h);
-                contextsCostCbf0.lambdaDistortion += (stateEncodeSubstream->ssdPrediction[rc.cIdx]) * getReciprocalLambda(h);
+                Lambda reciprocalLambda = getReciprocalLambda(h);
+                if(stateEncode->useRateControl)
+                {
+                    double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    reciprocalLambda.set(value);
+                }
+                contextsCostCbf1.lambdaDistortion += (stateEncodeSubstream->ssd[rc.cIdx]) * reciprocalLambda;
+                contextsCostCbf0.lambdaDistortion += (stateEncodeSubstream->ssdPrediction[rc.cIdx]) * reciprocalLambda;
 
                 if (contextsCostCbf0.cost2() < contextsCostCbf1.cost2())
                 {
@@ -1240,7 +1290,13 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
                 m(tt);
 
             auto contextsAndCostOne = *static_cast<ContextsAndCost *>(candidate);
-            contextsAndCostOne.lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
+            Lambda reciprocalLambda = getReciprocalLambda(h);
+            if(stateEncode->useRateControl)
+            {
+                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                reciprocalLambda.set(value);
+            }
+            contextsAndCostOne.lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * reciprocalLambda;
         
             // restore everything as it was before trying with depth = 1
             *static_cast<ContextsAndCost *>(candidate) = backupContextsAndCostBefore;
@@ -1272,7 +1328,7 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
 
             if (m[rqt_root_cbf()])
                 m(tt);
-            candidate->lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * getReciprocalLambda(h);
+            candidate->lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * reciprocalLambda;
         
             if (cbfZero || candidate->cost2() < contextsAndCostOne.cost2())
             {

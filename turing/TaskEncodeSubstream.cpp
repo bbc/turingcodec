@@ -211,15 +211,8 @@ bool TaskEncodeSubstream<Sample>::run()
 
     if(stateEncode->useRateControl && h[CtbAddrInRs()] == h[PicSizeInCtbsY()])
     {
-        // Only set coding rate at the end of one frame
-        BitWriter *bitWrite = h;
-        size_t rate = (bitWrite->data->size()) << 3;
-        stateEncode->rateControlEngine->setCodingBits(static_cast<int>(rate));
-#if WRITE_RC_LOG
-        char data[100];
-        sprintf(data, " %10d |", (int)rate);
-        stateEncode->rateControlEngine->writetoLogFile(data);
-#endif
+        int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+        stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
     }
 
     threadPool->lock();
