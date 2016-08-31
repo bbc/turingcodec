@@ -117,15 +117,19 @@ struct InputQueue::State
         return !!this->entries.at(i - 1 + delta).docket;
     }
 
-    int computeNextIdr(int sequenceFront, int nextDefaultIdr)
+    int computeNextIdr(int sequenceFront, int currDefaultIdr, int intraPeriod)
     {
-        int nextIdr = nextDefaultIdr;
-        for (int i = sequenceFront; i < nextDefaultIdr; i++)
+        int nextIdr = currDefaultIdr + intraPeriod;
+        for (int i = sequenceFront; i < (currDefaultIdr + intraPeriod); i++)
         {
             int index = i;
             index = (index < 0) ? 0 : index;
             if (index >= this->scd->m_shotChangeList.size())
+            {
+                nextIdr = currDefaultIdr;
                 break;
+            }
+                
 
             if (this->scd->m_shotChangeList[index])
             {
@@ -174,12 +178,12 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
 
 void InputQueue::State::process()
 {
-    if (this->entries.empty() || this->entries.front().docket) return;
+    if (this->entries.empty() ||  this->entries.front().docket) return;
 
     if (this->shotChange)
     {
         if ((this->sequenceIdr - this->sequenceFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->maxGopN));
+            this->sequenceIdr = computeNextIdr(this->sequenceFront, this->sequenceIdr, this->maxGopN);
     }
     else
     {
@@ -201,7 +205,7 @@ void InputQueue::State::process()
     }
 
     const int gopSizeIdr = this->sequenceIdr - this->sequenceFront + 1;
-    if (gopSizeIdr <= gopSize)
+    if ((this->sequenceIdr - this->sequenceFront)>=0 && gopSizeIdr <= gopSize)
     {
         gopSize = gopSizeIdr;
         lastPicture = 'I';
@@ -316,20 +320,17 @@ void InputQueue::preanalyse()
     auto n = this->state->entriesPreanalysis.size();
     if (n == 0)
         return;
+    auto windowSize = this->state->shotChange ? 40 : this->state->maxGopM;
 
-    auto intraPeriod = this->state->maxGopN;
-
-    if (n >= intraPeriod || this->state->finish)
+    if (n >= windowSize ||  this->state->finish)
     {
-        if (n > intraPeriod)
-            n = intraPeriod;
+        if (n > windowSize)
+            n = windowSize;
 
-        // do preanalysis here
         if (this->state->shotChange)
         {
-            this->state->scd->processSeq(this->state->entriesPreanalysis, n, this->state->sequenceFront);
+            this->state->scd->processSeq(this->state->entriesPreanalysis, n);
         }
-
 
         for (int i = 0; i < n; ++i)
         {
@@ -344,18 +345,20 @@ bool InputQueue::eos() const
     return this->state->finish;
 }
 
-
 std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
 {
     if (this->state->pictureInputCount == 1 && !this->eos())
         return nullptr;
+    
+
 
     this->state->process();
 
     int isIntraFrame = -1;
     bool encodeIntraFrame = false;
     int size = int(this->state->entries.size() > 8) ? 8 : int(this->state->entries.size());
-    for (int i = 0; i < size; ++i)
+    //for (int i = 0; i < size; ++i)
+    for (int i = 0; i < int(this->state->entries.size()); ++i)
     {
         if (!this->state->entries.at(i).docket || this->state->entries.at(i).done()) break;
         if (this->state->entries.at(i).docket->sliceType == I)
@@ -367,6 +370,7 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
 
     std::shared_ptr<InputQueue::Docket> docket;
     for (int i = 0; i < int(this->state->entries.size()); ++i)
+    //for (int i = 0; i < size; ++i)
     {
         docket = this->state->entries.at(i).docket;
         if (!docket) 
@@ -377,12 +381,13 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
         for (int deltaPoc : docket->references.positive)
             if (!this->state->entries.at(i + deltaPoc).done()) 
                 canEncode = false;
+       //if( abs(this->state->entries.at(i).docket->poc - this->state->scd->m_seqEnd) < 10)
+       //    canEncode = false;
+        //if (encodeIntraFrame && i != isIntraFrame)
+        //    canEncode = false;
 
-        if (encodeIntraFrame && i != isIntraFrame)
-            canEncode = false;
-
-        if (encodeIntraFrame && i == isIntraFrame)
-            canEncode = true;
+       // if (encodeIntraFrame && i == isIntraFrame)
+        //    canEncode = true;
 
         if (canEncode)
         {

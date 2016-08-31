@@ -38,22 +38,26 @@ const int SHIFT_DOWN = 2;
 const int THRESHOLD_CONST = 45;
 const int LOWER_THRESHOLD = 7;
 const int DELAY = 5;////55;
-const int WINDOW_SIZE = 3;//
-
-                          //const double LIKE_THRESHOLD = 1.002;
+const int WINDOW_SIZE = 5;//
 const double LIKE_THRESHOLD = 1.7;
 
 class ShotChangeDetection {
 public:
-    ShotChangeDetection() { m_seqFront = 0; m_seqEnd = 0; }
+    ShotChangeDetection() : cur(1 << (8 - SHIFT_DOWN), 0), next(1 << (8 - SHIFT_DOWN), 0) { m_seqFront = 0; m_seqEnd = 0; m_last_shot_change = 0;}
     ~ShotChangeDetection() {}
 
     using FramePtr = std::shared_ptr<std::vector<unsigned char>>;
+    using FrameQueue = std::deque<std::shared_ptr<std::vector<unsigned char>>>;
+    FrameQueue frame_queue;
+    std::vector<int> cur;
+    std::vector<int> next;
+//cur(1 << (8 - SHIFT_DOWN), 0), next(1 << (8 - SHIFT_DOWN), 0);
+    std::deque<int> dhist_queue;
 
     std::vector<int>        m_shotChangeList;
     int m_seqFront;
     int m_seqEnd;
-
+    int m_last_shot_change;
     double calc_likelihood(double avg1, double var1, double avg2, double var2)
     {
         double tmp = (avg2 - avg1) / 2.0;
@@ -178,18 +182,23 @@ public:
     }
 
     template <class Piece>
-    void processSeq(std::deque<Piece> &entriesPreanalysis, int numFrames, int seqFront)
+    void processSeq(std::deque<Piece> &entriesPreanalysis, int numFrames)
     {
         int width = 0, height = 0, bitDepth = 0;
-        int last_shot_change = 0;
-        m_seqFront = seqFront;
-        m_seqEnd = seqFront + numFrames;
+
+        int seqFront = m_seqFront;
+        int seqEnd = m_seqEnd;
+        seqFront = seqEnd;
+        seqEnd = seqFront + numFrames;
+        printf("Shot change detection: analysing now frames %d-%d. \n", seqFront, seqEnd);
         std::vector<int>        shotChangeList;
         shotChangeList.resize(numFrames);
         memset(&shotChangeList[0], 0, shotChangeList.size() * sizeof(shotChangeList[0]));
-        int tot_window = WINDOW_SIZE * 2 + 1;
-        if (numFrames < tot_window) return;
+        m_shotChangeList.insert(std::end(m_shotChangeList), std::begin(shotChangeList), std::end(shotChangeList));
 
+        int tot_window = WINDOW_SIZE * 2 + 1;
+     
+        if (numFrames < tot_window) return;
 
         {
             auto picture = entriesPreanalysis.at(0).picture;
@@ -212,50 +221,47 @@ public:
         }
         int lumaSize = width*height;
 
-        using FrameQueue = std::deque<std::shared_ptr<std::vector<unsigned char>>>;
-        FrameQueue frame_queue;
-
-        std::vector<int> cur(1 << (8 - SHIFT_DOWN), 0), next(1 << (8 - SHIFT_DOWN), 0);
-        std::deque<int> dhist_queue;
-        auto p_frame = std::make_shared<std::vector<unsigned char>>(lumaSize);
+        if(seqFront ==0)
         {
-            auto picture = entriesPreanalysis.at(0).picture;
-            if (bitDepth == 8)
+            auto p_frame = std::make_shared<std::vector<unsigned char>>(lumaSize);
             {
-                auto &pictureWrap = static_cast<PictureWrap<uint8_t> &>(*picture);
-                Picture<uint8_t> &orgPicture = static_cast<Picture<uint8_t> &>(pictureWrap);
-                int z = 0;
-                for (int y = 0; y < orgPicture[0].height; ++y)
+                auto picture = entriesPreanalysis.at(0).picture;
+                if (bitDepth == 8)
                 {
-                    for (int x = 0; x < orgPicture[0].width; ++x)
+                    auto &pictureWrap = static_cast<PictureWrap<uint8_t> &>(*picture);
+                    Picture<uint8_t> &orgPicture = static_cast<Picture<uint8_t> &>(pictureWrap);
+                    int z = 0;
+                    for (int y = 0; y < orgPicture[0].height; ++y)
                     {
-                        (*p_frame)[z++] = orgPicture[0](x, y);
+                        for (int x = 0; x < orgPicture[0].width; ++x)
+                        {
+                            (*p_frame)[z++] = orgPicture[0](x, y);
+                        }
                     }
-                }
 
-            }
-            else
-            {
-                auto &pictureWrap = static_cast<PictureWrap<uint16_t> &>(*picture);
-                Picture<uint16_t> &orgPicture = static_cast<Picture<uint16_t> &>(pictureWrap);
-                int z = 0;
-                for (int y = 0; y < orgPicture[0].height; ++y)
+                }
+                else
                 {
-                    for (int x = 0; x < orgPicture[0].width; ++x)
+                    auto &pictureWrap = static_cast<PictureWrap<uint16_t> &>(*picture);
+                    Picture<uint16_t> &orgPicture = static_cast<Picture<uint16_t> &>(pictureWrap);
+                    int z = 0;
+                    for (int y = 0; y < orgPicture[0].height; ++y)
                     {
-                        (*p_frame)[z++] = (orgPicture[0](x, y) >> 2);
+                        for (int x = 0; x < orgPicture[0].width; ++x)
+                        {
+                            (*p_frame)[z++] = (orgPicture[0](x, y) >> 2);
+                        }
                     }
                 }
             }
+            for (auto& v : *p_frame)
+            {
+                unsigned char s = v >> SHIFT_DOWN;
+                ++(cur)[s];
+            }
+            frame_queue.push_back(p_frame);
         }
-        for (auto& v : *p_frame)
-        {
-            unsigned char s = v >> SHIFT_DOWN;
-            ++(cur)[s];
-        }
-        frame_queue.push_back(p_frame);
-
-        for (auto i = 1; i<tot_window; ++i)
+        for (auto i = 1; i<(seqFront ? 0 :  tot_window); ++i)
         {
             auto p_frame = std::make_shared<std::vector<unsigned char>>(lumaSize);
             {
@@ -304,7 +310,7 @@ public:
             dhist_queue.push_back(dhist);
             next.swap(cur);
         }
-        for (auto i = tot_window; i <numFrames; ++i)
+        for (auto i = (seqFront ?  seqFront : tot_window); i <seqFront + numFrames ; ++i)
         {
             double left_avg = std::accumulate(dhist_queue.begin(), dhist_queue.begin() + WINDOW_SIZE, 0.0) / (double)WINDOW_SIZE;
             double right_avg = std::accumulate(dhist_queue.begin() + WINDOW_SIZE + 1, dhist_queue.end(), 0.0) / (double)WINDOW_SIZE;
@@ -323,27 +329,26 @@ public:
                 , right_avg + LOWER_THRESHOLD * right_stddev);
             if (!(dhist_queue[WINDOW_SIZE] < max))
             {
-                if (dhist_queue[WINDOW_SIZE] > th_max && (i - (WINDOW_SIZE + 1) - last_shot_change>DELAY))
+                if (dhist_queue[WINDOW_SIZE] > th_max && (i - (WINDOW_SIZE + 1) - m_last_shot_change>DELAY))
                 {
-                    last_shot_change = i - (WINDOW_SIZE);
-                    shotChangeList[i - (WINDOW_SIZE)] = 1;
-
+                    m_last_shot_change = i - (WINDOW_SIZE);
+                    m_shotChangeList[i - (WINDOW_SIZE)] = 1;
                 }
-                else if (dhist_queue[WINDOW_SIZE] > th_min && (i - (WINDOW_SIZE + 1) - last_shot_change>DELAY))
+                else if (dhist_queue[WINDOW_SIZE] > th_min && (i - (WINDOW_SIZE + 1) - m_last_shot_change>DELAY))
                 {
-                    //std::cout << i-11 << "   - possible shot change";
                     double likelihood = getLikelihood(frame_queue[WINDOW_SIZE], frame_queue[(WINDOW_SIZE + 1)], width, height);
                     if (likelihood < LIKE_THRESHOLD)
                     {
-                        last_shot_change = i - (WINDOW_SIZE);
-                        shotChangeList[i - (WINDOW_SIZE)] = 1;
+                        m_last_shot_change = i - (WINDOW_SIZE);
+                        m_shotChangeList[i - (WINDOW_SIZE)] = 1;
                     }
                 }
             }
             std::shared_ptr<std::vector<unsigned char>> p_f = frame_queue.front();
             frame_queue.pop_front();
             {
-                auto picture = entriesPreanalysis.at(i).picture;
+                int index = seqFront ? (i - seqFront) : i;
+                auto picture = entriesPreanalysis.at(index).picture;
                 if (bitDepth == 8)
                 {
                     auto &pictureWrap = static_cast<PictureWrap<uint8_t> &>(*picture);
@@ -388,7 +393,10 @@ public:
             dhist_queue.push_back(dhist);
             next.swap(cur);
         }
-        m_shotChangeList.insert(std::end(m_shotChangeList), std::begin(shotChangeList), std::end(shotChangeList));
+         
+        m_seqFront = seqFront;
+        m_seqEnd = seqEnd;
+        printf("Shot change detection: completed analysis of frames %d-%d. \n", m_seqFront, m_seqEnd);
     }
 };
 

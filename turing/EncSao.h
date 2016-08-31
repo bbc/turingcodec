@@ -1009,7 +1009,7 @@ public :
                 int xBegin = rx << h[CtbLog2SizeY()];
                 int yBegin = ry << h[CtbLog2SizeY()];
                 if (ry) yBegin += 8;
-                int xEnd = std::min(((rx + 1) << h[CtbLog2SizeY()] - 8), h[pic_width_in_luma_samples()]);
+                int xEnd = std::min(((rx + 1) << h[CtbLog2SizeY()]) - 8, h[pic_width_in_luma_samples()]);
                 int yEnd = std::min(((ry + 1) << h[CtbLog2SizeY()]), h[pic_height_in_luma_samples()]);
 
                 static_cast<StatePicture *>(h)->loopFilterPicture->deblock<EDGE_HOR>(h, debSamplesL, debSamplesU, debSamplesV, xBegin, yBegin, xEnd, yEnd);
