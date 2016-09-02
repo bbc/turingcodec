@@ -45,14 +45,9 @@ struct TemporalMvPredictionConstraints :
     };
 
 
-template <class H> void Read<temporal_mv_prediction_constraints>::go(temporal_mv_prediction_constraints const &f, H &h)
+template <class H> void Read<temporal_mv_prediction_constraints>::go(temporal_mv_prediction_constraints f, H &h)
 {
     TemporalMvPredictionConstraints temporalMvPredictionConstraints;
     auto hh = h.extend(&temporalMvPredictionConstraints);
     Syntax<temporal_mv_prediction_constraints>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(temporal_mv_prediction_constraints)
-#endif

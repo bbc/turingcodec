@@ -129,9 +129,6 @@ void setupSliceHeader(H &h, const InputQueue::Docket *docket)
 }
 
 
-template <> struct Encode<PictureBegin> : Vanilla<PictureBegin> { };
-
-
 template <class H>
 template <typename Sample>
 void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std::shared_ptr<InputQueue::Docket> docket, H &hh)
@@ -149,10 +146,16 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
     setupSliceHeader(h, response.picture->docket.get());
     // DPB state update - may bump pictures...
-    h(PictureBegin());
+    statePictures->sliceHeaderDone(h);
+    auto &picture = h[Concrete<StatePicture>()];
+    setupStateReconstructedPicture(picture, h);
 
-    auto *p = new ReconstructedPicture2<Sample>;
-    ReconstructedPicture2<Sample> *reconstructedPicture = h;
+    // Further DPB state update - may also bump pictures
+
+    h(PictureDone());
+
+    auto *p = new StateReconstructedPicture<Sample>;
+    StateReconstructedPicture<Sample> *reconstructedPicture = h;
     p->picture = reconstructedPicture->picture;
     p->saoPicture = reconstructedPicture->saoPicture;
     p->deblockPicture = reconstructedPicture->deblockPicture;
@@ -160,9 +163,6 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
     // Allocate various picture memories
     response.picture->resize<Sample>(h);
-
-    // Further DPB state update - may also bump pictures...
-    statePictures->accessUnitDone(h);
 
     // Lambda computations - review: better elsewhere?
     response.picture->qpFactor = response.picture->docket->qpFactor;

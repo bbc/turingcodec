@@ -523,7 +523,6 @@ struct StateEncodePicture :
     AccessOperators<StateEncodePicture>,
     StatePicture,
     StateWavefront,
-    StateSlice,
     Strps,
     NalWriter,
     StateEncodePictureSei
@@ -604,7 +603,7 @@ struct StateEncodePicture :
 template <class Sample>
 struct StateEncodePicture2 :
     StateEncodePicture,
-    ReconstructedPicture2<Sample>
+    StateReconstructedPicture<Sample>
     {
         using StateEncodePicture::StateEncodePicture;
     };
@@ -725,6 +724,7 @@ struct StateEncode :
     InputQueue,
     StateSequence,
     StateFunctionTables,
+    StateWriteUserDataUnregistered,
     ValueHolder<rbsp_byte>,
     ValueHolder<more_data_in_byte_stream>,
     ValueHolder<more_rbsp_data>,
@@ -750,12 +750,12 @@ struct StateEncode :
         {
             if (bpp == 8)
             {
-                ReconstructedPicture2<uint8_t> &dp = dynamic_cast<ReconstructedPicture2<uint8_t> &>(statePicture);
+                StateReconstructedPicture<uint8_t> &dp = dynamic_cast<StateReconstructedPicture<uint8_t> &>(statePicture);
                 o << *dp.picture;
             }
             else if (bpp == 16)
             {
-                ReconstructedPicture2<uint16_t> &dp = dynamic_cast<ReconstructedPicture2<uint16_t> &>(statePicture);
+                StateReconstructedPicture<uint16_t> &dp = dynamic_cast<StateReconstructedPicture<uint16_t> &>(statePicture);
                 o << *dp.picture;
             }
             else
@@ -789,8 +789,8 @@ struct StateEncode :
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            ReconstructedPicture2<uint8_t> &dptop = dynamic_cast<ReconstructedPicture2<uint8_t> &>(*this->decodedPictures[0]);
-                            ReconstructedPicture2<uint8_t> &dpbottom = dynamic_cast<ReconstructedPicture2<uint8_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint8_t> &dptop = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint8_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {
@@ -799,7 +799,7 @@ struct StateEncode :
                                 {
                                     auto &top = *dptop.picture;
                                     auto &bottom = *dpbottom.picture;
-                                    dptop.picture->writeFields(this->fileOutYuvFrames, top, bottom);
+                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)
@@ -818,8 +818,8 @@ struct StateEncode :
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            ReconstructedPicture2<uint16_t> &dptop = dynamic_cast<ReconstructedPicture2<uint16_t> &>(*this->decodedPictures[0]);
-                            ReconstructedPicture2<uint16_t> &dpbottom = dynamic_cast<ReconstructedPicture2<uint16_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint16_t> &dptop = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint16_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {
@@ -828,7 +828,7 @@ struct StateEncode :
                                 {
                                     auto &top = *dptop.picture;
                                     auto &bottom = *dpbottom.picture;
-                                    dptop.picture->writeFields(this->fileOutYuvFrames, top, bottom);
+                                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)

@@ -36,7 +36,7 @@ struct TemporalSubLayerZeroIndex :
 template <>
 struct Syntax<temporal_sub_layer_zero_index>
 {
-    template <class H> static void go(const temporal_sub_layer_zero_index &fun, H &h)
+    template <class H> static void go(temporal_sub_layer_zero_index fun, H &h)
     {
         h(temporal_sub_layer_zero_idx(), u(8));
         h(irap_pic_id(), u(8));
@@ -44,15 +44,10 @@ struct Syntax<temporal_sub_layer_zero_index>
 };
 
 
-template <class H> void Read<temporal_sub_layer_zero_index>::go(const temporal_sub_layer_zero_index &f, H &h)
+template <class H> void Read<temporal_sub_layer_zero_index>::go(temporal_sub_layer_zero_index f, H &h)
 {
     TemporalSubLayerZeroIndex temporalSubLayerZeroIndex;
     auto h3 = h.extend(&temporalSubLayerZeroIndex);
 
     Syntax<temporal_sub_layer_zero_index>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(temporal_sub_layer_zero_index)
-#endif

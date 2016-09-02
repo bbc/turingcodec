@@ -58,13 +58,13 @@ namespace RateDistortion {
             this->distortionC = sseChroma;
         }
         void operator+=(const Metric &other)
-	        {
+            {
             this->chromaComponent += other.chromaComponent;
             this->value += other.value;
             this->bits += other.bits;
             this->distortionY += other.distortionY;
             this->distortionC += other.distortionC;
-	        }
+            }
         static Metric max() { return Metric(); }
         bool operator<(Metric b) const { return this->value < b.value; }
 

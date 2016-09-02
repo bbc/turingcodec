@@ -228,10 +228,13 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 
     static const Test tests[] =
     {
-	{ "03e9f1b8", "7e5882e3", "caminandes2", "" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --asm 0" },
-	{ "f58470a4", "ccac3ba9", "caminandes2", "--bit-depth 8 --internal-bit-depth 10 --threads 1" },
+        { "371ae2fb", "9e14bdb3", "caminandes2", "--no-sao" },
+        { "77aac733", "d463c072", "caminandes2", "--speed fast" },
+        { "77aac733", "d463c072", "caminandes2", "--speed fast --asm 0" },
+        { "77aac733", "d463c072", "caminandes2", "--speed fast --threads 1" },
+        { "1a958b17", "d463c072", "caminandes2", "--speed fast --atc-sei 0" },
+        { "2d895158", "4fa7a0a3", "caminandes2", "--speed fast --field-coding" },
+        { "d9b799be", "515892ec", "caminandes2", "--speed fast --bit-depth 8 --internal-bit-depth 10" },
     };
 
     auto mismatchCount = 0;
@@ -263,7 +266,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
         if (rv < 0)
         {
             cerr << "signature test failed\n";
-            return rv;
+        ++mismatchCount;
         }
 
         if (rv > 0)

@@ -1147,25 +1147,24 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
 {
     template <class H> static void go(Element<coeff_abs_level_remaining, ae> fun, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        write(h[fun.v], h);
+    }
 
-        // FL cMax=1
+    template <class H> static void write(int synVal, H &h)
+    {
         StateEncode& stateEncode = *static_cast<StateEncode *>(h);
-        const int synVal = h[fun.v];
-
         // review: smaller state for baseLevel, cLastRiceParam et al?
         StateEncodeSubstreamBase *stateEncodeSubstreamBase = h;
         const int cAbsLevel = stateEncodeSubstreamBase->baseLevel + synVal;
 
-        const int cRiceParam = std::min( stateEncodeSubstreamBase->cLastRiceParam + ( stateEncodeSubstreamBase->cLastAbsLevel > ( 3 * ( 1  <<  stateEncodeSubstreamBase->cLastRiceParam ) ) ? 1 : 0 ), 4 );
+        const int cRiceParam = std::min(stateEncodeSubstreamBase->cLastRiceParam + (stateEncodeSubstreamBase->cLastAbsLevel > (3 * (1 << stateEncodeSubstreamBase->cLastRiceParam)) ? 1 : 0), 4);
 
         // 	   if (logstream && nn(false)<10000000) *logstream << cRiceParam << "\n";
 
         const int cMax = 4 << cRiceParam;
 
         // coeff_abs_level_remaining prefix
-        const int prefixVal = std::min( cMax, synVal );
+        const int prefixVal = std::min(cMax, synVal);
 
         bool fourOnes = false;
         {
@@ -1174,7 +1173,7 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
             const int prefixValTr = synValTr >> cRiceParam;
 
             // TR prefix
-            if (prefixValTr < (cMax  >>  cRiceParam))
+            if (prefixValTr < (cMax >> cRiceParam))
             {
                 for (int binIdx = 0; binIdx < prefixValTr; ++binIdx)
                 {
@@ -1184,12 +1183,12 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
             }
             else
             {
-                for (int binIdx = 0; binIdx < (cMax  >>  cRiceParam); ++binIdx)
+                for (int binIdx = 0; binIdx < (cMax >> cRiceParam); ++binIdx)
                 {
                     h(EncodeBypass<coeff_abs_level_remaining>(1));
                 }
 
-                assert((cMax  >>  cRiceParam) == 4);
+                assert((cMax >> cRiceParam) == 4);
                 fourOnes = true;
             }
 
@@ -1197,7 +1196,7 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
             if (cMax > synValTr)
             {
                 assert(!fourOnes);
-                const int suffixValTr = synValTr - ( ( prefixValTr )  <<  cRiceParam );
+                const int suffixValTr = synValTr - ((prefixValTr) << cRiceParam);
                 int shift = cRiceParam;
                 while (shift--)
                 {
@@ -1232,8 +1231,7 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
                     }
                     stopLoop = 1;
                 }
-            }
-            while (!stopLoop);
+            } while (!stopLoop);
         }
 
         // 	   if (logstream && nn(false)<10000000) *logstream << "abs=" << cAbsLevel << " base=" << stateEncodeSubstreamBase->baseLevel << " rice=" << cRiceParam << "\n";

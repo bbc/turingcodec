@@ -28,24 +28,14 @@ For more information, contact us at info @ turingcodec.org.
 #include "BlockData.h"
 #include "HevcMath.h"
 #include "StatePicture.h"
-
-
-namespace Mvp {
-
-    struct Predictors
-    {
-        PuData merge[5];
-        MotionVector mvp[15 /* refIdx */][2 /* refList */][2 /* mvp_flag */];
-    };
-
-}
+#include "GlobalState.h"
 
 
 static MotionVector distScale(MotionVector mv, int tD, int tB)
 {
     int const td = Clip3(-128, 127, tD);
     int const tb = Clip3(-128, 127, tB);
-    int const tx = (16384 + (Abs(td)>>1)) / td;
+    int const tx = (16384 + (Abs(td) >> 1)) / td;
     int const distScaleFactor = Clip3(-4096, 4095, (tb * tx + 32) >> 6);
     mv[0] = Clip3(-32768, 32767, Sign(distScaleFactor * mv[0])*((Abs(distScaleFactor * mv[0]) + 127) >> 8));
     mv[1] = Clip3(-32768, 32767, Sign(distScaleFactor * mv[1])*((Abs(distScaleFactor * mv[1]) + 127) >> 8));
@@ -67,7 +57,7 @@ bool deriveCollocatedMotionVectors(H &h2, PuData &puData, StateCollocatedMotion 
     }
 
     // Review: this is opaque and unnecessary?
-    auto h =  h2.extend(&*motion);
+    auto h = h2.extend(&*motion);
 
     x = (x >> 4) << 4;
     y = (y >> 4) << 4;
@@ -88,25 +78,17 @@ bool deriveCollocatedMotionVectors(H &h2, PuData &puData, StateCollocatedMotion 
     else
     {
         int listCol;
-        if (puDataCol.predFlag(L0) == 0)
-        {
+        if (!puDataCol.predFlag(L0))
             listCol = L1;
-        }
-        else if (puDataCol.predFlag(L1) == 0)
-        {
+        else if (!puDataCol.predFlag(L1))
             listCol = L0;
-        }
         else
         {
-            assert(puDataCol.predFlag(L0) == 1 && puDataCol.predFlag(L1) == 1);
+            assert(puDataCol.predFlag(L0) && puDataCol.predFlag(L1));
             if (static_cast<StatePicture *>(h)->allBackwards)
-            {
                 listCol = refList;
-            }
             else
-            {
                 listCol = h[collocated_from_l0_flag()] ? L1 : L0;
-            }
         }
 
         const MotionVector mvCol = puDataCol.mv(listCol);
@@ -127,32 +109,27 @@ bool deriveCollocatedMotionVectors(H &h2, PuData &puData, StateCollocatedMotion 
             int const currPocDiff = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicList(refList)][refIdxLX]);
 
             if (LongTermRefPic(h[RefPicList(refList)][refIdxLX]) || colPocDiff == currPocDiff)
-            {
                 mvLXCol = mvCol;
-            }
             else
-            {
                 mvLXCol = distScale(mvCol, colPocDiff, currPocDiff);
-            }
         }
     }
     if (!availableFlagLXCol)
-    {
         puData.setRefIdx(h, refList, -1);
-    }
     return availableFlagLXCol;
 }
 
 
 template <class H>
-const StatePicture *getColPic(H &h, int *poc=0)
+const StatePicture *getColPic(H &h, int *poc = 0)
 {
     if (h[collocated_ref_idx()] >= 0 || h[collocated_ref_idx()] < 16)
     {
         auto &pic = h[RefPicList(h[collocated_from_l0_flag()] ? 0 : 1)][h[collocated_ref_idx()]];
         if (pic.dp)
         {
-            if (poc) *poc = (*pic.dp)[PicOrderCntVal()];
+            if (poc) 
+                *poc = (*pic.dp)[PicOrderCntVal()];
             return pic.dp.get();
         }
     }
@@ -162,13 +139,14 @@ const StatePicture *getColPic(H &h, int *poc=0)
 
 // returns availableFlagLXCol
 template <class H>
-bool deriveTemporalLumaMotionVectorPredictors(H &h, PuData &puDataCol, MotionVector &mvLXCol, int refList, int refIdxLX, int xPb, int yPb, int nPbW, int nPbH)
+bool deriveTemporalLumaMotionVectorPredictors(H &h, PuData &puDataCol, prediction_unit const &pu, int refList, int refIdxLX)
 {
-    if (h[slice_temporal_mvp_enabled_flag()] == 0)
-    {
-        mvLXCol = MotionVector{ 0, 0 };
-        return false;
-    }
+    auto const &xPb = pu.x0;
+    auto const &yPb = pu.y0;
+    auto const &nPbW = pu.nPbW;
+    auto const &nPbH = pu.nPbH;
+
+    assert(h[slice_temporal_mvp_enabled_flag()]);
 
     int const poc = h[PicOrderCntVal()];
 
@@ -182,12 +160,11 @@ bool deriveTemporalLumaMotionVectorPredictors(H &h, PuData &puDataCol, MotionVec
     bool availableFlagLXCol = false; // omission in standard?
 
     if (((yPb >> h[CtbLog2SizeY()]) == (yColBr >> h[CtbLog2SizeY()]))
-            && (yColBr < h[pic_height_in_luma_samples()])
-            && (xColBr < h[pic_width_in_luma_samples()]))
+        && (yColBr < h[pic_height_in_luma_samples()])
+        && (xColBr < h[pic_width_in_luma_samples()]))
     {
         puDataCol.setRefIdx(h, refList, refIdxLX);
         availableFlagLXCol = deriveCollocatedMotionVectors(h, puDataCol, colPic->motion.get(), refList, xColBr, yColBr);
-        mvLXCol = puDataCol.mv(refList);
     }
 
     // 3.
@@ -199,11 +176,19 @@ bool deriveTemporalLumaMotionVectorPredictors(H &h, PuData &puDataCol, MotionVec
 
         puDataCol.setRefIdx(h, refList, refIdxLX);
         availableFlagLXCol = deriveCollocatedMotionVectors(h, puDataCol, colPic->motion.get(), refList, xColCtr, yColCtr);
-        mvLXCol = puDataCol.mv(refList);
     }
 
     return availableFlagLXCol;
 }
+
+
+struct MotionCand
+{
+    int refList;
+    const char *name;
+};
+
+template <> struct Syntax<MotionCand> : Null<MotionCand> {};
 
 
 // Computes the two MVP predictors
@@ -232,8 +217,8 @@ void predictMvp(H &h, int refList, int refIdxLX)
         mvLXA = MotionVector{ 0, 0 };
 
         const PuData puDataA[2] = {
-                neighbourPuData(h, xPb - 1, yPb + pu.nPbH), // A0
-                neighbourPuData(h, xPb - 1, yPb + pu.nPbH - 1) // A1
+            neighbourPuData(h, xPb - 1, yPb + pu.nPbH), // A0
+            neighbourPuData(h, xPb - 1, yPb + pu.nPbH - 1) // A1
         };
 
         const bool isScaledFlagLX = puDataA[0].isAvailable() || puDataA[1].isAvailable();
@@ -265,7 +250,7 @@ void predictMvp(H &h, int refList, int refIdxLX)
             if (puDataA[k].isAvailable())
             {
                 if (puDataA[k].predFlag(X)
-                        && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(X)][puDataA[k].refIdx(X)]))
+                    && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(X)][puDataA[k].refIdx(X)]))
                 {
                     availableFlagLXA = 1;
                     mvLXA = puDataA[k].mv(X);
@@ -274,7 +259,7 @@ void predictMvp(H &h, int refList, int refIdxLX)
                     kA = k;
                 }
                 else if (puDataA[k].predFlag(Y)
-                        && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(Y)][puDataA[k].refIdx(Y)]))
+                    && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(Y)][puDataA[k].refIdx(Y)]))
                 {
                     availableFlagLXA = 1;
                     mvLXA = puDataA[k].mv(Y);
@@ -284,9 +269,9 @@ void predictMvp(H &h, int refList, int refIdxLX)
                 }
             }
             if (availableFlagLXA == 1
-                    && DiffPicOrderCnt(h, h[RefPicListA][refIdxA], h[RefPicList(X)][refIdxLX]) != 0
-                    && h[RefPicListA][refIdxA].reference == SHORT_TERM
-                    && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
+                && DiffPicOrderCnt(h, h[RefPicListA][refIdxA], h[RefPicList(X)][refIdxLX]) != 0
+                && h[RefPicListA][refIdxA].reference == SHORT_TERM
+                && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
             {
                 int const tD = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicListA][refIdxA]);
                 int const tB = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicList(X)][refIdxLX]);
@@ -349,7 +334,7 @@ void predictMvp(H &h, int refList, int refIdxLX)
                 if (availableBk && availableFlagLXB == 0)
                 {
                     if (puDataBk.predFlag(X)
-                            && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(X)][puDataBk.refIdx(X)]))
+                        && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(X)][puDataBk.refIdx(X)]))
                     {
                         availableFlagLXB = 1;
                         mvLXB = puDataBk.mv(X);
@@ -358,7 +343,7 @@ void predictMvp(H &h, int refList, int refIdxLX)
                         kB = k;
                     }
                     else if (puDataBk.predFlag(Y)
-                            && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(Y)][puDataBk.refIdx(Y)]))
+                        && LongTermRefPic(h[RefPicList(X)][refIdxLX]) == LongTermRefPic(h[RefPicList(Y)][puDataBk.refIdx(Y)]))
                     {
                         availableFlagLXB = 1;
                         mvLXB = puDataBk.mv(Y);
@@ -369,8 +354,8 @@ void predictMvp(H &h, int refList, int refIdxLX)
                 }
 
                 if (availableFlagLXB == 1 && DiffPicOrderCnt(h, h[RefPicListB][refIdxB], h[RefPicList(X)][refIdxLX]) != 0
-                        && h[RefPicListB][refIdxB].reference == SHORT_TERM
-                        && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
+                    && h[RefPicListB][refIdxB].reference == SHORT_TERM
+                    && h[RefPicList(X)][refIdxLX].reference == SHORT_TERM)
                 {
                     int const tD = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicListB][refIdxB]);
                     int const tB = DiffPicOrderCnt(h, h[PicOrderCntVal()], h[RefPicList(X)][refIdxLX]);
@@ -398,7 +383,8 @@ void predictMvp(H &h, int refList, int refIdxLX)
         else
         {
             PuData puDataCol; // temporary
-            availableFlagLXCol = deriveTemporalLumaMotionVectorPredictors(h, puDataCol, mvLXCol, X, refIdxLX, xPb, yPb, pu.nPbW, pu.nPbH);
+            availableFlagLXCol = deriveTemporalLumaMotionVectorPredictors(h, puDataCol, pu, X, refIdxLX);
+            mvLXCol = puDataCol.mv(X);
         }
     }
 
@@ -410,7 +396,7 @@ void predictMvp(H &h, int refList, int refIdxLX)
     {
         mvpListLX[i++] = mvLXA;
         static const char *names[] = { "A0", "A1", "B0", "B1", "B2" };
-        h(MotionCand(X, names[kA]));
+        h(MotionCand{ X, names[kA] });
     }
     if (availableFlagLXB)
     {
@@ -424,13 +410,13 @@ void predictMvp(H &h, int refList, int refIdxLX)
         else
         {
             static const char *names[] = { "B0", "B1", "B2" };
-            h(MotionCand(X, names[kB]));
+            h(MotionCand{ X, names[kB] });
         }
     }
     if (availableFlagLXCol)
     {
         mvpListLX[i++] = mvLXCol;
-        h(MotionCand(X, "Col"));
+        h(MotionCand{ X, "Col" });
     }
 
     // 4.
@@ -439,13 +425,27 @@ void predictMvp(H &h, int refList, int refIdxLX)
     while (numMvpCandLX < 2)
     {
         mvpListLX[numMvpCandLX++] = MotionVector{ 0, 0 };
-        h(MotionCand(X, "Zero"));
+        h(MotionCand{ X, "Zero" });
     }
 
     Mvp::Predictors *predictors = h;
-    auto const refIdx = X ? h[ref_idx_l1(xPb, yPb)] : h[ref_idx_l0(xPb, yPb)];
-    predictors->mvp[refIdx][X][0] = mvpListLX[0];
-    predictors->mvp[refIdx][X][1] = mvpListLX[1];
+    predictors->mvp[refIdxLX][X][0] = mvpListLX[0];
+    predictors->mvp[refIdxLX][X][1] = mvpListLX[1];
+}
+
+
+// populate Mvp::Predictors::mvp[][] for all active pictures in L0 and L1 
+template <class H> 
+void populateMvp(H &h)
+{
+    for (int refIdx = 0; refIdx <= h[num_ref_idx_l0_active_minus1()]; ++refIdx)
+    {
+        predictMvp(h, L0, refIdx);
+    }
+    for (int refIdx = 0; refIdx <= h[num_ref_idx_l1_active_minus1()]; ++refIdx)
+    {
+        predictMvp(h, L1, refIdx);
+    }
 }
 
 
@@ -485,26 +485,40 @@ void computeMv(H &h, PuData &puData, int refList)
 
 
 template <class H>
-void populateMergeCandidates(H &h, prediction_unit pu, int partIdx)
+void populateMergeCandidatesInner(H &h, prediction_unit const &puOrig, PuData *const begin, PuData * const end)
 {
+    if (false)
+    {
+        // review: can use this or similar techniques to accelerate when actual predictors aren't needed
+        Mvp::Predictors *predictors = h;
+        PuData puData = {};
+        puData.setRefIdx(h, L0, 0);
+        for (int i = 0; i < 5; ++i)
+            predictors->merge[i] = puData;
+        return;
+    }
+
+    StateSubstream *stateSubstream = h;
     coding_quadtree const *cqt = h;
 
-    int xPb = pu.x0;
-    int yPb = pu.y0;
-    int const poc = h[PicOrderCntVal()];
+    // coding_unit information
+    auto const &xCb = cqt->x0;
+    auto const &yCb = cqt->y0;
+    auto const nCbS = 1 << cqt->log2CbSize;
 
-    const coding_unit cu(cqt->x0, cqt->y0, cqt->log2CbSize);
-    int const xCb = cu.x0;
-    int const yCb = cu.y0;
-    int const nCbS = 1 << cu.log2CbSize;
-    int nPbW = pu.nPbW;
-    int nPbH = pu.nPbH;
+    // prediction_unit information
+    auto pu = puOrig;
+    auto &xPb = pu.x0;
+    auto &yPb = pu.y0;
+    auto &nPbW = pu.nPbW;
+    auto &nPbH = pu.nPbH;
+    auto partIdx = stateSubstream->partIdx;
 
     // Derivation process for luma motion vectors for merge mode
-    int const xOrigP = xPb;
-    int const yOrigP = yPb;
-    int const nOrigPbW = pu.nPbW;
-    int const nOrigPbH = pu.nPbH;
+    auto const &xOrigP = puOrig.x0;
+    auto const &yOrigP = puOrig.y0;;
+    auto const &nOrigPbW = puOrig.nPbW;
+    auto const &nOrigPbH = puOrig.nPbH;
 
     if (h[Log2ParMrgLevel()] > 2 && nCbS == 8)
     {
@@ -515,288 +529,197 @@ void populateMergeCandidates(H &h, prediction_unit pu, int partIdx)
         partIdx = 0;
     }
 
-    static int const A0 = 0;
-    static int const A1 = 1;
-    static int const B0 = 2;
-    static int const B1 = 3;
-    static int const B2 = 4;
-    static int const Col = 5;
-    static int const combCand = 6;
-    static int const zeroCand = 20;
+    PuData puDataA1;
+    PuData puDataB1;
 
-    bool available[6];
-
-    // Review: work out actual needed array size
-    bool availableFlag[60] = { false };
-    PuData puDataN[60];
+    PuData *puData = begin;
 
     // The motion vectors mvL0 and mvL1, the reference indices refIdxL0 and refIdxL1, and the prediction utilization flags predFlagL0 and predFlagL1 are derived by the following ordered steps:
     // 1.
     {
         // Derivation process for spatial merging candidates
 
-        // A1
         int const xNbA1 = xPb - 1;
         int const yNbA1 = yPb + nPbH - 1;
+        puDataA1.reset();
+        bool const illegalA1 = partIdx && nPbW < nPbH;
+        assert(illegalA1 == ((h[PartMode()] == PART_Nx2N || h[PartMode()] == PART_nLx2N || h[PartMode()] == PART_nRx2N) && partIdx == 1));
+        if (!illegalA1)
         {
-            puDataN[A1].reset();
-
-            const bool illegalA1 = (h[PartMode()] == PART_Nx2N || h[PartMode()] == PART_nLx2N || h[PartMode()] == PART_nRx2N) && partIdx == 1;
-
-            if (!illegalA1) PuMergeNeighbour<-1, 0>::get(h, puDataN[A1], xNbA1, yNbA1, xPb, yPb);
-
-            available[A1] = puDataN[A1].isAvailable();
-            availableFlag[A1] = available[A1] ? 1 : 0;
+            PuMergeNeighbour<-1, 0>::get(h, puDataA1, xNbA1, yNbA1, xPb, yPb);
+            if (puDataA1.isAvailable())
+            {
+                *puData = puDataA1;
+                h(MotionCand{ -1, "A1" });
+                if (++puData == end)
+                    return;
+            }
         }
+    }
 
-        // B1
+    {
         int const xNbB1 = xPb + nPbW - 1;
         int const yNbB1 = yPb - 1;
+        puDataB1.reset();
+        bool const illegalB1 = partIdx && nPbH < nPbW;
+        assert(illegalB1 == ((h[PartMode()] == PART_2NxN || h[PartMode()] == PART_2NxnU || h[PartMode()] == PART_2NxnD) && partIdx == 1));
+        if (!illegalB1)
         {
-            puDataN[B1].reset();
-            available[B1] = false;
-
-            const bool illegalB1 = (h[PartMode()] == PART_2NxN || h[PartMode()] == PART_2NxnU || h[PartMode()] == PART_2NxnD) && partIdx == 1;
-
-            if (!illegalB1)
+            PuMergeNeighbour<0, -1>::get(h, puDataB1, xNbB1, yNbB1, xPb, yPb);
+            if (puDataB1.isAvailable() && puDataA1 != puDataB1)
             {
-                PuMergeNeighbour<0, -1>::get(h, puDataN[B1], xNbB1, yNbB1, xPb, yPb);
-                available[B1] = puDataN[B1].isAvailable();
-                availableFlag[B1] = available[B1] ? 1 : 0;
-            }
-
-            if (puDataN[A1] == puDataN[B1]) availableFlag[B1] = 0;
-        }
-
-        // B0
-        int const xNbB0 = xPb + nPbW;
-        int const yNbB0 = yPb - 1;
-        {
-            puDataN[B0].reset();
-            available[B0] = false;
-
-            PuMergeNeighbour<0, -1>::get(h, puDataN[B0], xNbB0, yNbB0, xPb, yPb);
-            available[B0] = puDataN[B0].isAvailable();
-            availableFlag[B0] = available[B0] ? 1 : 0;
-
-            if (puDataN[B0] == puDataN[B1]) availableFlag[B0] = 0;
-        }
-
-        // A0
-        int const xNbA0 = xPb - 1;
-        int const yNbA0 = yPb + nPbH;
-        {
-            puDataN[A0].reset();
-            available[A0] = false;
-
-            PuMergeNeighbour<-1, 0>::get(h, puDataN[A0], xNbA0, yNbA0, xPb, yPb);
-            available[A0] = puDataN[A0].isAvailable();
-            availableFlag[A0] = available[A0] ? 1 : 0;
-
-            if (puDataN[A0] == puDataN[A1]) availableFlag[A0] = 0;
-        }
-
-        // B2
-        int const xNbB2 = xPb - 1;
-        int const yNbB2 = yPb - 1;
-        {
-            puDataN[B2].reset();
-            available[B2] = false;
-            availableFlag[B2] = 0;
-
-            if (availableFlag[A0] + availableFlag[A1] + availableFlag[B0] + availableFlag[B1] != 4)
-            {
-                PuMergeNeighbour<-1, -1>::get(h, puDataN[B2], xNbB2, yNbB2, xPb, yPb);
-                available[B2] = puDataN[B2].isAvailable();
-                availableFlag[B2] = available[B2] ? 1 : 0;
-
-                if (puDataN[B2] == puDataN[A1]) availableFlag[B2] = 0;
-                if (puDataN[B2] == puDataN[B1]) availableFlag[B2] = 0;
+                *puData = puDataB1;
+                h(MotionCand{ -1, "B1" });
+                if (++puData == end)
+                    return;
             }
         }
     }
 
-    // 2.
-    puDataN[Col].reset();
-
-    // 3.
     {
-        MotionVector dummy;
-        int dummy2 = 0;
-        const bool availableFlagL0Col = deriveTemporalLumaMotionVectorPredictors(h, puDataN[Col], dummy, L0, dummy2, xPb, yPb, nPbW, nPbH);
-        availableFlag[Col] = availableFlagL0Col;
+        auto const xNbB0 = xPb + nPbW;
+        auto const yNbB0 = yPb - 1;
+        puData->reset();
+        PuMergeNeighbour<0, -1>::get(h, *puData, xNbB0, yNbB0, xPb, yPb);
+        if (puData->isAvailable() && *puData != puDataB1)
+        {
+            h(MotionCand{ -1, "B0" });
+            if (++puData == end)
+                return;
+        }
     }
 
-    // 4.
-    if (h[slice_type()] == B)
     {
-        MotionVector dummy;
-        int dummy2 = 0;
-        const bool availableFlagL1Col = deriveTemporalLumaMotionVectorPredictors(h, puDataN[Col], dummy, L1, dummy2, xPb, yPb, nPbW, nPbH);
-        availableFlag[Col] = availableFlag[Col] || availableFlagL1Col;
+        auto const xNbA0 = xPb - 1;
+        auto const yNbA0 = yPb + nPbH;
+        puData->reset();
+        PuMergeNeighbour<-1, 0>::get(h, *puData, xNbA0, yNbA0, xPb, yPb);
+
+        if (puData->isAvailable() && *puData != puDataA1)
+        {
+            h(MotionCand{ -1, "A0" });
+            if (++puData == end)
+                return;
+        }
     }
 
-
-    // 5.
-    int mergeCandList[60];
-
-    int i = 0;
-    if (availableFlag[A1])
+    if (puData != begin + 4)
     {
-        mergeCandList[i++] = A1;
-        h(MotionCand(-1, "A1"));
-    }
-    if (availableFlag[B1])
-    {
-        mergeCandList[i++] = B1;
-        h(MotionCand(-1, "B1"));
-    }
-    if (availableFlag[B0])
-    {
-        mergeCandList[i++] = B0;
-        h(MotionCand(-1, "B0"));
-    }
-    if (availableFlag[A0])
-    {
-        mergeCandList[i++] = A0;
-        h(MotionCand(-1, "A0"));
-    }
-    if (availableFlag[B2])
-    {
-        mergeCandList[i++] = B2;
-        h(MotionCand(-1, "B2"));
-    }
-    if (availableFlag[Col])
-    {
-        mergeCandList[i++] = Col;
-        h(MotionCand(-1, "col"));
+        auto const xNbB2 = xPb - 1;
+        auto const yNbB2 = yPb - 1;
+        puData->reset();
+        PuMergeNeighbour<-1, -1>::get(h, *puData, xNbB2, yNbB2, xPb, yPb);
+        if (puData->isAvailable() && *puData != puDataA1 && *puData != puDataB1)
+        {
+            h(MotionCand{ -1, "B2" });
+            if (++puData == end)
+                return;
+        }
     }
 
-    // 6.
-    int const numOrigMergeCand = i;
-    int numCurrMergeCand = i;
+    if (h[slice_temporal_mvp_enabled_flag()])
+    {
+        puData->reset();
+
+        // 3.
+        bool availableFlagCol = deriveTemporalLumaMotionVectorPredictors(h, *puData, pu, L0, 0);
+
+        // 4.
+        if (h[slice_type()] == B)
+            availableFlagCol |= deriveTemporalLumaMotionVectorPredictors(h, *puData, pu, L1, 0);
+
+        if (availableFlagCol)
+        {
+            h(MotionCand{ -1, "col" });
+            if (++puData == end)
+                return;
+        }
+    }
 
     // 7.
+    // Derivation process for combined bi-predictive merging candidates
     if (h[slice_type()] == B)
     {
-        // Derivation process for combined bi-predictive merging candidates
-
-        if (numOrigMergeCand > 1 && numOrigMergeCand < h[MaxNumMergeCand()])
+        auto const numOrigMergeCand = puData - begin;
+        auto const combMax = "\x0\x0\x2\x6\xc"[numOrigMergeCand];
+        assert(combMax == numOrigMergeCand * (numOrigMergeCand - 1));
+        for (int combIdx = 0; combIdx < combMax; ++combIdx)
         {
-            int numInputMergeCand = numCurrMergeCand;
-            int combIdx = 0;
-            bool combStop = false;
-            do
+            // 1.
+            auto const l0CandIdx = "\0\1\0\2\1\2\0\3\1\3\2\3"[combIdx];
+            auto const l1CandIdx = "\1\0\2\0\2\1\3\0\3\1\3\2"[combIdx];
+
+            // 2.
+            auto const &l0Cand = begin[l0CandIdx];
+            auto const &l1Cand = begin[l1CandIdx];
+
+            // 3.
+            if (l0Cand.predFlag(L0) && l1Cand.predFlag(L1) &&
+                ((DiffPicOrderCnt(h, h[RefPicList(L0)][l0Cand.refIdx(L0)], h[RefPicList(L1)][l1Cand.refIdx(L1)]) != 0) || (l0Cand.mv(L0) != l1Cand.mv(L1))))
             {
-                // 1.
-                int l0CandIdx = "\0\1\0\2\1\2\0\3\1\3\2\3"[combIdx];
-                int l1CandIdx = "\1\0\2\0\2\1\3\0\3\1\3\2"[combIdx];
-
-                // 2.
-                int l0Cand = mergeCandList[l0CandIdx];
-                int l1Cand = mergeCandList[l1CandIdx];
-
-                // 3.
-                if (puDataN[l0Cand].predFlag(L0) && puDataN[l1Cand].predFlag(L1) &&
-                        ((DiffPicOrderCnt(h, h[RefPicList(L0)][puDataN[l0Cand].refIdx(L0)], h[RefPicList(L1)][puDataN[l1Cand].refIdx(L1)]) != 0) || (puDataN[l0Cand].mv(L0) != puDataN[l1Cand].mv(L1))))
-                {
-                    int k = numCurrMergeCand - numInputMergeCand;
-
-                    mergeCandList[numCurrMergeCand] = combCand + k;
-                    h(MotionCand(-1, "Comb"));
-
-                    puDataN[combCand + k] = puDataN[l0Cand];
-                    puDataN[combCand + k].mv(L1) = puDataN[l1Cand].mv(L1);
-                    puDataN[combCand + k].setRefIdx(h, L1, puDataN[l1Cand].refIdx(L1));
-
-                    numCurrMergeCand = numCurrMergeCand + 1;
-                }
-
-                // 4.
-                ++combIdx;
-
-                // 5.
-                if (combIdx == (numOrigMergeCand * (numOrigMergeCand - 1)) || numCurrMergeCand == h[MaxNumMergeCand()])
-                {
-                    combStop = true;
-                }
-            } while (!combStop);
+                *puData = l0Cand;
+                puData->mv(L1) = l1Cand.mv(L1);
+                puData->setRefIdx(h, L1, l1Cand.refIdx(L1));
+                h(MotionCand{ -1, "Comb" });
+                if (++puData == end)
+                    return;
+            }
         }
     }
 
     // 8.
+    // Derivation process for zero motion vector merging candidates
+    int numRefIdxMinus1 = h[num_ref_idx_l0_active_minus1()];
+    if (h[slice_type()] == B && h[num_ref_idx_l1_active_minus1()] < numRefIdxMinus1)
+        numRefIdxMinus1 = h[num_ref_idx_l1_active_minus1()];
+
+    for (int zeroIdx = 0; zeroIdx <= numRefIdxMinus1; ++zeroIdx)
     {
-        // Derivation process for zero motion vector merging candidates
-        int numRefIdx;
-        if (h[slice_type()] == P)
-        {
-            numRefIdx = h[num_ref_idx_l0_active_minus1()] + 1;
-        }
-        else
-        {
-            assert(h[slice_type()] == B);
-            numRefIdx = std::min(h[num_ref_idx_l0_active_minus1()] + 1, h[num_ref_idx_l1_active_minus1()] + 1);
-        }
-
-        if (numCurrMergeCand < h[MaxNumMergeCand()])
-        {
-            int const numInputMergeCand = numCurrMergeCand;
-
-            int zeroIdx = 0;
-            do
-            {
-                // 1.
-                if (h[slice_type()] == P)
-                {
-                    int m = numCurrMergeCand - numInputMergeCand;
-
-                    mergeCandList[numCurrMergeCand] = zeroCand + m;
-
-                    puDataN[zeroCand + m].reset();
-                    puDataN[zeroCand + m].setRefIdx(h, L0, (zeroIdx < numRefIdx) ? zeroIdx : 0);
-
-                    numCurrMergeCand = numCurrMergeCand + 1;
-                    h(MotionCand(-1, "zero"));
-                }
-                else
-                {
-                    int m = numCurrMergeCand - numInputMergeCand;
-
-                    mergeCandList[numCurrMergeCand] = zeroCand + m;
-
-                    puDataN[zeroCand + m].reset();
-                    puDataN[zeroCand + m].setRefIdx(h, L0, (zeroIdx < numRefIdx) ? zeroIdx : 0);
-                    puDataN[zeroCand + m].setRefIdx(h, L1, (zeroIdx < numRefIdx) ? zeroIdx : 0);
-
-                    numCurrMergeCand = numCurrMergeCand + 1;
-                    h(MotionCand(-1, "zero"));
-                }
-
-                // 2.
-                ++zeroIdx;
-            } while (!(numCurrMergeCand == h[MaxNumMergeCand()]));
-        }
+        puData->reset();
+        puData->setRefIdx(h, L0, zeroIdx);
+        if (h[slice_type()] == B)
+            puData->setRefIdx(h, L1, zeroIdx);
+        h(MotionCand{ -1, "zero" });
+        if (++puData == end)
+            return;
     }
 
-    for (int i = 0; i < h[MaxNumMergeCand()]; ++i)
+    do
     {
-        const auto candType = mergeCandList[i];
-
-        // 10. (appears before step 10 so that all values of Mvp::Predictors::merge[] are set correctly)
-        if (puDataN[candType].predFlag(L0) && puDataN[candType].predFlag(L1) && (nOrigPbW + nOrigPbH) == 12)
-        {
-            puDataN[candType].setRefIdx(h, L1, -1);
-        }
-
-        Mvp::Predictors *predictors = h;
-        predictors->merge[i] = puDataN[candType];
-    }
+        puData->reset();
+        puData->setRefIdx(h, L0, 0);
+        if (h[slice_type()] == B) 
+            puData->setRefIdx(h, L1, 0);
+        h(MotionCand{ -1, "zero" });
+    } while (++puData != end);
 }
 
 
+template <class H>
+void populateMergeCandidates(H &h, prediction_unit const &pu, int mergeIdx=-1)
+{
+    Mvp::Predictors *predictors = h;
+
+    ++mergeIdx;
+    auto const max = mergeIdx ? mergeIdx : h[MaxNumMergeCand()];
+    auto const end = predictors->merge + max;
+
+    populateMergeCandidatesInner(h, pu, predictors->merge, end);
+
+    auto const &nOrigPbW = pu.nPbW;
+    auto const &nOrigPbH = pu.nPbH;
+
+    // 10.
+    if (nOrigPbW + nOrigPbH == 12)
+        for (PuData *puData = predictors->merge; puData != end; ++puData)
+            if (puData->predFlag(L0) && puData->predFlag(L1))
+                puData->setRefIdx(h, L1, -1);
+}
+ 
+
 // Populates MVP predictors if merge_flag=0 or populate merge candidates if merge_flag=1
 template <class H>
-void populatePuPredictors(H &h, prediction_unit pu, int partIdx)
+void populatePuPredictors(H &h, prediction_unit pu, int partIdx, int mergeIdx=-1)
 {
     Mvp::Predictors *predictors = h;
     coding_quadtree const *cqt = h;
@@ -817,25 +740,20 @@ void populatePuPredictors(H &h, prediction_unit pu, int partIdx)
     {
         auto const xOrigP = xPb;
         auto const yOrigP = yPb;
-        populateMergeCandidates(h, pu, partIdx);
-        puData = predictors->merge[h[merge_idx(xOrigP, yOrigP)]];
+        populateMergeCandidates(h, pu, mergeIdx);
     }
     else
     {
         puData.reset();
         if (h[inter_pred_idc(xPb, yPb)] == PRED_L0 || h[inter_pred_idc(xPb, yPb)] == PRED_BI)
-        {
             puData.setRefIdx(h, L0, h[ref_idx_l0(xPb, yPb)]);
-        }
         if (h[inter_pred_idc(xPb, yPb)] == PRED_L1 || h[inter_pred_idc(xPb, yPb)] == PRED_BI)
-        {
             puData.setRefIdx(h, L1, h[ref_idx_l1(xPb, yPb)]);
-        }
-        if (puData.predFlag(L0)) computeMv(h, puData, L0);
-        if (puData.predFlag(L1)) computeMv(h, puData, L1);
+        if (puData.predFlag(L0)) 
+            computeMv(h, puData, L0);
+        if (puData.predFlag(L1)) 
+            computeMv(h, puData, L1);
     }
-
-    assert(puData.isAvailable());
 }
 
 
@@ -891,9 +809,9 @@ void setPuDataMvp(PuData &puData, H &h)
     auto const &yPb = pu->y0;
 
     setPuDataMvpPredFlags(
-            puData, h,
-            h[inter_pred_idc(xPb, yPb)] == PRED_L0 || h[inter_pred_idc(xPb, yPb)] == PRED_BI,
-            h[inter_pred_idc(xPb, yPb)] == PRED_L1 || h[inter_pred_idc(xPb, yPb)] == PRED_BI);
+        puData, h,
+        h[inter_pred_idc(xPb, yPb)] == PRED_L0 || h[inter_pred_idc(xPb, yPb)] == PRED_BI,
+        h[inter_pred_idc(xPb, yPb)] == PRED_L1 || h[inter_pred_idc(xPb, yPb)] == PRED_BI);
 }
 
 
@@ -907,22 +825,18 @@ void setPuData(H &h, PuData &puData)
     int const merge = h[merge_flag(xPb, yPb)];
 
     if (merge)
-    {
         setPuDataMerge(puData, h);
-    }
     else
-    {
         setPuDataMvp(puData, h);
-    }
 }
 
 
 // Populates MVP predictors if merge_flag=0 or populate merge candidates if merge_flag=1
 // then sets puData based on merge_flag
 template <class H>
-void processPredictionUnit(H &h, prediction_unit pu, PuData &puData, int partIdx)
+void processPredictionUnit(H &h, prediction_unit pu, PuData &puData, int partIdx, int mergeIdx=-1)
 {
-    populatePuPredictors(h, pu, partIdx);
+    populatePuPredictors(h, pu, partIdx, mergeIdx);
     setPuData(h, puData);
 }
 

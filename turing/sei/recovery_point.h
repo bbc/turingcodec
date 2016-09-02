@@ -38,7 +38,7 @@ struct RecoveryPoint :
 template <>
 struct Syntax<recovery_point>
 {
-    template <class H> static void go(const recovery_point &fun, H &h)
+    template <class H> static void go(recovery_point fun, H &h)
     {
         h(recovery_poc_cnt(), se(v));
         h(exact_match_flag(), u(1));
@@ -47,14 +47,9 @@ struct Syntax<recovery_point>
 };
 
 
-template <class H> void Read<recovery_point>::go(const recovery_point &f, H &h)
+template <class H> void Read<recovery_point>::go(recovery_point f, H &h)
 {
     RecoveryPoint recoveryPoint;
     auto h3 = h.extend(&recoveryPoint);
     Syntax<recovery_point>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(recovery_point)
-#endif

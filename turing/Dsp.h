@@ -105,9 +105,9 @@ class Initializer
 public:
     Initializer(T t) : value(t) { };
     operator T()
-	        {
+            {
         return this->value;
-	        }
+            }
 protected:
     const T value;
 };
@@ -1124,13 +1124,13 @@ void predictInter(PredPicture &predPicture, prediction_unit pu, H &h)
 
     if (puData.getDpbIndex(L0) >= 0)
     {
-        ReconstructedPicture2<Sample> *ref = static_cast<ReconstructedPicture2<Sample> *>(h[RefPicList(L0)][puData.refIdx(L0)].dp->reconstructedPicture.get());
+        StateReconstructedPicture<Sample> *ref = static_cast<StateReconstructedPicture<Sample> *>(h[RefPicList(L0)][puData.refIdx(L0)].dp->reconstructedPicture.get());
         referencePictureLX[0] = ref->picture.get();
     }
 
     if (puData.getDpbIndex(L1) >= 0)
     {
-        ReconstructedPicture2<Sample> *ref = static_cast<ReconstructedPicture2<Sample> *>(h[RefPicList(L1)][puData.refIdx(L1)].dp->reconstructedPicture.get());
+        StateReconstructedPicture<Sample> *ref = static_cast<StateReconstructedPicture<Sample> *>(h[RefPicList(L1)][puData.refIdx(L1)].dp->reconstructedPicture.get());
         referencePictureLX[1] = ref->picture.get();
     }
 

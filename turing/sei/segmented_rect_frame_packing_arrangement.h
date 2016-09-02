@@ -53,14 +53,9 @@ void Syntax<segmented_rect_frame_packing_arrangement>::go(segmented_rect_frame_p
 }
 
 
-template <class H> void Read<segmented_rect_frame_packing_arrangement>::go(segmented_rect_frame_packing_arrangement const &f, H &h)
+template <class H> void Read<segmented_rect_frame_packing_arrangement>::go(segmented_rect_frame_packing_arrangement f, H &h)
 {
     SegmentedRectFramePackingArrangement s;
     auto h2 = h.extend(&s);
     Syntax<segmented_rect_frame_packing_arrangement>::go(f, h2);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(segmented_rect_frame_packing_arrangement)
-#endif

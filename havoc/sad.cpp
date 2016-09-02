@@ -626,6 +626,9 @@ struct Sad4Avx2 :
         auto &xmm8 = regXmm(8);
         auto *xmm9 = sizeof(Sample) == 2 ? &regXmm(9) : (Xbyak::Xmm const *)0;
 
+        if (sizeof(Sample) == 2)
+            vpxor(ymm9, ymm9);
+
         int widthBytes = width * sizeof(Sample);
 
         if (widthBytes == 8)
@@ -816,7 +819,6 @@ struct Sad4Avx2 :
             vpxor(ymm6, ymm6);
             vpxor(ymm7, ymm7);
             vpxor(ymm8, ymm8);
-            if (sizeof(Sample) == 2) vpxor(ymm9, ymm9);
 
             L("loop");
             {

@@ -113,27 +113,20 @@ bool writeOut(H &h)
 
     if(!stateEncode->userDataUnregSeiWritten)
     {
+        // Review: add command line options
+        auto const message = "Turing codec version " + std::string(turing_version());
+
+        StateWriteUserDataUnregistered *stateWriteUserDataUnregistered = h;
+        stateWriteUserDataUnregistered->p = message.c_str();
+        stateWriteUserDataUnregistered->end = stateWriteUserDataUnregistered->p + message.length();
+
+        h[uuid_iso_iec_11578()] = boost::uuids::string_generator()("ac9e584e2d484bdd8ccbf3ff9a878e69");
+
         h[nal_unit_type()] = PREFIX_SEI_NUT;
         h[last_payload_type_byte()] = PayloadTypeOf<user_data_unregistered>::value;
-
-        const uint8_t turingUuid[16] = {0xac, 0x9e, 0x58, 0x4e,
-                                        0x2d, 0x48, 0x4b, 0xdd,
-                                        0x8c, 0xcb, 0xf3, 0xff,
-                                        0x9a, 0x87, 0x8e, 0x69};
-        for(int i = 0; i < 16; i++)
-        {
-            h[uuid_iso_iec_11578(i)] = turingUuid[i];
-        }
-        // Review: add command line options
-        string message("Turing codec version " + string(turing_version()));
-        stateEncode->userDataUnregMsgLen = message.length();
-        for(int i = 0; i < stateEncode->userDataUnregMsgLen; i++)
-        {
-            h[user_data_payload_byte(i)] = message[i];
-        }
+        h(byte_stream_nal_unit(0));
 
         stateEncode->userDataUnregSeiWritten = true;
-        h(byte_stream_nal_unit(0));
     }
 
     if (stateEncode->fieldcoding)
@@ -162,10 +155,10 @@ bool writeOut(H &h)
 
     // Write the slice segment NALU (slice_segment_data() and slice_segment_trailing_bits() suppressed here)
     NalWriter *nalWriter = h;
-    size_t rateBefore = (nalWriter->pos()) << 3;
+    size_t rateBefore = (nalWriter->data->size()) << 3;
     h(byte_stream_nal_unit(0));
 
-    size_t rateAfter = (nalWriter->pos()) << 3;
+    size_t rateAfter = (nalWriter->data->size()) << 3;
     if(stateEncode->useRateControl)
     {
         StateEncodePicture *stateEncodePicture = h;
@@ -241,7 +234,7 @@ bool TaskEncodeOutput<H>::run()
                 if(stateEncode->useRateControl)
                 {
                     NalWriter *nalWriter = h;
-                    size_t rate = (nalWriter->pos()) << 3;
+                    size_t rate = (nalWriter->data->size()) << 3;
                     bool isIntra = h[slice_type()] == I;
                     int averageQp = NON_VALID_QP;
                     double averageLambda = NON_VALID_LAMBDA;
@@ -251,6 +244,11 @@ bool TaskEncodeOutput<H>::run()
                     StateEncodePicture *stateEncodePicture = h;
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     stateEncode->rateControlEngine->updateSequenceController(static_cast<int>(rate), averageQp, averageLambda, isIntra, currentPictureLevel);
+#if WRITE_RC_LOG
+                    char data[100];
+                    sprintf(data, " %10d | %10d \n", (int)rate, stateEncode->rateControlEngine->getCpbFullness());
+                    stateEncode->rateControlEngine->writetoLogFile(data);
+#endif
                 }
 
                 response.done = true;

@@ -83,12 +83,12 @@ struct ToneMappingInfo :
 template <>
 struct Syntax<tone_mapping_info>
 {
-    template <class H> static void go(const tone_mapping_info &fun, H &h);
+    template <class H> static void go(tone_mapping_info fun, H &h);
 };
 
 
 template <class H>
-void Syntax<tone_mapping_info>::go(const tone_mapping_info &fun, H &h)
+void Syntax<tone_mapping_info>::go(tone_mapping_info fun, H &h)
 {
     h(tone_map_id(), ue(v));
     h(tone_map_cancel_flag(), u(1));
@@ -144,15 +144,10 @@ void Syntax<tone_mapping_info>::go(const tone_mapping_info &fun, H &h)
 }
 
 
-template <class H> void Read<tone_mapping_info>::go(const tone_mapping_info &f, H &h)
+template <class H> void Read<tone_mapping_info>::go(tone_mapping_info f, H &h)
 {
     ToneMappingInfo toneMappingInfo;
     auto h3 = h.extend(&toneMappingInfo);
 
     Syntax<tone_mapping_info>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(tone_mapping_info)
-#endif

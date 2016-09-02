@@ -64,8 +64,7 @@ bool TaskDeblock<H>::blocked()
 template <class H>
 bool TaskDeblock<H>::run()
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->postprocess);
 
@@ -74,7 +73,8 @@ bool TaskDeblock<H>::run()
     //TODO: Review invocation order of this statement in SyntaxRbsb.hpp
     h[slice_deblocking_filter_disabled_flag()] = h[pps_deblocking_filter_disabled_flag()];
 
-    Picture<Sample> *picture = &h[ReconstructedPicture()];
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+    Picture<Sample> *picture = stateReconstructedPicture->picture.get();
 
     while (true)
     {

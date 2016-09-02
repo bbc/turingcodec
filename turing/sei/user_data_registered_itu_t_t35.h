@@ -59,7 +59,7 @@ struct Syntax<user_data_registered_itu_t_t35>
     }
 };
 
-template <class H> void Read<user_data_registered_itu_t_t35>::go(user_data_registered_itu_t_t35 const & f, H &h)
+template <class H> void Read<user_data_registered_itu_t_t35>::go(user_data_registered_itu_t_t35  f, H &h)
 {
     UserDataRegistered userDataRegistered;
     auto h3 = h.extend(&userDataRegistered);
@@ -68,6 +68,3 @@ template <class H> void Read<user_data_registered_itu_t_t35>::go(user_data_regis
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(user_data_registered_itu_t_t35)
-#endif

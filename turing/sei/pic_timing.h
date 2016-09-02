@@ -39,7 +39,7 @@ DEFINE_STRUCT_ARITY_1(du_cpb_removal_delay_increment_minus1, i);
 template <>
 struct Syntax<pic_timing>
 {
-    template <class H> static void go(const pic_timing &fun, H &h)
+    template <class H> static void go(pic_timing fun, H &h)
     {
         if (h[frame_field_info_present_flag()])
         {
@@ -92,15 +92,15 @@ struct PicTiming :
     {
     };
 
-template <class H> void Read<pic_timing>::go(const pic_timing &f, H &h)
+template <class H> void Read<pic_timing>::go(pic_timing f, H &h)
 {
     Hrd *hrd = getHrd(h);
 
     if (hrd)
     {
-        auto h2 = extendHandler(*hrd, h);
+        auto h2 = h.extend(hrd);
         PicTiming picTiming;
-        auto h3 = extendHandler(picTiming, h2);
+        auto h3 = h2.extend(&picTiming);
 
         Syntax<pic_timing>::go(f, h3);
     }
@@ -110,9 +110,4 @@ template <class H> void Read<pic_timing>::go(const pic_timing &f, H &h)
         seek(h, bitLen(h[::Stream()]));
     }
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(pic_timing)
-#endif
 

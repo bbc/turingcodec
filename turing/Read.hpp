@@ -27,6 +27,47 @@ For more information, contact us at info @ turingcodec.org.
 #include "SyntaxSei.h"
 
 
+template <typename T, class H>
+struct NextBits<T, H>
+{
+    static T go(H &h, int n, bool aligned = false)
+    {
+        auto& stream = h[Stream()];
+        typename Access<Stream, H>::SetType::Bookmark mark(stream);
+        assert(bitPos<int>(stream) <= (int)bitLen(stream));
+        T returnValue = 0;
+        if (aligned)
+        {
+            assert(n % 8 == 0);
+            assert(bitPos<int>(stream) % 8 == 0);
+            n /= 8;
+            while (n--)
+            {
+                if (bitPos<int>(stream) == bitLen(stream))
+                {
+                    return 0;
+                }
+                returnValue <<= 8;
+                returnValue |= stream.byte();
+            }
+        }
+        else
+        {
+            while (n--)
+            {
+                if (bitPos<size_t>(stream) >= bitLen(stream))
+                {
+                    return 0;
+                }
+                returnValue <<= 1;
+                returnValue |= stream.bit();
+            }
+        }
+        return returnValue;
+    }
+};
+
+
 template <class H>
 void Read<nal_unit>::go(const nal_unit &e, H &h2)
 {

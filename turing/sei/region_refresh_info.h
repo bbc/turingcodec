@@ -32,22 +32,17 @@ struct RegionRefreshInfo :
 template <>
 struct Syntax<region_refresh_info>
 {
-    template <class H> static void go(const region_refresh_info &fun, H &h)
+    template <class H> static void go(region_refresh_info fun, H &h)
     {
         h(refreshed_region_flag(), u(1));
     }
 };
 
 
-template <class H> void Read<region_refresh_info>::go(const region_refresh_info &f, H &h)
+template <class H> void Read<region_refresh_info>::go(region_refresh_info f, H &h)
 {
     RegionRefreshInfo regionRefreshInfo;
     auto h3 = h.extend(&regionRefreshInfo);
 
     Syntax<region_refresh_info>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(region_refresh_info)
-#endif

@@ -41,7 +41,9 @@ For more information, contact us at info @ turingcodec.org.
 static const int EDGE_VER = 0; // vertical edge
 static const int EDGE_HOR = 1; // horizontal edge
 
-template <class F> struct Write;
+// review: these should not be necessary, LoopFilter should be generic
+template <class> struct Write;
+template <class> struct Decode;
 
 namespace LoopFilter
 {
@@ -168,12 +170,12 @@ namespace LoopFilter
     {
 
         BlockEdge(Raster<Sample> s, Raster<Block> blocks, int bitDepth, int position = 0) :
-		blockP(blocks(-1, 0)),
-		blockQ(blocks(0, 0)),
-		bitDepth(bitDepth),
-		s(s.offset(0, 4*position))
-		{
-		}
+        blockP(blocks(-1, 0)),
+        blockQ(blocks(0, 0)),
+        bitDepth(bitDepth),
+        s(s.offset(0, 4*position))
+        {
+        }
 
         Sample &p(int i, int k)
         {
@@ -192,12 +194,12 @@ namespace LoopFilter
     struct BlockEdge<Sample, EDGE_HOR>
     {
         BlockEdge(Raster<Sample> s, Raster<Block> blocks, int bitDepth, int position = 0) :
-		blockP(blocks(0, -1)),
-		blockQ(blocks(0, 0)),
-		bitDepth(bitDepth),
-		s(s.offset(4*position, 0))
-		{
-		}
+        blockP(blocks(0, -1)),
+        blockQ(blocks(0, 0)),
+        bitDepth(bitDepth),
+        s(s.offset(4*position, 0))
+        {
+        }
 
         Sample &p(int i, int k)
         {
@@ -590,7 +592,7 @@ namespace LoopFilter
                 {
                     int qpy = h[QpY()];
 
-                    if(h[cu_qp_delta_enabled_flag()])
+                    if(!std::is_same<typename H::Tag, Decode<void>>::value && h[cu_qp_delta_enabled_flag()])
                     {
                         int rowModulo = ((y<<3) & qpState->getMaskCtb()) >> 3;
                         int colModulo = ((x<<3) & qpState->getMaskCtb()) >> 3;
@@ -793,7 +795,7 @@ namespace LoopFilter
         void applySaoCTU(H &h, int rx, int ry)
         {
             const int nCtbS = 1 << h[CtbLog2SizeY()];
-            ReconstructedPicture2<Sample> *reconstructedPicture = h;
+            StateReconstructedPicture<Sample> *reconstructedPicture = h;
             auto &recPicture = *reconstructedPicture->picture;
             auto &saoPicture = *reconstructedPicture->saoPicture;
 

@@ -243,14 +243,36 @@ static bool startsNewAccessUnit(int nut)
 }
 
 
+#define REFERENCE_TYPES \
+    X(UNUSED, "unused for reference") \
+    X(SHORT_TERM, "used for short-term reference") \
+    X(LONG_TERM, "used for long-term reference")
+
+enum Reference
+{
+#define X(A, B) A,
+    REFERENCE_TYPES
+#undef X
+};	
+
+static char const* referenceName(Reference reference)
+{
+    switch (reference)
+    {
+    default: return 0;
+#define X(A, B) case A: return B;
+        REFERENCE_TYPES
+#undef X
+    }
+}
+
+
 #define SLICE_TYPES \
         X(I, 2) \
         X(P, 1) \
         X(B, 0)
 
-#define X(A, B) \
-        static const int A = B;
-
+#define X(A, B) static const int A = B;
 SLICE_TYPES
 #undef X
 

@@ -271,6 +271,7 @@ struct Read<sei_payload>
     }
 };
 
+
 template <class V, class M> struct ReadU;
 
 
@@ -290,14 +291,15 @@ struct ReadUv
 #define PARSE_UV(V, L) template <> struct Read<Element<V, u>> : ReadUv<V, L> { };
 
 
-
 // Declare Read<F> for all SEI payload types
-#define PREFIX(id, F) template <> struct Read<F> { template <class H> static void go(F const &, H&); };
-#define SUFFIX(id, F) template <> struct Read<F> { template <class H> static void go(F const &, H&); };
-#define BOTH(id, F) template <> struct Read<F> { template <class H> static void go(F const &, H&); };
+#define DECLARE_READ_SEI(F) template <> struct Read<F> { template <class H> static void go(F, H&); };
+#define PREFIX(id, F) DECLARE_READ_SEI(F)
+#define SUFFIX(id, F) DECLARE_READ_SEI(F)
+#define BOTH(id, F) DECLARE_READ_SEI(F)
 
 SEI_PAYLOAD_TYPES
 
+#undef DECLARE_READ_SEI
 #undef PREFIX
 #undef SUFFIX
 #undef BOTH
@@ -305,7 +307,7 @@ SEI_PAYLOAD_TYPES
 
 // review: the following needs to be implemented
 #define UNIMPLEMENTED_SEI(F) \
-template <class H> void Read<F>::go(F const &f, H &h) \
+template <class H> void Read<F>::go(F f, H &h) \
 { \
     seek(h, 8 * f.payloadSize); \
 } \

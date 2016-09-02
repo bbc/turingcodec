@@ -140,8 +140,7 @@ struct Compute<H, struct SumOfAbsoluteTransformedDifferences, Turing::Rectangle>
 {
     static int32_t go(H &h, int x0, int y0, int width, int height, int cIdx)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateEncodePicture *stateEncodePicture = h;
 
@@ -149,8 +148,8 @@ struct Compute<H, struct SumOfAbsoluteTransformedDifferences, Turing::Rectangle>
         auto &pictureWrap = static_cast<PictureWrap<Sample> &>(pictureWrapper);
         auto &picture = static_cast<Picture<Sample> &>(pictureWrap);
 
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
-        Picture<Sample> &reconstructed = *reconstructedPicture.picture;
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+        Picture<Sample> &reconstructed = *stateReconstructedPicture->picture;
 
         if (cIdx)
         {

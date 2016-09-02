@@ -30,7 +30,6 @@ For more information, contact us at info @ turingcodec.org.
 
 
 struct StatePictures;
-struct StateSubstream;
 
 struct SaoCtuData :
     ValueHolder<SaoTypeIdx>,

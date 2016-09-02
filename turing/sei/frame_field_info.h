@@ -48,14 +48,9 @@ struct FieldFrameInfo :
     };
 
 
-template <class H> void Read<frame_field_info>::go(frame_field_info const &f, H &h)
+template <class H> void Read<frame_field_info>::go(frame_field_info f, H &h)
 {
     FieldFrameInfo fieldFrameInfo;
     auto hh = h.extend(&fieldFrameInfo);
     Syntax<frame_field_info>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(frame_field_info)
-#endif

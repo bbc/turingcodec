@@ -25,9 +25,10 @@ For more information, contact us at info @ turingcodec.org.
 #include <iostream>
 #include <stdint.h>
 #include <cassert>
-#include<memory>
+#include <memory>
 
-// Pair of pointer and stride that allows access into a 2D plane of samples.
+
+// Pair of pointer and stride that allows access into a 2D plane of samples
 template <typename Sample>
 struct Raster
 {
@@ -37,14 +38,14 @@ struct Raster
 
     template <class U, typename Stride>
     Raster(U* u, Stride stride, int xOffset = 0, int yOffset = 0) :
-    p(u + xOffset + yOffset * stride),
-    stride(stride)
+        p(u + xOffset + yOffset * stride),
+        stride(stride)
     {
     }
 
     template <class U>
     Raster(const Raster<U> &other, int xOffset = 0, int yOffset = 0) :
-    Raster(other.p, other.stride, xOffset, yOffset)
+        Raster(other.p, other.stride, xOffset, yOffset)
     {
     }
 
@@ -87,46 +88,57 @@ struct Raster
 
 
 template <class Sample>
+void fillRectangle(Raster<Sample> p, Sample value, int width, int height)
+{
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            p(x, y) = value;
+}
+
+
+// Representation of a rectangular region of a 2D plane of samples
+template <class Sample>
 struct Plane :
     Raster<Sample>
-    {
-        Plane() : width(0), height(0) { }
+{
+    Plane() : width(0), height(0) { }
 
-        template <class U>
-        Plane(Raster<U> sp, int width, int height) :
+    template <class U>
+    Plane(Raster<U> sp, int width, int height) :
         Raster<Sample>(sp),
         width(width),
         height(height)
-        {
-        }
+    {
+    }
 
-        bool contiguous() const
-        {
-            return this->width == this->stride;
-        }
+    bool contiguous() const
+    {
+        return this->width == this->stride;
+    }
 
-        const int width;
-        const int height;
-    };
+    const int width;
+    const int height;
+};
 
 
+// Three planar rectangles of samples
 template <class Sample>
 struct ThreePlanes
 {
     typedef Sample Type;
 
     ThreePlanes(int subWidthC = 1, int subHeightC = 1) :
-    subWidthC(subWidthC),
-    subHeightC(subHeightC)
+        subWidthC(subWidthC),
+        subHeightC(subHeightC)
     {
         assert(subWidthC == 1 || subWidthC == 2);
         assert(subHeightC == 1 || subHeightC == 2);
     }
 
     // Copy constuctor with optional crop
-    ThreePlanes(ThreePlanes &src, int left = 0, int top = 0, int right = 0, int bottom = 0) :
-    subWidthC(src.subWidthC),
-    subHeightC(src.subHeightC)
+    ThreePlanes(ThreePlanes const& src, int left = 0, int top = 0, int right = 0, int bottom = 0) :
+        subWidthC(src.subWidthC),
+        subHeightC(src.subHeightC)
     {
         for (int cIdx = 0; cIdx < 3; ++cIdx)
         {
@@ -146,6 +158,13 @@ struct ThreePlanes
             this->planes[cIdx].~Plane<Sample>();
             new (&this->planes[cIdx]) Plane<Sample>(sp, width, height);
         }
+    }
+
+    ThreePlanes const &operator=(ThreePlanes const &other)
+    {
+        this->~ThreePlanes();
+        new (this) ThreePlanes(other);
+        return *this;
     }
 
     Plane<Sample> &operator[](int cIdx)
@@ -178,40 +197,40 @@ protected:
     Plane<Sample> planes[3];
 };
 
-template <class Sample>
-struct Picture :
-    ThreePlanes<Sample>
-    {
-        Picture(int width, int height, int chromaFormat, int paddingX, int paddingY, int alignment);
-
-        Picture(const Picture &) = delete;
-
-        ~Picture();
-
-        void writeFields(std::ostream &os, Picture<Sample> &planestop, Picture<Sample> &planesbottom)
-        {
-            for (int cIdx = 0; cIdx < 3; ++cIdx)
-            {
-                for (int y = 0; y < planesbottom[cIdx].height; ++y)
-                {
-                    os.write(reinterpret_cast<const char *>(&planestop[cIdx](0, y)), planesbottom[cIdx].width);
-                    os.write(reinterpret_cast<const char *>(&planesbottom[cIdx](0, y)), planesbottom[cIdx].width);
-                }
-            }
-            return;
-        }
-
-    private:
-        Sample *buffers[3 /*cIdx*/];
-    };
-
-
 
 std::ostream &operator<<(std::ostream &, ThreePlanes<uint8_t> &);
 std::ostream &operator<<(std::ostream &, ThreePlanes<uint16_t> &);
 
-std::istream &operator>>(std::istream &, ThreePlanes<uint8_t> &);
-std::istream &operator>>(std::istream &, ThreePlanes<uint16_t> &);
+std::istream &operator >> (std::istream &, ThreePlanes<uint8_t> &);
+std::istream &operator >> (std::istream &, ThreePlanes<uint16_t> &);
+
+
+template <class Sample>
+static void writeFields(std::ostream &os, ThreePlanes<Sample> &planestop, ThreePlanes<Sample> &planesbottom)
+{
+    for (int cIdx = 0; cIdx < 3; ++cIdx)
+        for (int y = 0; y < planesbottom[cIdx].height; ++y)
+        {
+            os.write(reinterpret_cast<const char *>(&planestop[cIdx](0, y)), planesbottom[cIdx].width);
+            os.write(reinterpret_cast<const char *>(&planesbottom[cIdx](0, y)), planesbottom[cIdx].width);
+        }
+}
+
+
+// Three planar rectangles of samples in allocated memory
+template <class Sample>
+struct Picture :
+    ThreePlanes<Sample>
+{
+    Picture(int width, int height, int chromaFormat, int paddingX, int paddingY, int alignment);
+
+    Picture(const Picture &) = delete;
+
+    ~Picture();
+
+private:
+    Sample *buffers[3 /*cIdx*/];
+};
 
 
 struct PictureWrapper
@@ -223,10 +242,11 @@ struct PictureWrapper
 };
 
 template <typename Sample>
-struct PictureWrap  :
+struct PictureWrap :
     PictureWrapper,
     Picture<Sample>
-    {
-        using Picture<Sample>::Picture;
-    };
+{
+    using Picture<Sample>::Picture;
+};
+
 #endif

@@ -34,22 +34,17 @@ struct PictureSnapshot :
 template <>
 struct Syntax<picture_snapshot>
 {
-    template <class H> static void go(const picture_snapshot &fun, H &h)
+    template <class H> static void go(picture_snapshot fun, H &h)
     {
         h(snapshot_id(), ue(v));
     }
 };
 
 
-template <class H> void Read<picture_snapshot>::go(const picture_snapshot &f, H &h)
+template <class H> void Read<picture_snapshot>::go(picture_snapshot f, H &h)
 {
     PictureSnapshot pictureSnapshot;
     auto h3 = h.extend(&pictureSnapshot);
 
     Syntax<picture_snapshot>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(picture_snapshot)
-#endif

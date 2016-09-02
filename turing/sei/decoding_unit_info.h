@@ -40,7 +40,7 @@ struct DecodingUnitInfo :
 template <>
 struct Syntax<decoding_unit_info>
 {
-    template <class H> static void go(const decoding_unit_info &fun, H &h)
+    template <class H> static void go(decoding_unit_info fun, H &h)
     {
         h(decoding_unit_idx(), ue(v));
         if (!h[sub_pic_cpb_params_in_pic_timing_sei_flag()])
@@ -55,7 +55,7 @@ NUMBER_OF_BITS_MINUS1(du_spt_cpb_removal_delay_increment, du_cpb_removal_delay_i
 NUMBER_OF_BITS_MINUS1(pic_spt_dpb_output_du_delay, dpb_output_delay_du_length_minus1)
 
 
-template <class H> void Read<decoding_unit_info>::go(const decoding_unit_info &f, H &h)
+template <class H> void Read<decoding_unit_info>::go(decoding_unit_info f, H &h)
 {
     Hrd *hrd = getHrd(h);
 
@@ -76,6 +76,3 @@ template <class H> void Read<decoding_unit_info>::go(const decoding_unit_info &f
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(decoding_unit_info)
-#endif

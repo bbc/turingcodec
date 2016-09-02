@@ -34,7 +34,7 @@ DEFINE_VALUE_ARRAY_1(sop_poc_delta, i, 1024);
 
 template <> struct Syntax<structure_of_pictures_info>
 {
-    template <class H> static void go(const structure_of_pictures_info &fun, H &h)
+    template <class H> static void go(structure_of_pictures_info fun, H &h)
     {
         h(sop_seq_parameter_set_id(), ue(v));
         h(num_entries_in_sop_minus1(), ue(v));
@@ -62,14 +62,9 @@ struct StructureOfPicturesInfo :
     };
 
 
-template <class H> void Read<structure_of_pictures_info>::go(const structure_of_pictures_info &f, H &h)
+template <class H> void Read<structure_of_pictures_info>::go(structure_of_pictures_info f, H &h)
 {
     StructureOfPicturesInfo structureOfPicturesInfo;
     auto hh = h.extend(&structureOfPicturesInfo);
     Syntax<structure_of_pictures_info>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(structure_of_pictures_info)
-#endif

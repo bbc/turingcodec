@@ -27,11 +27,11 @@ For more information, contact us at info @ turingcodec.org.
 template <>
 struct Syntax<progressive_refinement_segment_end>
 {
-    template <class H> static void go(const progressive_refinement_segment_end &fun, H &h);
+    template <class H> static void go(progressive_refinement_segment_end fun, H &h);
 };
 
 template <class H>
-void Syntax<progressive_refinement_segment_end>::go(const progressive_refinement_segment_end &fun, H &h)
+void Syntax<progressive_refinement_segment_end>::go(progressive_refinement_segment_end fun, H &h)
 {
     h(progressive_refinement_id(), ue(v));
 }
@@ -43,16 +43,11 @@ struct ProgressiveRefinementSegmentEnd :
 
 
 
-template <class H> void Read<progressive_refinement_segment_end>::go(const progressive_refinement_segment_end &f, H &h)
+template <class H> void Read<progressive_refinement_segment_end>::go(progressive_refinement_segment_end f, H &h)
 {
     ProgressiveRefinementSegmentEnd progressiveRefinementSegmentEnd;
     auto h3 = h.extend(&progressiveRefinementSegmentEnd);
 
     Syntax<progressive_refinement_segment_end>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(progressive_refinement_segment_end)
-#endif
 

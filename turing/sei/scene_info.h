@@ -31,11 +31,11 @@ struct second_scene_id { };
 template <>
 struct Syntax<scene_info>
 {
-    template <class H> static void go(const scene_info &fun, H &h);
+    template <class H> static void go(scene_info fun, H &h);
 };
 
 template <class H>
-void Syntax<scene_info>::go(const scene_info &fun, H &h)
+void Syntax<scene_info>::go(scene_info fun, H &h)
 {
     h(scene_info_present_flag(), u(1));
     if (h[scene_info_present_flag()])
@@ -59,15 +59,10 @@ struct SceneInfo :
     };
 
 
-template <class H> void Read<scene_info>::go(const scene_info &f, H &h)
+template <class H> void Read<scene_info>::go(scene_info f, H &h)
 {
     SceneInfo sceneInfo;
     auto h3 = h.extend(&sceneInfo);
 
     Syntax<scene_info>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(scene_info)
-#endif

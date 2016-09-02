@@ -32,7 +32,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "StatePictures.h"
 #include "GlobalState.h"
 #include "CandModeList.h"
-#include "Vanilla.h"
 #include "LoopFilter.h"
 #include "Violation.h"
 #include "ContextModel.h"
@@ -43,13 +42,13 @@ For more information, contact us at info @ turingcodec.org.
 #include <fstream>
 
 
-// review: shouldn't be here
+ // review: shouldn't be here
 template <class F>
 struct Decode;
 
 
 // checks just-decoded element value, may throw Abort if it's bad
-template <class V, class H, class Enable=void>
+template <class V, class H, class Enable = void>
 struct ReadCheck
 {
     static void go(V, H &, const typename ValueType<V>::Type &)
@@ -84,23 +83,17 @@ static std::ofstream &flog()
 
 struct CabacState
 {
-    CabacState() :
-    bitsNeeded(-8), ivlCurrRange(510), ivlOffset(0)
-    {
-    }
-    unsigned ivlCurrRange;
-    int bitsNeeded;
-    unsigned ivlOffset;
-    int n; // unused?
+    int ivlCurrRange = -8;
+    int bitsNeeded = 510;
+    int ivlOffset = 0;
 };
-
 
 
 template <class F>
 struct Read :
     Syntax<F>
-    {
-    };
+{
+};
 
 
 template <>
@@ -312,45 +305,6 @@ struct ReadBytes<T, H>
     }
 };
 
-template <typename T, class H>
-struct NextBits<T, H>
-{
-    static T go(H &h, int n, bool aligned = false)
-    {
-        auto& stream = h[Stream()];
-        typename Access<Stream, H>::SetType::Bookmark mark(stream);
-        assert(bitPos<int>(stream) <= (int)bitLen(stream));
-        T returnValue = 0;
-        if (aligned)
-        {
-            assert(n % 8 == 0);
-            assert(bitPos<int>(stream) % 8 == 0);
-            n /= 8;
-            while (n--)
-            {
-                if (bitPos<int>(stream) == bitLen(stream))
-                {
-                    return 0;
-                }
-                returnValue <<= 8;
-                returnValue |= stream.byte();
-            }
-        }
-        else
-        {
-            while (n--)
-            {
-                if (bitPos<size_t>(stream) >= bitLen(stream))
-                {
-                    return 0;
-                }
-                returnValue <<= 1;
-                returnValue |= stream.bit();
-            }
-        }
-        return returnValue;
-    }
-};
 
 // Fixed-length bitfield parsing
 template <class V, class M>
@@ -400,7 +354,7 @@ struct ReadI
     }
 };
 
-template <class V> struct Read<Element<V, i>> : ReadI<V, i>{};
+template <class V> struct Read<Element<V, i>> : ReadI<V, i> {};
 
 
 
@@ -430,8 +384,8 @@ struct ReadUe
 template <class V>
 struct Read<Element<V, ue>> :
     ReadUe<V>
-    {
-    };
+{
+};
 
 
 template <class V>
@@ -498,8 +452,8 @@ struct GetCtxInc<H, split_cu_flag>
         coding_quadtree cqt = *static_cast<coding_quadtree *>(h);
 
         return
-                (snake.get<Left>(e.x0 - 1, e.y0, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0) +
-                (snake.get<Up>(e.x0, e.y0 - 1, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0);
+            (snake.get<Left>(e.x0 - 1, e.y0, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0) +
+            (snake.get<Up>(e.x0, e.y0 - 1, neighbourhood->MinCbLog2SizeYMinus1).CtDepth > cqt.cqtDepth ? 1 : 0);
     }
 };
 
@@ -576,99 +530,100 @@ struct GetContext
 };
 
 
+static inline int decodeDecision(BitReader *bitReader, CabacState *cabacState, ContextModel &contextModel)
+{
+    const int pStateIdx = contextModel.getState();
+    const int valMPS = contextModel.getMps();
+
+    const int qRangeIdx = (cabacState->ivlCurrRange >> 6) & 3;
+    const int ivlLpsRange = rangeTabLPS(pStateIdx, qRangeIdx); // uiLPS
+    cabacState->ivlCurrRange -= ivlLpsRange;
+    const int32_t scaledRange = cabacState->ivlCurrRange << 7;
+    int32_t mask = (cabacState->ivlOffset - scaledRange) >> 31;
+
+    int binVal, numBits;
+    binVal = valMPS ^ (1 + mask);
+    cabacState->ivlOffset -= scaledRange & ~mask;
+    cabacState->ivlCurrRange += (ivlLpsRange - cabacState->ivlCurrRange) & ~mask;
+    contextModel.update(mask);
+
+    static const uint8_t renormTable[] = {
+        6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    numBits = renormTable[cabacState->ivlCurrRange >> 3];
+
+    cabacState->ivlOffset <<= numBits;
+    cabacState->ivlCurrRange <<= numBits;
+    cabacState->bitsNeeded += numBits;
+
+    if (cabacState->bitsNeeded >= 0)
+    {
+        cabacState->ivlOffset |= bitReader->readBytes(1) << cabacState->bitsNeeded;
+        cabacState->bitsNeeded -= 8;
+
+        //if ((cabacState->ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
+        //{
+        //     h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (cabacState->ivlOffset >> 7));
+        //     throw Abort();
+        //}
+    }
+
+    return binVal;
+}
+
+
 template <class V>
 struct Read<DecodeDecision<V>>
 {
     template <class H> static void go(DecodeDecision<V> e, H &h)
     {
-        BitReader &reader = *static_cast<BitReader *>(h);
-        CabacState &state = *static_cast<CabacState *>(h);
-
-        Contexts &contexts = *static_cast<Contexts *>(h);
-        ContextModel &contextModel = contexts.get<typename Context<V>::Type>(e.ctxInc);
-
-        const int pStateIdx = contextModel.getState();
-        const int valMPS = contextModel.getMps();
-
-        const int qRangeIdx = (state.ivlCurrRange >> 6) & 3;
-        const int ivlLpsRange = rangeTabLPS(pStateIdx, qRangeIdx); // uiLPS
-        state.ivlCurrRange -= ivlLpsRange;
-        const unsigned scaledRange = state.ivlCurrRange << 7;
-
-        int binVal, numBits;
-        if (state.ivlOffset < scaledRange)
-        {
-            binVal = valMPS;
-            contextModel.updateMps();
-            numBits = (scaledRange < (256 << 7)) ? 1 : 0;
-        }
-        else
-        {
-            binVal = 1 - valMPS;
-            state.ivlOffset -= scaledRange;
-            state.ivlCurrRange = ivlLpsRange;
-            contextModel.updateLps();
-            static const int renormTable[] = { 6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-            numBits = renormTable[ivlLpsRange >> 3];
-        }
-
-        state.ivlOffset <<= numBits;
-        state.ivlCurrRange <<= numBits;
-        state.bitsNeeded += numBits;
-
-        if (state.bitsNeeded >= 0)
-        {
-            state.ivlOffset |= read_bytes<int>(h, 1) << state.bitsNeeded;
-            state.bitsNeeded -= 8;
-
-            if ((state.ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
-            {
-                h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (state.ivlOffset >> 7));
-                throw Abort();
-            }
-        }
-
-        *e.value = binVal;
+        BitReader *bitReader = h;
+        CabacState *cabacState = h;
+        Contexts *contexts = h;
+        ContextModel &contextModel = contexts->get<typename Context<V>::Type>(e.ctxInc);
+        *e.value = decodeDecision(bitReader, cabacState, contextModel);
     }
 };
+
+
+static int decodeBypass(CabacState *cabacState, BitReader *bitReader)
+{
+    cabacState->ivlOffset *= 2;
+    if (++cabacState->bitsNeeded >= 0)
+    {
+        cabacState->bitsNeeded = -8;
+        cabacState->ivlOffset |= bitReader->readBytes(1);
+    }
+    int scaledRange = cabacState->ivlCurrRange << 7;
+    int mask = (scaledRange - cabacState->ivlOffset - 1) >> 31;
+    cabacState->ivlOffset -= scaledRange & mask;
+
+    //if ((cabacState->ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
+    //{
+    // h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (cabacState->ivlOffset >> 7));
+    // throw Abort();
+    //}
+
+    //if ((cabacState->ivlOffset >> 7) >= (scaledRange >> 7)) // CondCheck 9.3.4.3.4-A
+    //{
+    // h(Violation("9.3.4.3.4", "ivlOffset{%1%} >= ivlCurrRange{%2%} after DecodeBypass")
+    //         % (cabacState->ivlOffset >> 7)
+    //         % (scaledRange >> 7));
+    // throw Abort();
+    //}
+
+    return mask & 1;
+}
 
 
 template <class V>
 struct Read<DecodeBypass<V>>
 {
-    template <class H> static void go(DecodeBypass<V> e, H &h)
+    template <class H> static inline void go(DecodeBypass<V> e, H &h)
     {
-        int binVal = 0;
-
-        BitReader &reader = *static_cast<BitReader *>(h);
-        CabacState &state = *static_cast<CabacState *>(h);
-
-        state.ivlOffset *= 2;
-        if (++state.bitsNeeded >= 0)
-        {
-            state.bitsNeeded = -8;
-            state.ivlOffset |= read_bytes<int>(h, 1);
-        }
-        unsigned scaledRange = state.ivlCurrRange << 7;
-        if (state.ivlOffset >= scaledRange)
-        {
-            state.ivlOffset -= scaledRange;
-            binVal = 1;
-        }
-        if ((state.ivlOffset >> 7) >= 510) // CondCheck 9.3.2.5-A
-        {
-            h(Violation("9.3.2.5", "ivlOffset{%1%} >= 510") % (state.ivlOffset >> 7));
-            throw Abort();
-        }
-        if ((state.ivlOffset >> 7) >= (scaledRange >> 7)) // CondCheck 9.3.4.3.4-A
-        {
-            h(Violation("9.3.4.3.4", "ivlOffset{%1%} >= ivlCurrRange{%2%} after DecodeBypass")
-                % (state.ivlOffset >> 7)
-                % (scaledRange >> 7));
-            throw Abort();
-        }
-
-        *e.value = binVal;
+        CabacState *cabacState = h;
+        BitReader *bitReader = h;
+        *e.value = decodeBypass(cabacState, bitReader);
     }
 };
 
@@ -781,8 +736,6 @@ struct Read<coding_unit>
 
         Syntax<coding_unit>::go(cu, h);
 
-        statePictureBase->loopFilterPicture->processCu(h, cu);
-
         qpState->postCu(cu, h);
 
         if (h[IntraSplitFlag()])
@@ -830,19 +783,6 @@ struct Read<transform_tree>
 
 
 template <>
-struct Read<transform_unit>
-{
-    template <class H> static void go(const transform_unit &tu, H &h)
-    {
-        StatePicture *statePictureBase = h;
-        statePictureBase->loopFilterPicture->processTu(h, tu);
-
-        Syntax<transform_unit>::go(tu, h);
-    }
-};
-
-
-template <>
 struct Read<pcm_sample>
 {
     template <class H> static void go(const pcm_sample &fun, H &h)
@@ -856,64 +796,346 @@ struct Read<pcm_sample>
 };
 
 
-template <class H>
-void clearCoeffs(H &h)
+static int subBlockRaster(int log2TrafoSize, int x, int y)
 {
-    for (int i = 0; i < 16; ++i)
+    switch (log2TrafoSize)
     {
-        h[coeff_abs_level_greater1_flag(i)] = 0;
-        h[coeff_abs_level_greater2_flag(i)] = 0;
-        h[coeff_abs_level_remaining(i)] = 0;
-        h[coeff_sign_flag(i)] = 0;
+    default:
+        assert(false);
+    case 2:
+        return 0;
+    case 3:
+        return ((y & ~3) >> 1) | (x >> 2);
+    case 4:
+        return (y & ~3) | (x >> 2);
+    case 5:
+        return ((y & ~3) << 1) | (x >> 2);
     }
 }
 
+
+template <int log2TrafoSize>
+struct ResidualCodingStateOptimised
+    :
+    ValueCache<scanIdx>
+{
+    template <class H>
+    ResidualCodingStateOptimised(H &h)
+        :
+        ValueCache<scanIdx>(h)
+    {
+    }
+
+    uint64_t codedSubBlockFlags = 0;
+    int nSigCoeffs;
+    ScanPos coeffPositions[17];
+    int nn[17];
+    int32_t absoluteCoefficients[17];
+    uint16_t remaining;
+};
+
+
+template <int log2TrafoSize>
+struct Access<coded_sub_block_flag, ResidualCodingStateOptimised<log2TrafoSize>>
+{
+    static int shift(coded_sub_block_flag v)
+    {
+        int a = 8 + v.xS - v.yS;
+        assert(a > 0 && a < 16);
+        return a;
+        //return 8 + v.xS - v.yS;
+        //return v.xS + (v.yS << (log2TrafoSize - 2));
+    }
+    typedef int Type;
+    static Type get(coded_sub_block_flag v, ResidualCodingStateOptimised<log2TrafoSize> &s)
+    {
+        return (s.codedSubBlockFlags >> shift(v)) & 1;
+    }
+    static void set(coded_sub_block_flag v, Type x, ResidualCodingStateOptimised<log2TrafoSize> &s)
+    {
+        auto const mask = static_cast<uint64_t>(1) << shift(v);
+        if (x)
+            s.codedSubBlockFlags |= mask;
+        else
+            s.codedSubBlockFlags &= ~mask;
+    }
+};
+
+
+template <int log2TrafoSize, class H>
+void optimisedReadResidualCoding(H &hParent)
+{
+    ResidualCodingStateOptimised<log2TrafoSize> residualCodingState(hParent);
+    auto h = hParent.extend(&residualCodingState);
+
+    StateSubstream *stateSubstream = h;
+    residual_coding *rc = h;
+    assert(rc->log2TrafoSize == log2TrafoSize);
+
+    if (std::is_same<typename H::Tag, Decode<void>>::value)
+    {
+        const int sizeC = 1 << rc->log2TrafoSize;
+        for (int yC = 0; yC < sizeC; ++yC)
+        {
+            for (int xC = 0; xC < sizeC; ++xC)
+            {
+                h[TransCoeffLevel(rc->x0, rc->y0, rc->cIdx, xC, yC)] = 0;
+            }
+        }
+    }
+
+    stateSubstream->lastGreater1Flag = 1;
+    stateSubstream->lastGreater1Ctx = -1;
+
+    stateSubstream->cLastAbsLevel = 0;
+    stateSubstream->firstCoeffAbsLevelRemainingInSubblock = true;
+
+    h[transform_skip_flag()] = 0;
+    h[explicit_rdpcm_flag()] = 0;
+
+    if (h[transform_skip_enabled_flag()] && !h[cu_transquant_bypass_flag()] && (log2TrafoSize <= h[Log2MaxTransformSkipSize()]))
+        h(transform_skip_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+
+    if (h[current(CuPredMode(rc->x0, rc->y0))] == MODE_INTER  &&  h[explicit_rdpcm_enabled_flag()] &&
+        (h[transform_skip_flag(rc->x0, rc->y0, rc->cIdx)] || h[cu_transquant_bypass_flag()]))
+    {
+        h(explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+        if (h[explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx)])
+            h(explicit_rdpcm_dir_flag(rc->x0, rc->y0, rc->cIdx), ae(v));
+    }
+
+    h(last_sig_coeff_x_prefix(), ae(v));
+    h(last_sig_coeff_y_prefix(), ae(v));
+    if (h[last_sig_coeff_x_prefix()] > 3)
+        h(last_sig_coeff_x_suffix(), ae(v));
+    if (h[last_sig_coeff_y_prefix()] > 3)
+        h(last_sig_coeff_y_suffix(), ae(v));
+
+    auto xx = h[LastSignificantCoeffX()];
+    auto yy = h[LastSignificantCoeffY()];
+
+    auto const lastSigCoeffRaster = ((h[LastSignificantCoeffY()] & 3) << 2) | (h[LastSignificantCoeffX()] & 3);
+    auto const lastSigSubBlockRaster = subBlockRaster(log2TrafoSize, h[LastSignificantCoeffX()], h[LastSignificantCoeffY()]);
+
+    auto const lastScanPos = scanPosInverse<2>(h[scanIdx()], lastSigCoeffRaster);
+    auto const lastSubBlock = scanPosInverse<log2TrafoSize - 2>(h[scanIdx()], lastSigSubBlockRaster);
+
+    int escapeDataPresent = 0;
+
+    auto const &sp = scanPos<log2TrafoSize - 2>().lookup[h[scanIdx()]];
+    auto const &sp2 = scanPos<2>().lookup[h[scanIdx()]];
+    int &i = stateSubstream->i;
+    for (i = lastSubBlock; i >= 0; i--)
+    {
+        auto const s = sp[i];
+        const auto &xS = s.x;
+        const auto &yS = s.y;
+        auto const offset = 8 + xS - yS;
+
+        // read coded_sub_block_flag
+        int inferSbDcSigCoeffFlag = 0;
+        if (i == 0)
+        {
+        }
+        else if (i < lastSubBlock)
+        {
+            h(coded_sub_block_flag(xS, yS), ae(v));
+            inferSbDcSigCoeffFlag = 1;
+        }
+
+        auto const s2 = s << 2;
+
+        if (i && !h[coded_sub_block_flag(offset - 8, 0)])
+            continue;
+
+
+        residualCodingState.nSigCoeffs = 0;
+        residualCodingState.remaining = ~0;
+
+        int max = 15;
+        if (i == lastSubBlock)
+        {
+            residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = 1;
+            residualCodingState.nn[residualCodingState.nSigCoeffs] = lastScanPos;
+            residualCodingState.coeffPositions[residualCodingState.nSigCoeffs++] = s2 + sp2[lastScanPos];
+            max = lastScanPos - 1;
+        }
+
+        // read sig_coeff_flag
+
+        for (int n = max; n >= inferSbDcSigCoeffFlag; n--)
+        {
+            auto const c = s2 + sp2[n];
+            h(sig_coeff_flag(c.x, c.y), ae(v));
+            residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = h[sig_coeff_flag(c.x, c.y)];
+            inferSbDcSigCoeffFlag &= !h[sig_coeff_flag(c.x, c.y)];
+            int mask = -h[sig_coeff_flag(c.x, c.y)];
+            //if (std::is_same<typename H::Tag, Decode<void>>::value)
+            residualCodingState.nn[residualCodingState.nSigCoeffs] = n;
+            residualCodingState.coeffPositions[residualCodingState.nSigCoeffs] = c;
+            residualCodingState.nSigCoeffs += h[sig_coeff_flag(c.x, c.y)];
+        }
+        residualCodingState.absoluteCoefficients[residualCodingState.nSigCoeffs] = 1;
+        //if (std::is_same<typename H::Tag, Decode<void>>::value)
+        residualCodingState.nn[residualCodingState.nSigCoeffs] = 0;
+        residualCodingState.coeffPositions[residualCodingState.nSigCoeffs] = s2;
+        residualCodingState.nSigCoeffs += inferSbDcSigCoeffFlag;
+
+        if (!residualCodingState.nSigCoeffs)
+            continue;
+
+        auto pnn = &residualCodingState.nn[residualCodingState.nSigCoeffs];
+        auto pCoeffPositions = &residualCodingState.coeffPositions[residualCodingState.nSigCoeffs];
+
+        // read coeff_abs_level_greater1_flag
+        int firstSigScanPos = 16;
+        int lastSigScanPos = -1;
+        h[numGreater1Flag()] = 0;
+        int lastGreater1ScanPos = -1;
+        int lastGreater1m = -1;
+
+        int mm = -residualCodingState.nSigCoeffs;
+        do
+        {
+            int m = residualCodingState.nSigCoeffs + mm;
+            auto const c = pCoeffPositions[mm];
+            int n = pnn[mm];
+            auto const &xC = c.x;
+            auto const &yC = c.y;
+
+            if (h[numGreater1Flag()] < 8)
+            {
+                h(coeff_abs_level_greater1_flag(n), ae(v));
+                h[numGreater1Flag()]++;
+
+                if (h[coeff_abs_level_greater1_flag(n)])
+                {
+                    residualCodingState.absoluteCoefficients[m] = 2;
+                    if (lastGreater1ScanPos == -1)
+                    {
+                        lastGreater1ScanPos = n;
+                        lastGreater1m = m;
+                    }
+                }
+                else
+                {
+                    residualCodingState.remaining &= ~(1 << m);
+                }
+            }
+            else
+            {
+                escapeDataPresent = 1;
+            }
+
+            if (lastSigScanPos == -1)
+                lastSigScanPos = n;
+
+            firstSigScanPos = n;
+
+        } while (++mm);
+
+        int signHidden = 0;
+        if (h[sign_data_hiding_enabled_flag()])
+        {
+            if (h[cu_transquant_bypass_flag()] ||
+                (h[current(CuPredMode(rc->x0, rc->y0))] == MODE_INTRA  &&
+                    h[implicit_rdpcm_enabled_flag()] && h[transform_skip_flag(rc->x0, rc->y0, rc->cIdx)] &&
+                    predModeIntraIs10or26(*rc, h)) ||
+                h[explicit_rdpcm_flag(rc->x0, rc->y0, rc->cIdx)])
+            {
+            }
+            else
+            {
+                signHidden = lastSigScanPos - firstSigScanPos > 3;
+            }
+        }
+
+        // read coeff_abs_level_greater2_flag
+        if (lastGreater1ScanPos != -1)
+        {
+            h(coeff_abs_level_greater2_flag(lastGreater1ScanPos), ae(v));
+            if (h[coeff_abs_level_greater2_flag(lastGreater1ScanPos)])
+            {
+                residualCodingState.absoluteCoefficients[lastGreater1m] = 3;
+                escapeDataPresent = 1;
+            }
+            else
+            {
+                residualCodingState.remaining &= ~(1 << lastGreater1m);
+            }
+        }
+
+        if (h[cabac_bypass_alignment_enabled_flag()] && escapeDataPresent)
+        {
+            assert(!"alignment not yet implemented");
+        }
+
+        mm = -residualCodingState.nSigCoeffs + signHidden;
+        do
+        {
+            int n = std::is_same<typename H::Tag, Decode<void>>::value ? pnn[mm - signHidden] : -1;
+            h(coeff_sign_flag(n), ae(v));
+        } while (++mm);
+
+        // read coeff_abs_level_remaining
+        mm = -residualCodingState.nSigCoeffs;
+        do
+        {
+            int m = residualCodingState.nSigCoeffs + mm;
+
+            if ((residualCodingState.remaining >> m) & 1)
+            {
+                h(coeff_abs_level_remaining(-1), ae(v));
+                residualCodingState.absoluteCoefficients[m] += h[coeff_abs_level_remaining(-1)];
+                stateSubstream->cLastAbsLevel = residualCodingState.absoluteCoefficients[m];
+            }
+        } while (++mm);
+
+        if (std::is_same<typename H::Tag, Decode<void>>::value)
+        {
+            int sumAbsLevel = 0;
+            mm = -residualCodingState.nSigCoeffs;
+            do
+            {
+                int m = residualCodingState.nSigCoeffs + mm;
+                auto const c = pCoeffPositions[mm];
+                int n = pnn[mm];
+                auto const &xC = c.x;
+                auto const &yC = c.y;
+
+                const int baseLevel = residualCodingState.absoluteCoefficients[m];
+                sumAbsLevel ^= (baseLevel);
+
+                if (signHidden)
+                {
+                    if (n == firstSigScanPos)
+                        h[coeff_sign_flag(n)] = sumAbsLevel & 1;
+                }
+
+                h[TransCoeffLevel(rc->x0, rc->y0, rc->cIdx, xC, yC)] = baseLevel * (1 - 2 * h[coeff_sign_flag(n)]);
+
+            } while (++mm);
+        }
+    }
+}
 template <>
 struct Read<residual_coding>
 {
     template <class H> static void go(const residual_coding &rc, H &hParent)
     {
-        static_cast<StatePicture *>(hParent)->loopFilterPicture->processRc(hParent, rc);
-
-        ResidualCodingState residualCodingState(hParent);
-
-        auto h =  hParent.extend(&residualCodingState);
-
-        const int sizeS = 1 << (rc.log2TrafoSize - 2);
-        for (int yS = 0; yS < sizeS; ++yS)
+        static void(*const read[6])(H &) =
         {
-            for (int xS = 0; xS < sizeS; ++xS)
-            {
-                h[coded_sub_block_flag(xS, yS)] = 0;
-            }
-        }
-        h[coded_sub_block_flag(0, 0)] = 1;
+            0,
+            0,
+            optimisedReadResidualCoding<2, H>,
+            optimisedReadResidualCoding<3, H>,
+            optimisedReadResidualCoding<4, H>,
+            optimisedReadResidualCoding<5, H>,
+        };
+        read[rc.log2TrafoSize](hParent);
+     }
+ };
 
-        const int sizeC = 1 << rc.log2TrafoSize;
-        for (int yC = 0; yC < sizeC; ++yC)
-        {
-            for (int xC = 0; xC < sizeC; ++xC)
-            {
-                h[sig_coeff_flag(xC, yC)] = 0;
-                h[TransCoeffLevel(rc.x0, rc.y0, rc.cIdx, xC, yC)] = 0;
-            }
-        }
-
-        clearCoeffs(h);
-
-        StateSubstream& stateSubstream = *static_cast<StateSubstream *>(h);
-        stateSubstream.lastGreater1Flag = 1;
-        stateSubstream.lastGreater1Ctx = -1;
-
-        stateSubstream.cLastAbsLevel = 0;
-        stateSubstream.firstCoeffAbsLevelRemainingInSubblock = true;
-
-        h[transform_skip_flag()] = 0;
-        h[explicit_rdpcm_flag()] = 0;
-
-        Syntax<residual_coding>::go(rc, h);
-    }
-};
 
 
 template <class V>
@@ -1001,11 +1223,11 @@ struct ReadSaoTypeIdx
 };
 
 template <>
-struct Read<Element<sao_type_idx_luma, ae>> : ReadSaoTypeIdx<sao_type_idx_luma>{};
+struct Read<Element<sao_type_idx_luma, ae>> : ReadSaoTypeIdx<sao_type_idx_luma> {};
 
 
 template <>
-struct Read<Element<sao_type_idx_chroma, ae>> : ReadSaoTypeIdx<sao_type_idx_chroma>{};
+struct Read<Element<sao_type_idx_chroma, ae>> : ReadSaoTypeIdx<sao_type_idx_chroma> {};
 
 
 template <>
@@ -1048,11 +1270,11 @@ struct ReadFixedLengthBypass
 
 
 template <>
-struct Read<Element<sao_offset_sign, ae>> : ReadFixedLengthBypass<sao_offset_sign, 1>{};
+struct Read<Element<sao_offset_sign, ae>> : ReadFixedLengthBypass<sao_offset_sign, 1> {};
 
 
 template <>
-struct Read<Element<sao_band_position, ae>> : ReadFixedLengthBypass<sao_band_position, 5>{};
+struct Read<Element<sao_band_position, ae>> : ReadFixedLengthBypass<sao_band_position, 5> {};
 
 
 template <>
@@ -1215,7 +1437,7 @@ struct Read<Element<split_cu_flag, ae>>
 
 
 template <>
-struct Read<Element<cu_transquant_bypass_flag, ae>> : DecisionLength1<cu_transquant_bypass_flag>{};
+struct Read<Element<cu_transquant_bypass_flag, ae>> : DecisionLength1<cu_transquant_bypass_flag> {};
 
 
 
@@ -1227,8 +1449,8 @@ struct Read<Element<cu_skip_flag, ae>>
         coding_quadtree *cqt = h;
 
         const int ctxInc =
-                h[cu_skip_flag(fun.v.x0 - 1, fun.v.y0)] +
-                h[cu_skip_flag(fun.v.x0, fun.v.y0 - 1)];
+            h[cu_skip_flag(fun.v.x0 - 1, fun.v.y0)] +
+            h[cu_skip_flag(fun.v.x0, fun.v.y0 - 1)];
 
         int binVal;
         h(DecodeDecision<cu_skip_flag>(&binVal, ctxInc));
@@ -1355,7 +1577,7 @@ struct Read<Element<part_mode, ae>>
 
 
 template <>
-struct Read<Element<prev_intra_luma_pred_flag, ae>> : DecisionLength1<prev_intra_luma_pred_flag>{};
+struct Read<Element<prev_intra_luma_pred_flag, ae>> : DecisionLength1<prev_intra_luma_pred_flag> {};
 
 
 template <>
@@ -1449,6 +1671,14 @@ template <>
 struct Read<Element<rqt_root_cbf, ae>> : DecisionLength1<rqt_root_cbf> { };
 
 
+// compute and store loop filter metadata for specified entity
+template <class F> struct Process { };
+
+
+template <>
+struct Read<Process<prediction_unit>> : Null<Process<prediction_unit>> { };
+
+
 template <>
 struct Read<prediction_unit>
 {
@@ -1472,10 +1702,9 @@ struct Read<prediction_unit>
 
         PuData &puData = cursor->current(0, 0, h[MinCbLog2SizeY()] - 1);
 
-        processPredictionUnit(h, pu, puData, stateSubstream->partIdx);
+        processPredictionUnit(h, pu, puData, stateSubstream->partIdx, h[merge_idx(xPb, yPb)]);
 
-        StatePicture *statePictureBase = h;
-        statePictureBase->loopFilterPicture->processPu(h, pu);
+        h(Process<prediction_unit>());
 
         cursor->commit(pu, h[MinCbLog2SizeY()] - 1);
 
@@ -1614,19 +1843,19 @@ struct Read<mvd_coding>
 
 
 template <>
-struct Read<Element<abs_mvd_greater0_flag, ae>> : DecisionLength1<abs_mvd_greater0_flag>{};
+struct Read<Element<abs_mvd_greater0_flag, ae>> : DecisionLength1<abs_mvd_greater0_flag> {};
 
 
 template <>
-struct Read<Element<abs_mvd_greater1_flag, ae>> : DecisionLength1<abs_mvd_greater1_flag>{};
+struct Read<Element<abs_mvd_greater1_flag, ae>> : DecisionLength1<abs_mvd_greater1_flag> {};
 
 
 template <>
-struct Read<Element<mvp_l0_flag, ae>> : DecisionLength1<mvp_l0_flag>{};
+struct Read<Element<mvp_l0_flag, ae>> : DecisionLength1<mvp_l0_flag> {};
 
 
 template <>
-struct Read<Element<mvp_l1_flag, ae>> : DecisionLength1<mvp_l1_flag>{};
+struct Read<Element<mvp_l1_flag, ae>> : DecisionLength1<mvp_l1_flag> {};
 
 
 
@@ -1642,13 +1871,13 @@ struct ReadRefIdx
             int binVal;
             switch (binIdx)
             {
-                case 0:
-                case 1:
-                    h(DecodeDecision<V>(&binVal, binIdx));
-                    break;
-                default:
-                    h(DecodeBypass<V>(&binVal));
-                    break;
+            case 0:
+            case 1:
+                h(DecodeDecision<V>(&binVal, binIdx));
+                break;
+            default:
+                h(DecodeBypass<V>(&binVal));
+                break;
             }
             if (!binVal) break;
         }
@@ -1658,14 +1887,14 @@ struct ReadRefIdx
 
 template <>
 struct Read<Element<ref_idx_l0, ae>> :
-ReadRefIdx<ref_idx_l0, num_ref_idx_l0_active_minus1>
+    ReadRefIdx<ref_idx_l0, num_ref_idx_l0_active_minus1>
 {
 };
 
 
 template <>
 struct Read<Element<ref_idx_l1, ae>> :
-ReadRefIdx<ref_idx_l1, num_ref_idx_l1_active_minus1>
+    ReadRefIdx<ref_idx_l1, num_ref_idx_l1_active_minus1>
 {
 };
 
@@ -1699,7 +1928,7 @@ struct Read<Element<abs_mvd_minus2, ae>>
 
 
 template <>
-struct Read<Element<mvd_sign_flag, ae>> : ReadFixedLengthBypass<mvd_sign_flag, 1>{};
+struct Read<Element<mvd_sign_flag, ae>> : ReadFixedLengthBypass<mvd_sign_flag, 1> {};
 
 
 template <>
@@ -1941,7 +2170,7 @@ struct LastSigCoeffPrefix
 
 template <>
 struct Read<Element<last_sig_coeff_x_prefix, ae>> :
-LastSigCoeffPrefix<last_sig_coeff_x_prefix>
+    LastSigCoeffPrefix<last_sig_coeff_x_prefix>
 {
 };
 
@@ -1957,9 +2186,9 @@ int computeLast(H &h)
     else
     {
         return
-                (1 << ((h[Prefix()] >> 1) - 1))
-                * (2 + (h[Prefix()] & 1))
-                + h[Suffix()];
+            (1 << ((h[Prefix()] >> 1) - 1))
+            * (2 + (h[Prefix()] & 1))
+            + h[Suffix()];
     }
 }
 
@@ -1977,25 +2206,20 @@ void setLast(H &h)
         h[LastSignificantCoeffX()] = computeLast<last_sig_coeff_x_prefix, last_sig_coeff_x_suffix>(h);
         h[LastSignificantCoeffY()] = computeLast<last_sig_coeff_y_prefix, last_sig_coeff_y_suffix>(h);
     }
-    h[coded_sub_block_flag(h[LastSignificantCoeffX()] >> 2, h[LastSignificantCoeffY()] >> 2)] = 1;
-    h[sig_coeff_flag(h[LastSignificantCoeffX()], h[LastSignificantCoeffY()])] = 1;
-
-    //BitReader &reader = *static_cast<BitReader *>(h);
-    //if (reader.log) *reader.log
-    //	<< "last: " << h[LastSignificantCoeffX()] << ", " << h[LastSignificantCoeffY()] << "\n"
-    //	<< "scanIdx: " << h[scanIdx()] << "\n";
+    int v = 1;
+    Access<coded_sub_block_flag, H>::set(coded_sub_block_flag(h[LastSignificantCoeffX()] >> 2, h[LastSignificantCoeffY()] >> 2), v, h);
 }
 
 template <>
 struct Read<Element<last_sig_coeff_y_prefix, ae>> :
     LastSigCoeffPrefix<last_sig_coeff_y_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_y_prefix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_y_prefix, ae> fun, H &h)
-        {
-            LastSigCoeffPrefix<last_sig_coeff_y_prefix>::go(fun, h);
-            if (h[last_sig_coeff_x_prefix()] <= 3 && h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
-        }
-    };
+        LastSigCoeffPrefix<last_sig_coeff_y_prefix>::go(fun, h);
+        if (h[last_sig_coeff_x_prefix()] <= 3 && h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
+    }
+};
 
 
 template <class V, class Prefix>
@@ -2020,25 +2244,25 @@ struct LastSigCoeffSuffix
 template <>
 struct Read<Element<last_sig_coeff_x_suffix, ae>> :
     LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_x_suffix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_x_suffix, ae> fun, H &h)
-        {
-            LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>::go(fun, h);
-            if (h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
-        }
-    };
+        LastSigCoeffSuffix<last_sig_coeff_x_suffix, last_sig_coeff_x_prefix>::go(fun, h);
+        if (h[last_sig_coeff_y_prefix()] <= 3) setLast(h);
+    }
+};
 
 
 template <>
 struct Read<Element<last_sig_coeff_y_suffix, ae>> :
     LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>
+{
+    template <class H> static void go(Element<last_sig_coeff_y_suffix, ae> fun, H &h)
     {
-        template <class H> static void go(Element<last_sig_coeff_y_suffix, ae> fun, H &h)
-        {
-            LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>::go(fun, h);
-            setLast(h);
-        }
-    };
+        LastSigCoeffSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>::go(fun, h);
+        setLast(h);
+    }
+};
 
 
 template <>
@@ -2048,10 +2272,9 @@ struct Read<Element<coded_sub_block_flag, ae>>
     {
         int binVal;
         h(DecodeDecision<coded_sub_block_flag>(&binVal, ctxInc(h, fun.v)));
-        h[fun.v] = binVal;
+        Access<coded_sub_block_flag, H>::set(fun.v, binVal, h);
         if (binVal)
         {
-            h[sig_coeff_flag(fun.v.xS << 2, fun.v.yS << 2)] = 1;
             StateSubstream& stateSubstream = *static_cast<StateSubstream *>(h);
             stateSubstream.cLastAbsLevel = 0;
             stateSubstream.firstCoeffAbsLevelRemainingInSubblock = true;
@@ -2081,12 +2304,6 @@ struct Read<Element<sig_coeff_flag, ae>>
 {
     template <class H> static void go(Element<sig_coeff_flag, ae> fun, H &h)
     {
-        const bool nIs15 = ((fun.v.xC & 3) | (fun.v.xC & 3)) == 3;
-        if (nIs15)
-        {
-            clearCoeffs(h);
-        }
-
         residual_coding &rc = *static_cast<residual_coding *>(h);
         int binVal;
         h(DecodeDecision<sig_coeff_flag>(&binVal, ctxInc(h, rc.cIdx, fun.v.xC, fun.v.yC, h[scanIdx()], rc.log2TrafoSize)));
@@ -2113,10 +2330,10 @@ struct Read<Element<sig_coeff_flag, ae>>
         {
             const int ctxIdxMap[16] =
             {
-                    0, 1, 4, 5,
-                    2, 3, 4, 5,
-                    6, 6, 8, 8,
-                    7, 7, 8, 8
+                0, 1, 4, 5,
+                2, 3, 4, 5,
+                6, 6, 8, 8,
+                7, 7, 8, 8
             };
             sigCtx = ctxIdxMap[(yC << 2) + xC];
         }
@@ -2281,7 +2498,7 @@ struct Read<Element<coeff_abs_level_greater2_flag, ae>>
 
 
 template <>
-struct Read<Element<coeff_sign_flag, ae>> : ReadFixedLengthBypass<coeff_sign_flag, 1>{};
+struct Read<Element<coeff_sign_flag, ae>> : ReadFixedLengthBypass<coeff_sign_flag, 1> {};
 
 
 template <>
@@ -2312,8 +2529,7 @@ struct Read<Element<coeff_abs_level_remaining, ae>>
         {
             ++prefix;
             h(DecodeBypass<coeff_abs_level_remaining>(&codeWord));
-        }
-        while (codeWord);
+        } while (codeWord);
 
         codeWord = 1 - codeWord;
         prefix -= codeWord;
@@ -2412,14 +2628,26 @@ struct Read<CodedVideoSequence>
 {
     template <class H> static void go(CodedVideoSequence, H &h)
     {
-        auto statePictures = &h[Concrete<StatePicturesBase>()];
+        StatePictures *statePictures = h;
 
-        ++ statePictures->codedVideoSequenceId;
+        h[Active<Sps>()].reset();
+        h[Active<Vps>()].reset();
+
+        ++statePictures->codedVideoSequenceId;
         statePictures->posEndCvs = h[::Stream()].len;
 
         while (!h[::Stop()] && h[::Stream()].state.pos < statePictures->posEndCvs)
         {
-            h(AccessUnit());
+            auto newPicture = h[NewPicture()];
+            auto hPicture = h.extend(newPicture.get());
+
+            hPicture[Active<Vps>()] = h[Active<Vps>()];
+            hPicture[Active<Sps>()] = h[Active<Sps>()];
+
+            hPicture(AccessUnit());
+
+            h[Active<Vps>()] = hPicture[Active<Vps>()];
+            h[Active<Sps>()] = hPicture[Active<Sps>()];
         }
     }
 };
@@ -2461,88 +2689,75 @@ struct NalUnitInfo
 template <>
 struct Read<AccessUnit>
 {
-    template <class H> static void go(AccessUnit au, H &hh)
+    template <class H> static void go(AccessUnit au, H &h)
     {
-        // Retrieve a reference to the derived class of StatePictures in use within H
-        auto &statePicturesConcrete = hh[Concrete<StatePictures>()];
+        StatePicturesBase *statePicturesBase = h;
+        statePicturesBase->sliceHeaderValid = false;
 
-        // Ask that derived class to make a new picture (usually a derived class of StatePicture)
-        auto *statePictureDerivative = statePicturesConcrete.newPicture();
-
-        std::shared_ptr<StatePicture> statePicture{ statePictureDerivative };
-
-        // Extend the handler with the picture state
-        auto h = hh.extend(statePictureDerivative);
-
+        size_t posNextAu = bitLen(h[::Stream()]) / 8;
+        while (h[Position<Bytes<>>()] < posNextAu)
         {
-            size_t posNextAu = bitLen(h[::Stream()]) / 8;
-
-            while (h[Position<Bytes<>>()] < posNextAu)
+            try
             {
+                const size_t NumBytesInNalUnit = numBytesInNalUnit(h[::Stream()]);
+                h(byte_stream_nal_unit(boost::numeric_cast<int>(NumBytesInNalUnit)));
+            }
+            catch (boost::numeric::bad_numeric_cast &)
+            {
+                h(Violation("7", "NAL unit too large"));
+                h[Stop()] = 1;
+                break;
+            }
+            catch (Abort &)
+            {
+                h[Stop()] = 1;
+                break;
+            }
+            const bool firstSliceSegmentInPicture = isSliceSegment(h[nal_unit_type()]) && h[first_slice_segment_in_pic_flag()];
+            if (firstSliceSegmentInPicture)
+            {
+                size_t startPos = 0;
+
+                typename Access<Stream, H>::SetType::Bookmark mark(h[::Stream()]);
                 try
                 {
-                    const size_t NumBytesInNalUnit = numBytesInNalUnit(h[::Stream()]);
-                    h(byte_stream_nal_unit(boost::numeric_cast<int>(NumBytesInNalUnit)));
-                }
-                catch (boost::numeric::bad_numeric_cast &)
-                {
-                    h(Violation("7", "NAL unit too large"));
-                    h[Stop()] = 1;
-                    break;
-                }
-                catch (Abort &)
-                {
-                    h[Stop()] = 1;
-                    break;
-                }
-                const bool firstSliceSegmentInPicture = isSliceSegment(h[nal_unit_type()]) && h[first_slice_segment_in_pic_flag()];
-                if (firstSliceSegmentInPicture)
-                {
-                    size_t startPos = 0;
-
-                    typename Access<Stream, H>::SetType::Bookmark mark(h[::Stream()]);
-                    try
+                    bool seenEos = false;
+                    // loop over NAL units
+                    while (true)
                     {
-                        bool seenEos = false;
-                        // loop over NAL units
-                        while (true)
+                        NalUnitInfo info(h[::Stream()]);
+
+                        if (!startPos && (info.firstSliceSegment || startsNewAccessUnit(info.nal_unit_type)))
                         {
-                            NalUnitInfo info(h[::Stream()]);
+                            startPos = info.pos;
+                        }
 
-                            if (!startPos && (info.firstSliceSegment || startsNewAccessUnit(info.nal_unit_type)))
+                        if (info.firstSliceSegment)
+                        {
+                            posNextAu = startPos;
+
+                            if (isIdr(info.nal_unit_type) || isBla(info.nal_unit_type) || seenEos)
                             {
-                                startPos = info.pos;
+                                static_cast<StatePicturesBase *>(h)->posEndCvs = posNextAu;
                             }
 
-                            if (info.firstSliceSegment)
-                            {
-                                posNextAu = startPos;
+                            break;
+                        }
 
-                                if (isIdr(info.nal_unit_type) || isBla(info.nal_unit_type) || seenEos)
-                                {
-                                    static_cast<StatePicturesBase *>(h)->posEndCvs = posNextAu;
-                                }
-
-                                break;
-                            }
-
-                            {
-                                if (info.nal_unit_type == EOS_NUT) seenEos = true;
-                            }
+                        {
+                            if (info.nal_unit_type == EOS_NUT) seenEos = true;
                         }
                     }
-                    catch (ExceptionOverrun &)
-                    {
-                    }
+                }
+                catch (ExceptionOverrun &)
+                {
                 }
             }
+        }
 
-            StatePicturesBase *statePicturesBase = h;
-            if (statePicturesBase->sliceHeaderValid)
-            {
-                auto statePictures = &h[Concrete<StatePicturesBase>()];
-                statePictures->accessUnitDone(h);
-            }
+        if (statePicturesBase->sliceHeaderValid)
+        {
+            h(PictureDone());
         }
     };
 };
@@ -2591,14 +2806,14 @@ struct AccessCbfRead
 template <class S>
 struct Access<cbf_cb, S, typename std::enable_if<std::is_base_of<ChromaCbf, S>::value>::type> :
     AccessCbfRead<cbf_cb, 1>
-    {
-    };
+{
+};
 
 template <class S>
 struct Access<cbf_cr, S, typename std::enable_if<std::is_base_of<ChromaCbf, S>::value>::type> :
     AccessCbfRead<cbf_cr, 2>
-    {
-    };
+{
+};
 
 
 
@@ -2610,8 +2825,8 @@ struct RbspState :
     ChromaCbf,
     ValueHolder<cbf_luma>,
     ValueHolder<rqt_root_cbf>
-    {
-    };
+{
+};
 
 template <class S>
 struct Access<Stream, S, typename std::enable_if<std::is_base_of<RbspState, S>::value>::type>
@@ -2637,9 +2852,9 @@ struct Read<video_parameter_set_rbsp>
     template <class H> static void go(const video_parameter_set_rbsp &fun, H &h0)
     {
         std::shared_ptr<Vps> vps(new Vps());
-        auto hh =  h0.extend(&*vps);
-        auto hhh =  hh.extend(&vps->ptl);
-        auto h =  hhh.extend(&vps->hrdArray);
+        auto hh = h0.extend(&*vps);
+        auto hhh = hh.extend(&vps->ptl);
+        auto h = hhh.extend(&vps->hrdArray);
 
         try
         {
@@ -2673,7 +2888,7 @@ struct Read<hrd_parameters>
 
         hrdArray.hrd.push_back(Hrd());
 
-        auto h2 =  h.extend(&hrdArray.hrd.back());
+        auto h2 = h.extend(&hrdArray.hrd.back());
 
         for (int i = 0; i <= fun.maxNumSubLayersMinus1; i++)
         {
@@ -2694,7 +2909,7 @@ struct Read<sub_layer_hrd_parameters>
 
         hrd.sublayers.push_back(Hrd::SubLayer());
 
-        auto h2 =  h.extend(&hrd.sublayers.back());
+        auto h2 = h.extend(&hrd.sublayers.back());
 
         Syntax<sub_layer_hrd_parameters>::go(fun, h2);
     }
@@ -2707,10 +2922,10 @@ struct Read<seq_parameter_set_rbsp>
     template <class H> static void go(const seq_parameter_set_rbsp &fun, H &h1)
     {
         std::shared_ptr<Sps> sps(new Sps());
-        auto h2 =  h1.extend(&*sps);
-        auto h3 =  h2.extend(&sps->scalingListState);
-        auto h4 =  h3.extend(&sps->ptl);
-        auto h =  h4.extend(&sps->hrdArray);
+        auto h2 = h1.extend(&*sps);
+        auto h3 = h2.extend(&sps->scalingListState);
+        auto h4 = h3.extend(&sps->ptl);
+        auto h = h4.extend(&sps->hrdArray);
 
         try
         {
@@ -2742,8 +2957,8 @@ struct Read<pic_parameter_set_rbsp>
     {
         std::shared_ptr<Pps> pps(new Pps());
 
-        auto h1 =  h2.extend(&*pps);
-        auto h =  h1.extend(&pps->scalingListState);
+        auto h1 = h2.extend(&*pps);
+        auto h = h1.extend(&pps->scalingListState);
 
         h[uniform_spacing_flag()] = 1;
         h[loop_filter_across_tiles_enabled_flag()] = 1;
@@ -2781,7 +2996,7 @@ struct Read<short_term_ref_pic_set>
     template <class H> static void go(const short_term_ref_pic_set &fun, H &h1)
     {
         Strps strps;
-        auto h =  h1.extend(&strps);
+        auto h = h1.extend(&strps);
 
         h[delta_idx_minus1()] = 0;
         h[inter_ref_pic_set_prediction_flag()] = 0;
@@ -2896,6 +3111,11 @@ struct Read<slice_segment_header>
         *static_cast<SliceSegmentHeaderIndependent *>(h) = SliceSegmentHeaderIndependent();
 
         Syntax<slice_segment_header>::go(v, h);
+
+        StatePictures *statePictures = h;
+        statePictures->sliceHeaderDone(h);
+
+        h[CtbAddrInTs()] = h[CtbAddrRsToTs(h[slice_segment_address()])];
     }
 };
 
@@ -2916,16 +3136,11 @@ struct Read<Element<num_ref_idx_active_override_flag, u>>
 };
 
 
-template <> struct Read<PictureBegin> : Vanilla<PictureBegin> {};
-
-
 template <>
 struct Read<slice_segment_data>
 {
     template <class H> static void go(const slice_segment_data &fun, H &h)
     {
-        h(PictureBegin());
-
         auto statePictures = &h[Concrete<StatePicturesBase>()];
         statePictures->sliceHeaderValid = true; // move this into sliceHeaderDone() ?
 
@@ -2951,34 +3166,18 @@ struct Read<slice_segment_data>
 
         // handle the case where first slice does not have first_slice_in_pic_flag set
         // review
-        if (h[ContainerOf<CtbAddrRsToTs>()].empty()) throw Abort();
+        if (h[ContainerOf<CtbAddrRsToTs>()].empty()) 
+            throw Abort();
 
         StatePicturesBase *statePicturesBase = h;
         statePicturesBase->streamType = StatePicturesBase::streamTypeCabac();
 
         StateSubstream stateSubstream(h);
-        auto h2 =  h.extend(&stateSubstream);
-
-        if (!h2[dependent_slice_segment_flag()])
-        {
-            h2(ContextsInitialize());
-        }
+        auto h2 = h.extend(&stateSubstream);
 
         h2[CtbAddrInTs()] = h[CtbAddrInTs()];
         h2[CtbAddrInRs()] = h[CtbAddrTsToRs(h[CtbAddrInTs()])];
         h2[QpY()] = h[QpY()];
-
-        if (isRasl(h2[nal_unit_type()]) && statePicturesBase->NoRaslOutputFlag)
-        {
-            // associated IRAP picture has NoRaslOutputFlag equal to 1, the RASL picture is not output and may not be correctly decodable
-            seek(h2, bitLen(h2[::Stream()]));
-            return;
-        }
-
-        if (statePicturesBase->skipSliceSegmentData)
-        {
-            return;
-        }
 
         if (h[first_slice_segment_in_pic_flag()])
         {
@@ -2990,12 +3189,16 @@ struct Read<slice_segment_data>
         CabacState *cabacState = h2;
         cabacState->ivlCurrRange = 510;
 
-        Syntax<slice_segment_data>::go(fun, h2);
+        if (isRasl(h2[nal_unit_type()]) && statePicturesBase->NoRaslOutputFlag)
+        {
+            // associated IRAP picture has NoRaslOutputFlag equal to 1, the RASL picture is not output and may not be correctly decodable
+            Greedy<slice_segment_data>::go(fun, h2);
+        }
+        else
+            Syntax<slice_segment_data>::go(fun, h2);
 
         if (h2[dependent_slice_segments_enabled_flag()])
-        {
             h2(ContextsSave(tablesDs));
-        }
 
         h[CtbAddrInTs()] = h2[CtbAddrInTs()];
         h[QpY()] = h2[QpY()];
@@ -3078,39 +3281,6 @@ struct Read<Element<pcm_sample_chroma, uv>>
         h[fun.v] = value;
         BitReader &reader = *static_cast<BitReader *>(h);
         //if (reader.log) *reader.log << "pcm_sample_chroma\tu(" << h[PcmBitDepthC()] << ")\t" << std::hex << value << std::dec << "\n";
-    }
-};
-
-
-template <>
-struct Read<OutputPicture>
-{
-    template <class H> static void go(OutputPicture, H &)
-    {
-    }
-};
-
-template <>
-struct Read<DeletePicture>
-{
-    template <class H> static void go(DeletePicture, H &)
-    {
-    }
-};
-
-template <>
-struct Read<DpbClear>
-{
-    template <class H> static void go(DpbClear, H &)
-    {
-    }
-};
-
-template <>
-struct Read<MotionCand>
-{
-    template <class H> static void go(MotionCand, H &)
-    {
     }
 };
 

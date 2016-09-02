@@ -85,14 +85,9 @@ struct InterLayerConstrainedTileSets :
     };
 
 
-template <class H> void Read<inter_layer_constrained_tile_sets>::go(inter_layer_constrained_tile_sets const &f, H &h)
+template <class H> void Read<inter_layer_constrained_tile_sets>::go(inter_layer_constrained_tile_sets f, H &h)
 {
     InterLayerConstrainedTileSets interLayerConstrainedTileSets;
     auto hh = h.extend(&interLayerConstrainedTileSets);
     Syntax<inter_layer_constrained_tile_sets>::go(f, hh);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(inter_layer_constrained_tile_sets)
-#endif

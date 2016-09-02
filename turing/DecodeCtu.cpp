@@ -24,10 +24,9 @@ For more information, contact us at info @ turingcodec.org.
 #include "Decode.h"
 #include "GlobalState.h"
 #include "Syntax.h"
-#include "Vanilla.h"
 #include "SyntaxCtu.hpp"
 #include "Read.hpp"
 
 
-template void Syntax<struct coding_tree_unit>::go<struct Handler<struct Decode<void>,struct StateSubstream,struct ReconstructedPicture2<unsigned short>,struct RbspState,struct StatePicture,struct StateDecode> >(struct coding_tree_unit const &,struct Handler<struct Decode<void>,struct StateSubstream,struct ReconstructedPicture2<unsigned short>,struct RbspState,struct StatePicture,struct StateDecode> &);
-template void Syntax<struct coding_tree_unit>::go<struct Handler<struct Decode<void>,struct StateSubstream,struct ReconstructedPicture2<unsigned char>,struct RbspState,struct StatePicture,struct StateDecode> >(struct coding_tree_unit const &,struct Handler<struct Decode<void>,struct StateSubstream,struct ReconstructedPicture2<unsigned char>,struct RbspState,struct StatePicture,struct StateDecode> &);
+template void Syntax<struct coding_tree_unit>::go<struct Handler<struct Decode<void>,struct StateSubstream,struct StateReconstructedPicture<unsigned short>,struct RbspState,struct StatePicture,struct StateDecode> >(struct coding_tree_unit const &,struct Handler<struct Decode<void>,struct StateSubstream,struct StateReconstructedPicture<unsigned short>,struct RbspState,struct StatePicture,struct StateDecode> &);
+template void Syntax<struct coding_tree_unit>::go<struct Handler<struct Decode<void>,struct StateSubstream,struct StateReconstructedPicture<unsigned char>,struct RbspState,struct StatePicture,struct StateDecode> >(struct coding_tree_unit const &,struct Handler<struct Decode<void>,struct StateSubstream,struct StateReconstructedPicture<unsigned char>,struct RbspState,struct StatePicture,struct StateDecode> &);

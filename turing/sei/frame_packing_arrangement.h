@@ -67,12 +67,12 @@ struct FramePackingArrangement :
 template <>
 struct Syntax<frame_packing_arrangement>
 {
-    template <class H> static void go(const frame_packing_arrangement &fun, H &h);
+    template <class H> static void go(frame_packing_arrangement fun, H &h);
 };
 
 
 template <class H>
-void Syntax<frame_packing_arrangement>::go(const frame_packing_arrangement &fun, H &h)
+void Syntax<frame_packing_arrangement>::go(frame_packing_arrangement fun, H &h)
 {
     h(frame_packing_arrangement_id(), ue(v));
     h(frame_packing_arrangement_cancel_flag(), u(1));
@@ -101,15 +101,10 @@ void Syntax<frame_packing_arrangement>::go(const frame_packing_arrangement &fun,
 }
 
 
-template <class H> void Read<frame_packing_arrangement>::go(const frame_packing_arrangement &f, H &h)
+template <class H> void Read<frame_packing_arrangement>::go(frame_packing_arrangement f, H &h)
 {
     FramePackingArrangement framePackingArrangement;
     auto h3 = h.extend(&framePackingArrangement);
 
     Syntax<frame_packing_arrangement>::go(f, h3);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(frame_packing_arrangement)
-#endif

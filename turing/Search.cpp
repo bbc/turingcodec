@@ -18,8 +18,8 @@ the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
 
-// Encoder "Search" functions - all encoder decisions are made by functions here.
-// For example, CQT topology, CU prediction, mode, CU partitioning, intra prediction modes, inter modes, motion vectors, etc.
+ // Encoder "Search" functions - all encoder decisions are made by functions here.
+ // For example, CQT topology, CU prediction, mode, CU partitioning, intra prediction modes, inter modes, motion vectors, etc.
 
 
 #include "Search.h"
@@ -39,8 +39,7 @@ For more information, contact us at info @ turingcodec.org.
 template <class H>
 void searchIntraPartition(H &h, IntraPartition intraPartition)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     coding_quadtree *cqt = h;
@@ -234,8 +233,7 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
 template <class H>
 void searchIntraChroma(H &h, const coding_quadtree &cqt)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateReconstructionCache<Sample> *stateReconstructionCache = h;
@@ -283,8 +281,8 @@ void searchIntraChroma(H &h, const coding_quadtree &cqt)
             if (m[rqt_root_cbf()])
             {
                 m[MaxTrafoDepth()] = (m[current(CuPredMode(cu.x0, cu.y0))] == MODE_INTRA)
-					        ? m[max_transform_hierarchy_depth_intra()] + m[IntraSplitFlag()]
-					                                                       : m[max_transform_hierarchy_depth_inter()];
+                    ? m[max_transform_hierarchy_depth_intra()] + m[IntraSplitFlag()]
+                    : m[max_transform_hierarchy_depth_inter()];
                 m(transform_tree(cu.x0, cu.y0, cu.x0, cu.y0, cu.log2CbSize, 0, 0));
             }
         }
@@ -404,8 +402,8 @@ void searchIntraCu(H &h, CandidateStash<Sample> *&challenger, CandidateStash<Sam
                 m(part_mode(), ae(v));
             }
             if (m[PartMode()] == PART_2Nx2N && m[pcm_enabled_flag()] &&
-                    cqt->log2CbSize >= m[Log2MinIpcmCbSizeY()] &&
-                    cqt->log2CbSize <= m[Log2MaxIpcmCbSizeY()])
+                cqt->log2CbSize >= m[Log2MinIpcmCbSizeY()] &&
+                cqt->log2CbSize <= m[Log2MaxIpcmCbSizeY()])
             {
                 m(pcm_flag(cqt->x0, cqt->y0), ae(v));
             }
@@ -552,8 +550,7 @@ template <class Direction>
 template <class H>
 void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtree, Direction> &cqt, H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Candidate<Sample> *candidate = h;
 
@@ -566,9 +563,10 @@ void Search<Deleted<coding_quadtree, Direction>>::go(const Deleted<coding_quadtr
 
 #ifdef SNAKE_DEBUG
     NeighbourhoodEnc<Sample> *neighbourhood = h;
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
     for (int cIdx = 0; cIdx < 3; ++cIdx)
     {
-        auto &reconstructed = h[ReconstructedPicture()];
+        Picture<Sample> &reconstructed = *stateReconstructedPicture->picture;
         auto recSamples = reconstructed(0, 0, cIdx);
 
         neighbourhood->snakeIntraReferenceSamples[cIdx].copyFrom2D(cqt, recSamples, cIdx ? 1 : 0);
@@ -648,8 +646,7 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     StateEncodePicture *stateEncodePicture = h;
     StateEncode *stateEncode = h;
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Candidate<Sample> **activeCandidate = h;
     Candidate<Sample> *originalCandidate = *activeCandidate;
@@ -746,8 +743,8 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     originalCandidate->StateCodedData::startCu();
 
     bool mustSplit =
-            cqt.x0 + (1 << cqt.log2CbSize) > h[pic_width_in_luma_samples()] ||
-            cqt.y0 + (1 << cqt.log2CbSize) > h[pic_height_in_luma_samples()];
+        cqt.x0 + (1 << cqt.log2CbSize) > h[pic_width_in_luma_samples()] ||
+        cqt.y0 + (1 << cqt.log2CbSize) > h[pic_height_in_luma_samples()];
 
     if (FORCE_PCM(h) && cqt.log2CbSize > h[Log2MaxIpcmCbSizeY()])
     {
@@ -788,9 +785,9 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
             // resultant state of single CU / split=0 test is now in *originalCandidate
         }
         const bool trySplit = !testFull || (testSplit && (
-                cqt.log2CbSize > h[MinCbLog2SizeY()] &&
-                (!stateEncode->ecu || h[current(CuPredMode(cqt.x0, cqt.y0))] != MODE_SKIP) &&
-                static_cast<Speed *>(h)->trySplit(cqt)));
+            cqt.log2CbSize > h[MinCbLog2SizeY()] &&
+            (!stateEncode->ecu || h[current(CuPredMode(cqt.x0, cqt.y0))] != MODE_SKIP) &&
+            static_cast<Speed *>(h)->trySplit(cqt)));
 
         if (trySplit)
         {
@@ -1027,8 +1024,7 @@ struct Search<coding_unit>
 {
     template <class H> static void go(const coding_unit &cu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
@@ -1059,8 +1055,8 @@ struct Search<coding_unit>
         assert(h[SubWidthC()] == 2);
         assert(h[SubHeightC()] == 2);
 
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
-        Picture<Sample> &currPic = *reconstructedPicture.picture;
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+        Picture<Sample> &currPic = *stateReconstructedPicture->picture;
 
         for (int cIdx = 0; cIdx < 3; ++cIdx)
         {
@@ -1194,7 +1190,7 @@ struct Search<coding_unit>
 struct MvCandidate
 {
     MvCandidate()
-    :
+        :
         cost(std::numeric_limits<Cost>::max())
     {
     }
@@ -1254,8 +1250,7 @@ struct MvCandidate
 
 template <class H> static void searchMotionUni(H &h, int refList)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateEncodePicture *stateEncodePicture = h;
@@ -1278,13 +1273,12 @@ template <class H> static void searchMotionUni(H &h, int refList)
 
     if (speed->doHalfPelRefinement())
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
         auto const input = pictureInput(pu->x0, pu->y0, 0);
-        auto &reconstructedPicture = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(mvdc.refList)].dp->reconstructedPicture);
+        auto &reconstructedPicture = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(mvdc.refList)].dp->reconstructedPicture);
         Picture<Sample> &pictureReference = *reconstructedPicture.picture;
         auto const reference = pictureReference(pu->x0, pu->y0, 0);
         auto mv = best.mv;
@@ -1327,8 +1321,8 @@ struct LimitFullPelMv
 
             int maxWavefront[2] =
             {
-                    h[xCtb()] + 3 * h[CtbSizeY()] - pu.x0 - pu.nPbW - howCloseDoYouDare,
-                    h[yCtb()] + 2 * h[CtbSizeY()] - pu.y0 - pu.nPbH - howCloseDoYouDare,
+                h[xCtb()] + 3 * h[CtbSizeY()] - pu.x0 - pu.nPbW - howCloseDoYouDare,
+                h[yCtb()] + 2 * h[CtbSizeY()] - pu.y0 - pu.nPbH - howCloseDoYouDare,
             };
 
             this->max[0] = std::min(this->max[0], MotionVector::ComponentType(maxWavefront[0]));
@@ -1353,25 +1347,25 @@ template <typename Sample>
 struct StateMeFullPel
 {
     template <class H> StateMeFullPel(H &h, int refList, prediction_unit const &pu, MvCandidate &best)
-		        :
-		        best(best),
-		        tableSad(h),
-		        tableSadMultiref(h),
-		        limit(pu, h),
-		        refList(refList),
-		        rect(HAVOC_RECT(pu.nPbW, pu.nPbH))
-		        {
+        :
+        best(best),
+        tableSad(h),
+        tableSadMultiref(h),
+        limit(pu, h),
+        refList(refList),
+        rect(HAVOC_RECT(pu.nPbW, pu.nPbH))
+    {
         this->functionSad = *havoc_get_sad(tableSad, pu.nPbW, pu.nPbH);
         this->functionSad4 = *havoc_get_sad_multiref(tableSadMultiref, 4, pu.nPbW, pu.nPbH);
 
         ThreePlanes<Sample> &picture = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
         this->src = Raster<Sample const>(picture[0], pu.x0, pu.y0);
 
-        auto &referencePicture = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(refList)][0].dp->reconstructedPicture);
+        auto &referencePicture = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(refList)][0].dp->reconstructedPicture);
         this->ref = Raster<Sample const>((*referencePicture.picture)[0], pu.x0, pu.y0);
 
         this->lambda.set(getReciprocalSqrtLambda(h));
-		        }
+    }
 
     template <class H> bool considerPattern(H &h, MotionVector origin, MotionVector const *pattern, int n, int step, int dist, mvd_coding mvdc)
     {
@@ -1426,8 +1420,7 @@ struct StateMeFullPel
 
 template <class H> static void searchMotionBi(H &h, int refList)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StateCodedData *stateCodedData = h;
@@ -1450,7 +1443,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
 
         auto refListOther = 1 - mvdc.refList;
 
-        auto &referencePictureOther = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(1 - mvdc.refList)][puData.refIdx(refListOther)].dp->reconstructedPicture);
+        auto &referencePictureOther = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(1 - mvdc.refList)][puData.refIdx(refListOther)].dp->reconstructedPicture);
         auto reference = (*referencePictureOther.picture)(pu->x0, pu->y0, 0);
 
         auto mv = puData.mv(refListOther);
@@ -1463,8 +1456,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
         f(predictionOther.p, predictionOther.stride, reference.p, reference.stride, pu->nPbW, pu->nPbH, mvFrac[0], mvFrac[1], h[BitDepthY()]);
     }
 
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
     Raster<Sample const> input(pictureInput[0], pu->x0, pu->y0);
@@ -1544,7 +1536,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
     }
 
     // fractional vector refinement
-    auto &pictureReference = static_cast<ReconstructedPicture2<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(int(mvdc.refList))].dp->reconstructedPicture);
+    auto &pictureReference = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(mvdc.refList)][puData.refIdx(int(mvdc.refList))].dp->reconstructedPicture);
     auto const reference = (*pictureReference.picture)(pu->x0, pu->y0, 0);
 
     if (speed->doHalfPelRefinement())
@@ -1577,8 +1569,7 @@ template <class H> static void searchMotionBi(H &h, int refList)
 template <class H>
 Cost measurePuCost(H &h)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
     StatePicture *statePicture = h;
@@ -1590,11 +1581,11 @@ Cost measurePuCost(H &h)
 
     int32_t satd[3];
     {
-        auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
 
         // Reconstruct
         // review: duplication--we have already predicted luma (and measured its SATD) during sub-pixel refinement
-        predictInter(*reconstructedPicture.picture, pu, h);
+        predictInter(*stateReconstructedPicture->picture, pu, h);
 
         // Measure distortion using SATD
         for (int cIdx = 0; cIdx < 3; ++cIdx)
@@ -1651,17 +1642,17 @@ struct Search<prediction_unit>
         ContextsAndCost bestContextsAndCost;
 
         template <class H> State(H &h)
-			        :
-			        neighbourhood(h),
-			        cursor(h),
-			        stateCodedData(h),
-			        stateEncodeSubstream(h),
-			        cqt(h)
-			        {
+            :
+            neighbourhood(h),
+            cursor(h),
+            stateCodedData(h),
+            stateEncodeSubstream(h),
+            cqt(h)
+        {
             bestCost = std::numeric_limits<Cost>::max();
             bestCostUni[0] = std::numeric_limits<Cost>::max();
             bestCostUni[1] = std::numeric_limits<Cost>::max();
-			        }
+        }
 
         template <class H> void searchMergeMode(int i, const prediction_unit &pu, H &h)
         {
@@ -1672,7 +1663,7 @@ struct Search<prediction_unit>
 
         template <class H> void searchMergeModes(const prediction_unit &pu, H &h)
         {
-            populateMergeCandidates(h, pu, stateEncodeSubstream->partIdx);
+            populateMergeCandidates(h, pu);
             for (int i = 0; i < h[MaxNumMergeCand()]; ++i)
             {
                 searchMergeMode(i, pu, h);
@@ -1767,7 +1758,7 @@ struct Search<prediction_unit>
             if (std::is_same<typename H::Tag, SearchMerge2Nx2N<void>>::value)
             {
                 assert(h[PartMode()] == PART_2Nx2N);
-                populateMergeCandidates(h, pu, stateEncodeSubstream->partIdx);
+                populateMergeCandidates(h, pu);
                 StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
                 Snake<BlockData>::Cursor *cursor = h;
                 prediction_unit const pu = *static_cast<prediction_unit *>(h);
@@ -1796,8 +1787,8 @@ struct Search<prediction_unit>
                 if (h[RefPicList(L1)][0].dp) searchUni(L1, 0, pu, h);
 
                 if (pu.nPbW + pu.nPbH != 12 &&
-                        bestCostUni[L0] != std::numeric_limits<Cost>::max() &&
-                        bestCostUni[L1] != std::numeric_limits<Cost>::max())
+                    bestCostUni[L0] != std::numeric_limits<Cost>::max() &&
+                    bestCostUni[L1] != std::numeric_limits<Cost>::max())
                 {
                     searchBi(pu, h);
                 }
@@ -1842,13 +1833,13 @@ struct Search<prediction_unit>
             predAccessor.candidate = h;
             predAccessor.cqt = h;
 
-            auto &reconstructedPicture = h[Concrete<ReconstructedPictureBase>()];
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
 
-            predictInter(*reconstructedPicture.picture, pu, h);
+            predictInter(*stateReconstructedPicture->picture, pu, h);
 
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 0), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 0), 1ull << cqt->log2CbSize, 1ull << cqt->log2CbSize);
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 1), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 1), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
-            copyBlock(predAccessor(cqt->x0, cqt->y0, 2), (*reconstructedPicture.picture)(cqt->x0, cqt->y0, 2), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 0), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 0), 1ull << cqt->log2CbSize, 1ull << cqt->log2CbSize);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 1), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 1), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
+            copyBlock(predAccessor(cqt->x0, cqt->y0, 2), (*stateReconstructedPicture->picture)(cqt->x0, cqt->y0, 2), 1ull << cqt->log2CbSize >> 1, 1ull << cqt->log2CbSize >> 1);
 
             if (h[PartMode()] != PART_2Nx2N)
             {
@@ -1868,9 +1859,7 @@ struct Search<prediction_unit>
 
     template <class H> static void go(const prediction_unit &pu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
         State<Sample> s(h);
         s.go2(pu, h);
     }
@@ -1969,8 +1958,7 @@ void patternSearch(H &h, mvd_coding mvdc, const P &pattern, bool tryOrigin, Moti
 // Integer motion estimation
 template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, MvCandidate &best)
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     auto const refIdx = 0;
 
@@ -2102,17 +2090,17 @@ template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, Mv
     int step = 4;
 
     static const MotionVector diamond[16] = {
-            { 0, -4 },{ 1, -3 },{ 2, -2 },{ 3, -1 },
-            { 4, 0 },{ 3, 1 },{ 2, 2 },{ 1, 3 },
-            { 0, 4 },{ -1, 3 },{ -2, 2 },{ -3, 1 },
-            { -4, 0 },{ -3, -1 },{ -2, -2 },{ -1, -3 },
+        { 0, -4 },{ 1, -3 },{ 2, -2 },{ 3, -1 },
+        { 4, 0 },{ 3, 1 },{ 2, 2 },{ 1, 3 },
+        { 0, 4 },{ -1, 3 },{ -2, 2 },{ -3, 1 },
+        { -4, 0 },{ -3, -1 },{ -2, -2 },{ -1, -3 },
     };
 
     static const MotionVector square[16] = {
-            { 4, -4 },{ 4, -2 },{ 4, 0 },{ 4, 2 },
-            { 4, 4 },{ 2, 4 },{ 0, 4 },{ -2, 4 },
-            { -4, 4 },{ -4, 2 },{ -4, 0 },{ -4, -2 },
-            { -4, -4 },{ -2, -4 },{ 0, -4 },{ 2, -4 },
+        { 4, -4 },{ 4, -2 },{ 4, 0 },{ 4, 2 },
+        { 4, 4 },{ 2, 4 },{ 0, 4 },{ -2, 4 },
+        { -4, 4 },{ -4, 2 },{ -4, 0 },{ -4, -2 },
+        { -4, -4 },{ -2, -4 },{ 0, -4 },{ 2, -4 },
     };
 
     static const MotionVector square4[4] = { { -4, -4 },{ -4, 4 },{ 4, 4 },{ 4, -4 } };
@@ -2259,8 +2247,7 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
 {
     template <class H> static void go(const IfCbf<rqt_root_cbf, transform_tree> &i, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         transform_tree const &tt = i.f;
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
@@ -2300,8 +2287,8 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         haveResidual = m[rqt_root_cbf()];
 
         bool const isMerge2Nx2N =
-                h[PartMode()] == PART_2Nx2N &&
-                h[merge_flag(cqt->x0, cqt->y0)];
+            h[PartMode()] == PART_2Nx2N &&
+            h[merge_flag(cqt->x0, cqt->y0)];
 
         bool const encodeAsSkip = isMerge2Nx2N && !haveResidual;
         if (encodeAsSkip)

@@ -42,7 +42,7 @@ struct DeinterlacedFieldIdentification :
     };
 
 
-template <class H> void Read<deinterlaced_field_identification>::go(deinterlaced_field_identification const &f, H &h)
+template <class H> void Read<deinterlaced_field_identification>::go(deinterlaced_field_identification f, H &h)
 {
     DeinterlacedFieldIdentification deinterlacedFieldIdentification;
     auto hh = h.extend(&deinterlacedFieldIdentification);
@@ -50,6 +50,3 @@ template <class H> void Read<deinterlaced_field_identification>::go(deinterlaced
 }
 
 
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(deinterlaced_field_identification)
-#endif

@@ -18,7 +18,7 @@ the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
 
-// Functions for writing bitstream
+ // Functions for writing bitstream
 
 #ifndef INCLUDED_Write_h
 #define INCLUDED_Write_H
@@ -36,7 +36,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "Reconstruct.h"
 #include "Picture.h"
 #include "Binarization.h"
-#include "Vanilla.h"
 #include "Measure.h"
 #include "EncSao.h"
 #include "Speed.h"
@@ -54,8 +53,8 @@ For more information, contact us at info @ turingcodec.org.
 // write the specified element to bitstream
 template <typename F> struct Write :
     Syntax<F>
-    {
-    };
+{
+};
 
 template <> struct Write<void> { };
 
@@ -83,9 +82,9 @@ struct EstimateAndSet<Element<cu_qp_delta_abs, ae>>
     template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
     {
         h[IsCuQpDeltaCoded()] = 1;
-        int qpY = static_cast<QpState* >(h)->getQp(0) - h[QpBdOffsetY()];
+        int qpY = static_cast<QpState*>(h)->getQp(0) - h[QpBdOffsetY()];
         qpY = Clip3(0, 51, qpY);
-        static_cast<QpState* >(h)->setCodedQp(qpY);
+        static_cast<QpState*>(h)->setCodedQp(qpY);
     }
 };
 
@@ -95,9 +94,9 @@ struct SetParameters<Element<cu_qp_delta_abs, ae>>
     template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
     {
         h[IsCuQpDeltaCoded()] = 1;
-        int qpY = static_cast<QpState* >(h)->getQp(0) - h[QpBdOffsetY()];
+        int qpY = static_cast<QpState*>(h)->getQp(0) - h[QpBdOffsetY()];
         qpY = Clip3(0, 51, qpY);
-        static_cast<QpState* >(h)->setCodedQp(qpY);
+        static_cast<QpState*>(h)->setCodedQp(qpY);
     }
 };
 
@@ -106,8 +105,8 @@ template <> struct Write<video_parameter_set_rbsp>
     template <class H> static void go(video_parameter_set_rbsp e, H &hhh)
     {
         std::shared_ptr<Vps> vps = hhh[Table<Vps>()][0];
-        auto hh =  hhh.extend(&*vps);
-        auto h =  hh.extend(&vps->ptl);
+        auto hh = hhh.extend(&*vps);
+        auto h = hh.extend(&vps->ptl);
 
         Syntax<video_parameter_set_rbsp>::go(e, h);
     }
@@ -119,8 +118,8 @@ template <> struct Write<seq_parameter_set_rbsp>
     template <class H> static void go(seq_parameter_set_rbsp e, H &hhh)
     {
         std::shared_ptr<Sps> sps = hhh[Table<Sps>()][0];
-        auto hh =  hhh.extend(&*sps);
-        auto h =  hh.extend(&sps->ptl);
+        auto hh = hhh.extend(&*sps);
+        auto h = hh.extend(&sps->ptl);
 
         Syntax<seq_parameter_set_rbsp>::go(e, h);
     }
@@ -246,7 +245,7 @@ struct Write<Element<V, se>>
     template <class H> static void go(Element<V, se> fun, H &h)
     {
         int code = h[fun.v];
-        code = ( code <= 0) ? -code<<1 : (code<<1)-1;
+        code = (code <= 0) ? -code << 1 : (code << 1) - 1;
 
         ++code;
         int len = 1;
@@ -281,9 +280,9 @@ case TYPE: h(ELEMENT()); break;
             NAL_UNIT_TYPES
 #undef X
 
-            default:
-                assert(!"unrecognised nal_unit_type");
-                break;
+        default:
+            assert(!"unrecognised nal_unit_type");
+            break;
         }
 
         // Emulation prevention: insert some 0x03 bytes into the stream, as necessary.
@@ -370,9 +369,30 @@ struct NotImplemented
 // The following are not yet used in encoding
 template <> struct Write<scaling_list_data> : NotImplemented {};
 template <> struct Write<pred_weight_table> : NotImplemented {};
-template <> struct Write<hrd_parameters> : NotImplemented {};
 template <> struct Write<Element<reserved_payload_extension_data, uv>> : NotImplemented {};
 
+template <>
+struct Write<sub_layer_hrd_parameters>
+{
+    template <class H> static void go(const sub_layer_hrd_parameters &fun, H &h)
+    {
+        Hrd *currentHrd = getHrd(h);
+        Hrd::SubLayer *currentSublayer = &(currentHrd->sublayers.back());
+        auto h2 = h.extend(currentSublayer);
+        Syntax<sub_layer_hrd_parameters>::go(fun, h2);
+    }
+};
+
+template <>
+struct Write<hrd_parameters>
+{
+    template <class H> static void go(const hrd_parameters &fun, H &h)
+    {
+        Hrd *currentHrd = getHrd(h);
+        auto h2 = h.extend(currentHrd);
+        Syntax<hrd_parameters>::go(fun, h2);
+    }
+};
 
 template <>
 struct Write<vui_parameters>
@@ -394,15 +414,15 @@ template <> struct Write<rbsp_slice_segment_trailing_bits> : Null<rbsp_slice_seg
 
 // Entropy estimation values from HM. These have radix position 15, i.e. rate of 1 bit is 0x8000.
 static int32_t entropyBitsHm[] = {
-        // Corrected table, most notably for last state
-        0x07b23, 0x085f9, 0x074a0, 0x08cbc, 0x06ee4, 0x09354, 0x067f4, 0x09c1b, 0x060b0, 0x0a62a, 0x05a9c, 0x0af5b, 0x0548d, 0x0b955, 0x04f56, 0x0c2a9,
-        0x04a87, 0x0cbf7, 0x045d6, 0x0d5c3, 0x04144, 0x0e01b, 0x03d88, 0x0e937, 0x039e0, 0x0f2cd, 0x03663, 0x0fc9e, 0x03347, 0x10600, 0x03050, 0x10f95,
-        0x02d4d, 0x11a02, 0x02ad3, 0x12333, 0x0286e, 0x12cad, 0x02604, 0x136df, 0x02425, 0x13f48, 0x021f4, 0x149c4, 0x0203e, 0x1527b, 0x01e4d, 0x15d00,
-        0x01c99, 0x166de, 0x01b18, 0x17017, 0x019a5, 0x17988, 0x01841, 0x18327, 0x016df, 0x18d50, 0x015d9, 0x19547, 0x0147c, 0x1a083, 0x0138e, 0x1a8a3,
-        0x01251, 0x1b418, 0x01166, 0x1bd27, 0x01068, 0x1c77b, 0x00f7f, 0x1d18e, 0x00eda, 0x1d91a, 0x00e19, 0x1e254, 0x00d4f, 0x1ec9a, 0x00c90, 0x1f6e0,
-        0x00c01, 0x1fef8, 0x00b5f, 0x208b1, 0x00ab6, 0x21362, 0x00a15, 0x21e46, 0x00988, 0x2285d, 0x00934, 0x22ea8, 0x008a8, 0x239b2, 0x0081d, 0x24577,
-        0x007c9, 0x24ce6, 0x00763, 0x25663, 0x00710, 0x25e8f, 0x006a0, 0x26a26, 0x00672, 0x26f23, 0x005e8, 0x27ef8, 0x005ba, 0x284b5, 0x0055e, 0x29057,
-        0x0050c, 0x29bab, 0x004c1, 0x2a674, 0x004a7, 0x2aa5e, 0x0046f, 0x2b32f, 0x0041f, 0x2c0ad, 0x003e7, 0x2ca8d, 0x003ba, 0x2d323, 0x0010c, 0x3bfbb};
+    // Corrected table, most notably for last state
+    0x07b23, 0x085f9, 0x074a0, 0x08cbc, 0x06ee4, 0x09354, 0x067f4, 0x09c1b, 0x060b0, 0x0a62a, 0x05a9c, 0x0af5b, 0x0548d, 0x0b955, 0x04f56, 0x0c2a9,
+    0x04a87, 0x0cbf7, 0x045d6, 0x0d5c3, 0x04144, 0x0e01b, 0x03d88, 0x0e937, 0x039e0, 0x0f2cd, 0x03663, 0x0fc9e, 0x03347, 0x10600, 0x03050, 0x10f95,
+    0x02d4d, 0x11a02, 0x02ad3, 0x12333, 0x0286e, 0x12cad, 0x02604, 0x136df, 0x02425, 0x13f48, 0x021f4, 0x149c4, 0x0203e, 0x1527b, 0x01e4d, 0x15d00,
+    0x01c99, 0x166de, 0x01b18, 0x17017, 0x019a5, 0x17988, 0x01841, 0x18327, 0x016df, 0x18d50, 0x015d9, 0x19547, 0x0147c, 0x1a083, 0x0138e, 0x1a8a3,
+    0x01251, 0x1b418, 0x01166, 0x1bd27, 0x01068, 0x1c77b, 0x00f7f, 0x1d18e, 0x00eda, 0x1d91a, 0x00e19, 0x1e254, 0x00d4f, 0x1ec9a, 0x00c90, 0x1f6e0,
+    0x00c01, 0x1fef8, 0x00b5f, 0x208b1, 0x00ab6, 0x21362, 0x00a15, 0x21e46, 0x00988, 0x2285d, 0x00934, 0x22ea8, 0x008a8, 0x239b2, 0x0081d, 0x24577,
+    0x007c9, 0x24ce6, 0x00763, 0x25663, 0x00710, 0x25e8f, 0x006a0, 0x26a26, 0x00672, 0x26f23, 0x005e8, 0x27ef8, 0x005ba, 0x284b5, 0x0055e, 0x29057,
+    0x0050c, 0x29bab, 0x004c1, 0x2a674, 0x004a7, 0x2aa5e, 0x0046f, 0x2b32f, 0x0041f, 0x2c0ad, 0x003e7, 0x2ca8d, 0x003ba, 0x2d323, 0x0010c, 0x3bfbb };
 
 
 template <class T>
@@ -457,7 +477,7 @@ struct Write<EncodeDecision<V>>
 
         auto const pStateIdx = contextModel.getState();
         auto const valMPS = contextModel.getMps();
-        auto const qRangeIdx = ( writer->ivlCurrRange  >>  6 ) & 3; // (9-45)
+        auto const qRangeIdx = (writer->ivlCurrRange >> 6) & 3; // (9-45)
         auto const ivlLpsRange = rangeTabLPS(pStateIdx, qRangeIdx); // uiLPS
 
         writer->ivlCurrRange -= ivlLpsRange; // m_uiRange
@@ -467,10 +487,10 @@ struct Write<EncodeDecision<V>>
         {
             static const int renormTable[] =
             {
-                    6, 5, 4, 4, 3, 3, 3, 3,
-                    2, 2, 2, 2, 2, 2, 2, 2,
-                    1, 1, 1, 1, 1, 1, 1, 1,
-                    1, 1, 1, 1, 1, 1, 1, 1,
+                6, 5, 4, 4, 3, 3, 3, 3,
+                2, 2, 2, 2, 2, 2, 2, 2,
+                1, 1, 1, 1, 1, 1, 1, 1,
+                1, 1, 1, 1, 1, 1, 1, 1,
             };
             numBits = renormTable[ivlLpsRange >> 3];
 
@@ -515,7 +535,7 @@ struct Write<EncodeBypass<V>>
         CabacWriter *writer = h;
         writer->ivlLow <<= 1;
         if (encodeBypass.binVal)
-            writer->ivlLow  += writer->ivlCurrRange;
+            writer->ivlLow += writer->ivlCurrRange;
         --writer->bitsLeft;
         writer->testAndWriteOut();
     }
@@ -542,9 +562,9 @@ struct Write<EncodeTerminate<V>>
         writer->ivlCurrRange -= 2;
 
         int numBits;
-        if( encodeTerminate.binVal )
+        if (encodeTerminate.binVal)
         {
-            writer->ivlLow  += writer->ivlCurrRange;
+            writer->ivlLow += writer->ivlCurrRange;
             writer->ivlCurrRange = 2;
             numBits = 7;
         }
@@ -578,16 +598,14 @@ struct Encode<coding_tree_unit>
 {
     template <class H> static void go(const coding_tree_unit &ctu, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
 
         //#ifdef SNAKE_DEBUG
         coding_quadtree cqt(
-                (h[CtbAddrInRs()] % h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
-                (h[CtbAddrInRs()] / h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
-                h[CtbLog2SizeY()],
-                0);
+            (h[CtbAddrInRs()] % h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
+            (h[CtbAddrInRs()] / h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
+            h[CtbLog2SizeY()],
+            0);
         //#endif
 
         preCtu(h);
@@ -595,6 +613,8 @@ struct Encode<coding_tree_unit>
         Syntax<coding_tree_unit>::go(ctu, h);
 
         postCtu(h);
+        StatePicture *statePicture = h;
+        statePicture->loopFilterPicture->processCtu(h, ctu);
 
 #ifdef SNAKE_DEBUG
         bool lastCtuInRow = cqt.x0 + (1 << cqt.log2CbSize) >= h[pic_width_in_luma_samples()];
@@ -604,9 +624,11 @@ struct Encode<coding_tree_unit>
             cqt.x0 += h[CtbSizeY()];
             --cqt.log2CbSize;
 
+            StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+            Picture<Sample> &reconstructed = *stateReconstructedPicture->picture;
+
             for (int cIdx = 0; cIdx < 3; ++cIdx)
             {
-                Picture<Sample> &reconstructed = h[ReconstructedPicture()];
                 Raster<Sample> recSamples = reconstructed(-(1 << cqt.log2CbSize), 0, cIdx);
 
                 NeighbourhoodEnc<Sample> *neighbourhood = h;
@@ -617,13 +639,12 @@ struct Encode<coding_tree_unit>
 
             for (int cIdx = 0; cIdx < 3; ++cIdx)
             {
-                Picture<Sample> &reconstructed = h[ReconstructedPicture()];
                 Raster<Sample> recSamples = reconstructed(-(1 << cqt.log2CbSize), 0, cIdx);
 
                 NeighbourhoodEnc<Sample> *neighbourhood = h;
                 neighbourhood->snakeIntraReferenceSamples[cIdx].copyFrom2D(cqt, recSamples, cIdx ? 1 : 0);
-            }
-        }
+    }
+}
 #endif
     }
 };
@@ -657,8 +678,7 @@ struct Encode<coding_quadtree>
     // Review: consistency - naming, access and usage of various Candidates
     template <class H> static void go(const coding_quadtree &cqt, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
 
@@ -715,13 +735,13 @@ struct Encode<coding_quadtree>
             Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->searchTotal);
             auto hSearch = h.template change<Search<void>>();
 
-            if(h[cu_qp_delta_enabled_flag()])
+            if (h[cu_qp_delta_enabled_flag()])
             {
                 static_cast<QpState *>(h)->setCanWrite(false);
 
                 StateEncode *stateEncode = h;
 
-                if(stateEncode->useRateControl)
+                if (stateEncode->useRateControl)
                 {
                     StateEncodePicture *stateEncodePicture = h;
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
@@ -731,7 +751,7 @@ struct Encode<coding_quadtree>
                     double estLambda;
                     int qp;
 
-                    if(isIntraSlice)
+                    if (isIntraSlice)
                     {
                         stateEncode->rateControlEngine->getCtuEstLambdaAndQp(bpp, h[SliceQpY()], h[CtbAddrInRs()], estLambda, qp);
                     }
@@ -817,17 +837,16 @@ struct Encode<coding_quadtree>
         *currentCandidate = originalCandidate;
 
         // Copy reconstructed pieces into reconstructed picture buffer
-        candidate.StatePieces<Sample>::commit(h[ReconstructedPicture()], cqt);
+        StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+        candidate.StatePieces<Sample>::commit(*stateReconstructedPicture->picture, cqt);
 
         if (checkDistortion)
         {
             // Measure distortion again, check that it is same as that measured during search
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-            static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
 
             // input picture
             ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
-            ThreePlanes<Sample> &pictureReconstructed = h[ReconstructedPicture()];
+            ThreePlanes<Sample> &pictureReconstructed = *stateReconstructedPicture->picture;
 
             int32_t ssd = 0;
             for (int cIdx = 0; cIdx < 3; ++cIdx)
@@ -860,13 +879,13 @@ struct Encode<coding_quadtree>
             if (stateEncode->saoslow)
                 static_cast<StatePicture *>(h)->loopFilterPicture->processCtu(h, *static_cast<coding_tree_unit *>(h));
 
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
+            using Sample = typename SampleType<H>::Type;
             EncSao* encSao = new EncSao();
             const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
             const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
             StateEncodePicture *stateEncodePicture = h;
             PictureWrapper &orgPic = *stateEncodePicture->docket->picture;
-            ReconstructedPicture2<Sample> *recPic = h;
+            StateReconstructedPicture<Sample> *recPic = h;
             encSao->rdSao<Sample>(h, orgPic, recPic, rx, ry);
             delete encSao;
         }
@@ -884,7 +903,7 @@ struct Encode<coding_quadtree>
             // review: derive split_cu_flag directly from coded data
             h[split_cu_flag(cqt.x0, cqt.y0)] = cqt.cqtDepth < static_cast<StateCodedData *>(h)->codedCu.word0().CtDepth;
 
-            if(h[cu_qp_delta_enabled_flag()])
+            if (h[cu_qp_delta_enabled_flag()])
             {
                 static_cast<QpState *>(h)->setCanWrite(true);
                 static_cast<QpState *>(h)->setQpInternal(0, 0, 64, h[SliceQpY()], 0);
@@ -902,7 +921,7 @@ struct Encode<coding_quadtree>
                 contextsAfterSearch.ContextsBase2<sao_merge_X_flag, 1>::cm = candidate->ContextsBase2<sao_merge_X_flag, 1>::cm;
             }
 
-            if(h[cu_qp_delta_enabled_flag()])
+            if (h[cu_qp_delta_enabled_flag()])
                 static_cast<QpState *>(h)->swapInternalMemory();
 
             StateEncode *stateEncode = h;
@@ -918,7 +937,7 @@ struct Encode<coding_quadtree>
             }
 
             // review: test should pass even if this flag set
-            if(!h[cu_qp_delta_enabled_flag()])
+            if (!h[cu_qp_delta_enabled_flag()])
                 candidate->checkSameAs(contextsAfterSearch);
         }
 
@@ -928,8 +947,8 @@ struct Encode<coding_quadtree>
         originalCandidate->snakeIntraReferenceSamples[2].copyBlockFrom(candidate.snakeIntraReferenceSamples[2], after, cqt, 1);
 
         neighbourhood->snake.checkPosition(after, cqt);
-    }
-};
+        }
+    };
 
 
 template <class Direction>
@@ -976,7 +995,7 @@ struct Write<coding_unit>
         if (CuPredMode != MODE_INTRA) stateCodedData->firstPu();
 
 
-        if(h[cu_qp_delta_enabled_flag()] && static_cast<QpState *>(h)->getCanWrite())
+        if (h[cu_qp_delta_enabled_flag()] && static_cast<QpState *>(h)->getCanWrite())
         {
 
             // Set up cu_qp_delta_abs and sign flag
@@ -986,12 +1005,12 @@ struct Write<coding_unit>
             StateEncode *stateEncode = h;
             int QpY;
             // Review for intra RC
-            if(stateEncode->useRateControl)
+            if (stateEncode->useRateControl)
                 QpY = stateEncode->rateControlEngine->getCtuStoredQp(h[CtbAddrInRs()]);
             else
                 QpY = h[SliceQpY()];
 
-            if(stateEncode->useAq)
+            if (stateEncode->useAq)
             {
                 AdaptiveQuantisation &aqInfo = dynamic_cast<AdaptiveQuantisation&>(*static_cast<StateEncodePicture *>(h)->docket->aqInfo);
                 int qpOffset = aqInfo.getAqOffset(cu.y0, cu.x0, cqt->cqtDepth);
@@ -1004,7 +1023,7 @@ struct Write<coding_unit>
             else
                 qpForPrediction = static_cast<QpState *>(h)->getQpYPred(cu, h);
             int valueToWrite = QpY - qpForPrediction;
-            valueToWrite = (valueToWrite + 78 + h[QpBdOffsetY()] + (h[QpBdOffsetY()]/2)) % (52 + h[QpBdOffsetY()]) - 26 - (h[QpBdOffsetY()]/2);
+            valueToWrite = (valueToWrite + 78 + h[QpBdOffsetY()] + (h[QpBdOffsetY()] / 2)) % (52 + h[QpBdOffsetY()]) - 26 - (h[QpBdOffsetY()] / 2);
             static_cast<QpState *>(h)->setQpValue(QpY);
 
             // Set the internal QP for this CU to the predictor one (default one)
@@ -1021,24 +1040,24 @@ struct Write<coding_unit>
 
         static_cast<QpState *>(h)->postCu(cu, h);
         neighbourhood->recordMerge(h, *cqt, CuPredMode == MODE_INTRA);
-  
 
-        if ( (std::is_same<typename H::Tag, SetParameters<void>>::value) ||
-             (std::is_same<typename H::Tag, EstimateAndSet<void>>::value) )
+
+        if ((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+            (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
         {
             static_cast<StatePicture *>(h)->loopFilterPicture->processCu(h, cu);
-        //}
-        //if (std::is_same<typename H::Tag, Write<void>>::value)
-        //{
+            //}
+            //if (std::is_same<typename H::Tag, Write<void>>::value)
+            //{
             if (CuPredMode == MODE_INTRA)
             {
                 StatePicture *decodedPicture = h;
                 decodedPicture->motion->fillRectangleIntra(cu);
             }
-        //}
-        //{
+            //}
+            //{
             StateEncode *stateEncode = h;
-            if(stateEncode->useRateControl && h[slice_type()] != I)
+            if (stateEncode->useRateControl && h[slice_type()] != I)
             {
                 stateEncode->rateControlEngine->updateValidityFlag(!(h[current(cu_skip_flag(cu.x0, cu.y0))]), h[CtbAddrInRs()]);
             }
@@ -1064,9 +1083,7 @@ template <> struct Write<pcm_sample>
         assert(h[PcmBitDepthC()] == 8);
 
         // Input picture
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
-
+        using Sample = typename SampleType<H>::Type;
         ThreePlanes<Sample> *picture = &dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
         assert(!"this function writes PCM to bitstream but does not reconstruct - intra and inter prediction from here may fail");
@@ -1074,27 +1091,27 @@ template <> struct Write<pcm_sample>
         // Write IPCM samples to bitstream
 
         const int nCbS = 1 << cqt->log2CbSize;
-        for (int j=0; j<nCbS; ++j)
+        for (int j = 0; j < nCbS; ++j)
         {
-            for (int i=0; i<nCbS; ++i)
+            for (int i = 0; i < nCbS; ++i)
             {
                 // pcm_sample_luma
                 cabacWriter->writeBits(8, (*picture)[0](cqt->x0 + i, cqt->y0 + j));
             }
         }
 
-        for (int j=0; j<nCbS/2; ++j)
+        for (int j = 0; j < nCbS / 2; ++j)
         {
-            for (int i=0; i<nCbS/2; ++i)
+            for (int i = 0; i < nCbS / 2; ++i)
             {
                 // pcm_sample_chroma
                 cabacWriter->writeBits(8, (*picture)[1](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
             }
         }
 
-        for (int j=0; j<nCbS/2; ++j)
+        for (int j = 0; j < nCbS / 2; ++j)
         {
-            for (int i=0; i<nCbS/2; ++i)
+            for (int i = 0; i < nCbS / 2; ++i)
             {
                 // pcm_sample_chroma
                 cabacWriter->writeBits(8, (*picture)[2](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
@@ -1121,8 +1138,7 @@ struct Write<transform_tree>
 {
     template <class H> static void go(const transform_tree &tt, H &h)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         coding_quadtree const *cqt = h;
         Snake<BlockData>::Cursor *cursor = h;
@@ -1193,7 +1209,7 @@ struct Write<transform_tree>
             tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
             tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
         int split = stateCodedData->transformTree.word0().split_transform_flag;
-        
+
         h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : split;
 
         //auto p = stateCodedData->transformTree.p;
@@ -1210,7 +1226,7 @@ struct Write<transform_tree>
         typedef std::is_same<typename H::Tag, MeasureChroma<void>> MeasuringChroma;
 
         if (intraPartition &&
-                !MeasuringLuma::value && !std::is_same<typename H::Tag, EstimateRateLuma<void>>::value)
+            !MeasuringLuma::value && !std::is_same<typename H::Tag, EstimateRateLuma<void>>::value)
         {
             cursor->value.intra.predModeY = static_cast<StateCodedData *>(h)->codedCu.IntraPredModeY(tt.blkIdx);
             cursor->commit(tt, neighbourhood->MinCbLog2SizeYMinus1, true);
@@ -1245,8 +1261,8 @@ struct Write<transform_unit>
 template <class Prefix, class Suffix, class H>
 void setLastSignificantCoeff(H &h, residual_coding e, int n)
 {
-    static const std::array<int, 32> groupIdx = {0,1,2,3,4,4,5,5,6,6,6,6,7,7,7,7,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9};
-    static const std::array<int, 10> minInGroup = {0,1,2,3,4,6,8,12,16,24};
+    static const std::array<int, 32> groupIdx = { 0,1,2,3,4,4,5,5,6,6,6,6,7,7,7,7,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9 };
+    static const std::array<int, 10> minInGroup = { 0,1,2,3,4,6,8,12,16,24 };
 
     h[Prefix()] = groupIdx[n];
     h[Suffix()] = n - minInGroup[groupIdx[n]];
@@ -1260,10 +1276,10 @@ int ctxIncSigCoeffFlag(H &h, int cIdx, int xC, int yC, int codedSubBlockFlagRigh
     {
         const int ctxIdxMap[16] =
         {
-                0, 1, 4, 5,
-                2, 3, 4, 5,
-                6, 6, 8, 8,
-                7, 7, 8, 8
+            0, 1, 4, 5,
+            2, 3, 4, 5,
+            6, 6, 8, 8,
+            7, 7, 8, 8
         };
         sigCtx = ctxIdxMap[(yC << 2) + xC];
     }
@@ -1349,17 +1365,15 @@ int ctxIncSigCoeffFlag(H &h, int cIdx, int xC, int yC, int codedSubBlockFlagRigh
     }
 }
 
-
 template <int log2TrafoSize>
 struct OptimizedResidualCodingEncode
 {
     template <class H> static void go(const residual_coding &rc, H &hParent)
     {
-        typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-        static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+        using Sample = typename SampleType<H>::Type;
 
         StateEncodeSubstreamBase *stateEncodeSubstreamBase = hParent;
-        ResidualCodingState residualCodingState(hParent);
+        StateResidualCoding residualCodingState(hParent);
         auto h = hParent.extend(&residualCodingState);
         bool sdhEnabledFlag = !!h[sign_data_hiding_enabled_flag()];
         bool signHidden;
@@ -1427,8 +1441,8 @@ struct OptimizedResidualCodingEncode
             if ((i < lastSubBlock) && (i > 0))
             {
                 int const csbfCtx =
-                        codedSubBlockFlagSnake[8 + (xS + 1) - yS] +
-                        codedSubBlockFlagSnake[8 + xS - (yS + 1)];
+                    codedSubBlockFlagSnake[8 + (xS + 1) - yS] +
+                    codedSubBlockFlagSnake[8 + xS - (yS + 1)];
 
                 int const ctxInc = (rc.cIdx ? 2 : 0) + std::min(csbfCtx, 1);
 
@@ -1439,6 +1453,9 @@ struct OptimizedResidualCodingEncode
 
             if (codedSubBlockFlag)
             {
+                uint8_t greater1[16] = { 0 };
+                uint8_t greater2[16] = { 0 };
+
                 // Sublock loop for sig_coeff_flag
                 for (int n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--)
                 {
@@ -1482,7 +1499,7 @@ struct OptimizedResidualCodingEncode
 
                         if (numGreater1Flag < 8)
                         {
-                            h[coeff_abs_level_greater1_flag(n)] = subBlock.coeffGreater1Flag(n);
+                            greater1[n] = subBlock.coeffGreater1Flag(n);
 
                             if (numGreater1Flag == 0)
                             {
@@ -1516,18 +1533,15 @@ struct OptimizedResidualCodingEncode
                                 greater1Ctx = lastGreater1Flag ? 0 : greater1Ctx + 1;
                             }
 
-                            h(coeff_abs_level_greater1_flag(n), ae(v));
-                            previousGreater1Flag = h[coeff_abs_level_greater1_flag(n)];
+                            h(EncodeDecision<coeff_abs_level_greater1_flag>(greater1[n], Write<Element<coeff_abs_level_greater1_flag, ae>>::ctxInc(h)));
+
+                            previousGreater1Flag = greater1[n];
                             numGreater1Flag++;
-                            if (h[coeff_abs_level_greater1_flag(n)] && lastGreater1ScanPos == -1)
+                            if (greater1[n] && lastGreater1ScanPos == -1)
                             {
                                 lastGreater1ScanPos = n;
-                                h[coeff_abs_level_greater2_flag(lastGreater1ScanPos)] = *pAbsCoeff > 2 ? 1 : 0;
+                                greater2[lastGreater1ScanPos] = *pAbsCoeff > 2 ? 1 : 0;
                             }
-                        }
-                        else
-                        {
-                            h[coeff_abs_level_greater1_flag(n)] = 0;
                         }
 
                         if (lastSigScanPos == -1)
@@ -1542,10 +1556,10 @@ struct OptimizedResidualCodingEncode
 
                 if (lastGreater1ScanPos != -1)
                 {
-                    h(coeff_abs_level_greater2_flag(lastGreater1ScanPos), ae(v));
+                    h(EncodeDecision<coeff_abs_level_greater2_flag>(greater2[lastGreater1ScanPos], Write<Element<coeff_abs_level_greater2_flag, ae>>::ctxInc(h)));
                 }
 
-                if(h[cu_transquant_bypass_flag()])
+                if (h[cu_transquant_bypass_flag()])
                     signHidden = false;
                 else
                     signHidden = lastSigScanPos - firstSigScanPos > 3;
@@ -1572,9 +1586,6 @@ struct OptimizedResidualCodingEncode
                     const int yC = (yS << 2) + ScanOrder(2, h[scanIdx()], n, 1);
                     if (subBlock.sigCoeffFlag(n))
                     {
-                        ASSERT(codedSubBlockFlag);
-                        ASSERT(subBlock.sigCoeffFlag(n));
-
                         int16_t absCoeff = 1;
                         if (subBlock.coeffGreater1Flag(n))
                         {
@@ -1582,15 +1593,10 @@ struct OptimizedResidualCodingEncode
                         }
 
                         int& baseLevel = stateEncodeSubstreamBase->baseLevel;
-                        baseLevel = 1 + h[coeff_abs_level_greater1_flag(n)] + h[coeff_abs_level_greater2_flag(n)];
+                        baseLevel = 1 + greater1[n] + greater2[n];
                         if (baseLevel == ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
                         {
-                            h[coeff_abs_level_remaining(n)] = absCoeff - baseLevel;
-                            h(coeff_abs_level_remaining(n), ae(v));
-                        }
-                        else
-                        {
-                            h[coeff_abs_level_remaining(n)] = 0;
+                            Write<Element<coeff_abs_level_remaining, ae>>::write(absCoeff - baseLevel, h);
                         }
                         numSigCoeff++;
                     }
@@ -1633,7 +1639,7 @@ struct Write<IfCbf<V, residual_coding>>
         if (h[e.cbf])
         {
             CopyValueToState<residual_coding, H> copy{ h, rc };
-            if((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+            if ((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
                 (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
             {
                 static_cast<StatePicture *>(h)->loopFilterPicture->processRc(h, rc);
@@ -1641,18 +1647,18 @@ struct Write<IfCbf<V, residual_coding>>
 
             switch (rc.log2TrafoSize)
             {
-                case 2:
-                    OptimizedResidualCodingEncode<2>::go(rc, h);
-                    break;
-                case 3:
-                    OptimizedResidualCodingEncode<3>::go(rc, h);
-                    break;
-                case 4:
-                    OptimizedResidualCodingEncode<4>::go(rc, h);
-                    break;
-                case 5:
-                    OptimizedResidualCodingEncode<5>::go(rc, h);
-                    break;
+            case 2:
+                OptimizedResidualCodingEncode<2>::go(rc, h);
+                break;
+            case 3:
+                OptimizedResidualCodingEncode<3>::go(rc, h);
+                break;
+            case 4:
+                OptimizedResidualCodingEncode<4>::go(rc, h);
+                break;
+            case 5:
+                OptimizedResidualCodingEncode<5>::go(rc, h);
+                break;
             }
         }
 
@@ -1688,23 +1694,23 @@ struct Write<prediction_unit>
         ASSERT(h[slice_type()] != I);
 
         cursor->relocate(neighbourhood->snake, pu, h[MinCbLog2SizeY()] - 1);
-      
+
         BlockData &blockData = cursor->current(0, 0, h[MinCbLog2SizeY()] - 1);
 
         processPredictionUnit(h, pu, blockData, stateSubstream->partIdx);
-  
+
         Syntax<prediction_unit>::go(pu, h);
 
-        if((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
+        if ((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
             (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
         {
             // Populate loop filter and temporal motion buffers accordingly.
 
             StatePicture *statePictureBase = h;
             statePictureBase->loopFilterPicture->processPu(h, pu);
-       // }
-        //if (std::is_same<typename H::Tag, Write<void>>::value)
-        //{
+            // }
+             //if (std::is_same<typename H::Tag, Write<void>>::value)
+             //{
             StatePicture *decodedPicture = h;
             decodedPicture->motion->fillRectangle(pu, blockData);
         }
@@ -1757,30 +1763,12 @@ struct Write<mvd_coding>
 };
 
 template <>
-struct Write<OutputPicture>
+struct Write<PictureOutput>
 {
-    template <class H> static void go(const OutputPicture &op, H &h)
+    template <class H> static void go(PictureOutput po, H &h)
     {
-        std::shared_ptr<StatePicture> pic = static_cast<StatePictures *>(h)->getPicByPoc(op.poc);
-        static_cast<StateEncode *>(h)->decodedPictures.push_back(pic);
-    }
-};
-
-
-template <>
-struct Write<DeletePicture>
-{
-    template <class H> static void go(const DeletePicture &dp, H &h)
-    {
-    }
-};
-
-
-template <>
-struct Write<DpbClear>
-{
-    template <class H> static void go(const DpbClear &f, H &h)
-    {
+        StateEncode* stateEncode = h;
+        stateEncode->decodedPictures.push_back(po.statePicture);
     }
 };
 
@@ -1792,7 +1780,7 @@ template <> struct Write<pic_timing>
         Hrd hrdDefault{};
         Hrd *hrd = getHrd(h);
         if (!hrd) hrd = &hrdDefault;
-        auto h2 =  h.extend(&*hrd);
+        auto h2 = h.extend(&*hrd);
         Syntax<pic_timing>::go(e, h2);
     }
 };
@@ -1848,18 +1836,18 @@ template <> struct Write<multiview_view_position> : NotImplemented { };
 template <class F>
 struct Measure :
     Write<F>
-    {
-    };
+{
+};
 
 template <class F> struct MeasureLuma : Measure<F> { };
-template <> struct MeasureLuma<Element<cbf_cb, ae>> : Null<Element<cbf_cb, ae>>{};
-template <> struct MeasureLuma<Element<cbf_cr, ae>> : Null<Element<cbf_cr, ae>>{};
-template <> struct MeasureLuma<Element<intra_chroma_pred_mode, ae>> : Null<Element<intra_chroma_pred_mode, ae>>{};
+template <> struct MeasureLuma<Element<cbf_cb, ae>> : Null<Element<cbf_cb, ae>> {};
+template <> struct MeasureLuma<Element<cbf_cr, ae>> : Null<Element<cbf_cr, ae>> {};
+template <> struct MeasureLuma<Element<intra_chroma_pred_mode, ae>> : Null<Element<intra_chroma_pred_mode, ae>> {};
 
 
 template <class F> struct MeasureChroma : Measure<F> { };
-template <> struct MeasureChroma<Element<cbf_luma, ae>> : Null<Element<cbf_luma, ae>>{};
-template <> struct MeasureChroma<Element<split_transform_flag, ae>> : Null<Element<split_transform_flag, ae>>{};
+template <> struct MeasureChroma<Element<cbf_luma, ae>> : Null<Element<cbf_luma, ae>> {};
+template <> struct MeasureChroma<Element<split_transform_flag, ae>> : Null<Element<split_transform_flag, ae>> {};
 
 
 template <class H>

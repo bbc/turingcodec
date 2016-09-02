@@ -36,21 +36,21 @@ struct alpha_channel_clip_type_flag { };
 template <>
 struct Syntax<alpha_channel_info>
 {
-	template <class H> static void go(alpha_channel_info const &fun, H &h)
-	{
-		h(alpha_channel_cancel_flag(), u(1));
-		if (!h[alpha_channel_cancel_flag()])
-		{
-			h(alpha_channel_use_idc(), u(3));
-			h(alpha_channel_bit_depth_minus8(), u(3));
-			h(alpha_transparent_value(), uv());
-			h(alpha_opaque_value(), uv());
-			h(alpha_channel_incr_flag(), u(1));
-			h(alpha_channel_clip_flag(), u(1));
-			if (h[alpha_channel_clip_flag()])
-				h(alpha_channel_clip_type_flag(), u(1));
-		}
-	}
+    template <class H> static void go(alpha_channel_info const &fun, H &h)
+    {
+        h(alpha_channel_cancel_flag(), u(1));
+        if (!h[alpha_channel_cancel_flag()])
+        {
+            h(alpha_channel_use_idc(), u(3));
+            h(alpha_channel_bit_depth_minus8(), u(3));
+            h(alpha_transparent_value(), uv());
+            h(alpha_opaque_value(), uv());
+            h(alpha_channel_incr_flag(), u(1));
+            h(alpha_channel_clip_flag(), u(1));
+            if (h[alpha_channel_clip_flag()])
+                h(alpha_channel_clip_type_flag(), u(1));
+        }
+    }
 };
 
 
@@ -59,28 +59,21 @@ NUMBER_OF_BITS_UV(alpha_opaque_value, h[alpha_channel_bit_depth_minus8()] + 9)
 
 
 struct AlphaChannelInfo :
-	ValueHolder<alpha_channel_cancel_flag>,
-	ValueHolder<alpha_channel_use_idc>,
-	ValueHolder<alpha_channel_bit_depth_minus8>,
-	ValueHolder<alpha_transparent_value>,
-	ValueHolder<alpha_opaque_value>,
-	ValueHolder<alpha_channel_incr_flag>,
-	ValueHolder<alpha_channel_clip_flag>,
-	ValueHolder<alpha_channel_clip_type_flag>
+    ValueHolder<alpha_channel_cancel_flag>,
+    ValueHolder<alpha_channel_use_idc>,
+    ValueHolder<alpha_channel_bit_depth_minus8>,
+    ValueHolder<alpha_transparent_value>,
+    ValueHolder<alpha_opaque_value>,
+    ValueHolder<alpha_channel_incr_flag>,
+    ValueHolder<alpha_channel_clip_flag>,
+    ValueHolder<alpha_channel_clip_type_flag>
     {
     };
 
 
-template <class H> void Read<alpha_channel_info>::go(alpha_channel_info const &f, H &h)
+template <class H> void Read<alpha_channel_info>::go(alpha_channel_info f, H &h)
 {
-	AlphaChannelInfo alphaChannelInfo;
-	auto hh = h.extend(&alphaChannelInfo);
-	Syntax<alpha_channel_info>::go(f, hh);
+    AlphaChannelInfo alphaChannelInfo;
+    auto hh = h.extend(&alphaChannelInfo);
+    Syntax<alpha_channel_info>::go(f, hh);
 }
-
-
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(alpha_channel_info)
-#endif

@@ -23,46 +23,71 @@ For more information, contact us at info @ turingcodec.org.
 
 #pragma once
 
-#include "Picture.h"
 #include "StateSpatial.h"
 #include "LoopFilter.h"
 #include "StateCollocatedMotion.h"
+#include "StateParameterSets.h"
 #include "StateValues.h"
-#include "RateControl.h"
+#include "ScalingMatrices.h"
+#include "Cabac.h"
 #include <memory>
 #include <array>
 
 
-// review: use x-args here, move to HevcTypes.h
-enum Reference
+struct StateReconstructedPictureBase
 {
-    UNUSED,
-    SHORT_TERM,
-    LONG_TERM
+    virtual ~StateReconstructedPictureBase() { };
 };
 
-struct ReconstructedPictureBase
-{
-    virtual ~ReconstructedPictureBase() { };
-};
 
-template <class H>
-struct GetSampleType
-{
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Type;
-};
-
-// review: naming - perhaps combine functionality with ReconstructedPicture
 template <typename T>
-struct ReconstructedPicture2 :
-    ReconstructedPictureBase
+struct StateReconstructedPicture :
+    StateReconstructedPictureBase
+{
+    typedef T Sample;
+    std::shared_ptr<Picture<T>> picture;
+    std::shared_ptr<Picture<T>> saoPicture;
+    std::shared_ptr<Picture<T>> deblockPicture;
+    ThreePlanes<T> conformanceWindow;
+};
+
+// metafunction to retrieve sample type from handler type
+template <class H>
+struct SampleType
+{
+    typedef typename Access<Concrete<StateReconstructedPictureBase>, H>::ActualType::Sample Type;
+    static_assert(std::is_same<Type, uint8_t>::value || std::is_same<Type, uint16_t>::value, "");
+};
+
+
+// State that relates to a NAL unit
+struct StateNalUnit :
+    ValueHolder<nal_unit_type>,
+    ValueHolder<nuh_layer_id>,
+    ValueHolder<nuh_temporal_id_plus1>
+{
+    StateNalUnit()
     {
-        typedef T Sample;
-        std::shared_ptr<Picture<T>> picture;
-        std::shared_ptr<Picture<T>> saoPicture;
-        std::shared_ptr<Picture<T>> deblockPicture;
-        ThreePlanes<T> conformanceWindow;
-    };
+        this->ValueHolder<nuh_temporal_id_plus1>::value = 1;
+    }
+};
+
+
+// Decoder or encoder state that persists while working on a particular slice of video
+struct StateSlice :
+    StateNalUnit,
+    ValueHolder<SliceAddrRs>,
+    ValueHolder<CtbAddrInTs>,
+    ValueHolder<QpY>,
+    SliceSegmentHeader,
+    ScalingMatrices,
+    ActiveParameterSets,
+    short_term_ref_pic_set
+{
+    Contexts savedContexts[2];
+    int savedStatCoeff[2][4];
+};
+
 
 // Decoder or encoder state that persists while working on a particular video frame
 struct StatePicture :
@@ -74,28 +99,21 @@ struct StatePicture :
     ValueHolder<CtbAddrRsToTs>,
     ValueHolder<CtbAddrTsToRs>,
     ValueHolder<TileId>,
+    StateSlice,
     StateSpatial
     {
+        using AccessOperators<StatePicture>::operator[];
+
         virtual ~StatePicture() { }
 
-        std::shared_ptr<ReconstructedPictureBase> reconstructedPicture;
+        std::shared_ptr<StateReconstructedPictureBase> reconstructedPicture;
 
         std::shared_ptr<LoopFilter::Picture> loopFilterPicture;
 
         Reference reference;
 
-        char const *referenceName() const
-        {
-            switch (this->reference)
-            {
-                default:
-                case UNUSED: return "unused for reference";
-                case SHORT_TERM: return "used for short-term reference";
-                case LONG_TERM: return "used for long-term reference";
-            }
-        }
-
         bool neededForOutput;
+        bool hasBeenOutput = false;
         int nal_unit_type;
         int TemporalId;
         int codedVideoSequenceId;
@@ -164,45 +182,13 @@ struct Access<RefPicList, S, typename std::enable_if<std::is_base_of<StatePictur
     }
 };
 
-template <class S>
-struct Access<ReconstructedPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(ReconstructedPicture, ReconstructedPicture2<Sample> &s)
-    {
-        return *s.picture;
-    }
-};
 
 template <class S>
-struct Access<SaoPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(SaoPicture, ReconstructedPicture2<Sample> &s)
-    {
-        return *s.saoPicture;
-    }
-};
-
-template <class S>
-struct Access<DeblockPicture, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
-{
-    typedef typename S::Sample Sample;
-    typedef Picture<Sample> &Type;
-    static Type get(DeblockPicture, ReconstructedPicture2<Sample> &s)
-    {
-        return *s.deblockPicture;
-    }
-};
-
-template <class S>
-struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<ReconstructedPictureBase, S>::value>::type>
+struct Access<ReconstructedSamples, S, typename std::enable_if<std::is_base_of<StateReconstructedPictureBase, S>::value>::type>
 {
     typedef typename S::Sample Sample;
     typedef Raster<Sample> Type;
-    static Type get(ReconstructedSamples e, ReconstructedPicture2<Sample> &s)
+    static Type get(ReconstructedSamples e, StateReconstructedPicture<Sample> &s)
     {
         return (*s.picture)(e.x, e.y, e.cIdx);
     }

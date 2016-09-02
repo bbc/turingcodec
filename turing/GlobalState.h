@@ -40,8 +40,6 @@ For more information, contact us at info @ turingcodec.org.
 #include "Profiler.h"
 #include "StateFunctionTables.h"
 #include "QpState.h"
-#include "RateControl.h"
-#include "Mvp.h"
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -54,40 +52,25 @@ For more information, contact us at info @ turingcodec.org.
 // Decoder or encoder state that persists for the whole video sequence
 struct StateSequence :
     StateParameterSets,
+    ValueHolder<Active<Vps>>,
+    ValueHolder<Active<Sps>>,
     StatePictures,
     Profiler::Timers
     {
     };
 
 
-// State that relates to a NAL unit
-struct StateNalUnit :
-    ValueHolder<nal_unit_type>,
-    ValueHolder<nuh_layer_id>,
-    ValueHolder<nuh_temporal_id_plus1>
-    {
-        StateNalUnit()
-        {
-            this->ValueHolder<nuh_temporal_id_plus1>::value = 1;
-        }
-    };
+namespace Mvp {
+
+struct Predictors
+{
+    PuData merge[5];
+    MotionVector mvp[15 /* refIdx */][2 /* refList */][2 /* mvp_flag */];
+};
+
+}
 
 
-
-// Decoder or encoder state that persists while working on a particular slice of video
-struct StateSlice :
-    StateNalUnit,
-    ValueHolder<SliceAddrRs>,
-    ValueHolder<CtbAddrInTs>,
-    ValueHolder<QpY>,
-    SliceSegmentHeader,
-    ScalingMatrices,
-    ActiveParameterSets,
-    short_term_ref_pic_set
-    {
-        Contexts savedContexts[2];
-        int savedStatCoeff[2][4];
-    };
 
 struct StateSubstream :
     AccessOperators<StateSubstream>,
@@ -311,6 +294,18 @@ template <class S> struct Access<intra_chroma_pred_mode, S, typename std::enable
         }
 
         return s.intra_chroma_pred_mode[0][0];
+    }
+};
+
+
+// Local state that precomputes and caches the constant value scanIdx
+struct StateResidualCoding :
+    ValueCache<scanIdx>
+{
+    template <class H>
+    StateResidualCoding(H &h) :
+        ValueCache<scanIdx>(h)
+    {
     }
 };
 

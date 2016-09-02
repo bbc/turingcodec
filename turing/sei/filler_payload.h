@@ -26,7 +26,7 @@ For more information, contact us at info @ turingcodec.org.
 template <>
 struct Syntax<filler_payload>
 {
-    template <class H> static void go(const filler_payload &fun, H &h)
+    template <class H> static void go(filler_payload fun, H &h)
     {
         for (int k = 0; k < fun.payloadSize; k++)
             h(ff_byte() /* equal to 0xFF */, f(8));
@@ -34,13 +34,7 @@ struct Syntax<filler_payload>
 };
 
 
-template <class H> void Read<filler_payload>::go(filler_payload const & f, H &h)
+template <class H> void Read<filler_payload>::go(filler_payload f, H &h)
 {
     Syntax<filler_payload>::go(f, h);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(filler_payload)
-#endif
-

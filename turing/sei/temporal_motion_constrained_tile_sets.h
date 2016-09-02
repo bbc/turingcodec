@@ -109,14 +109,9 @@ struct TemporalMotionConstrainedTileSets :
     {
     };
 
-template <class H> void Read<temporal_motion_constrained_tile_sets>::go(temporal_motion_constrained_tile_sets const &f, H &h)
+template <class H> void Read<temporal_motion_constrained_tile_sets>::go(temporal_motion_constrained_tile_sets f, H &h)
 {
     TemporalMotionConstrainedTileSets s;
     auto h2 = h.extend(&s);
     Syntax<temporal_motion_constrained_tile_sets>::go(f, h2);
 }
-
-
-#ifdef EXPLICIT_INSTANTIATION
-    EXPLICIT_INSTANTIATION(temporal_motion_constrained_tile_sets)
-#endif

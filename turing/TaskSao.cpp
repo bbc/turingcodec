@@ -54,7 +54,8 @@ bool TaskSao<H>::blocked()
     if (ry < h[PicHeightInCtbsY()] - 1) ++ry;
 
     // Blocked by deblock task? (bottom-right CTU not ready)
-    if (!(*this->syncIn)(rx, ry)) return true;
+    if (!(*this->syncIn)(rx, ry)) 
+        return true;
 
     return false;
 }
@@ -63,15 +64,15 @@ bool TaskSao<H>::blocked()
 template <class H>
 bool TaskSao<H>::run()
 {
-    typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-    static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+    using Sample = typename SampleType<H>::Type;
 
     Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->postprocess);
 
     ThreadPool *threadPool = h;
 
-    Picture<Sample> *picture = &h[ReconstructedPicture()];
-    Picture<Sample> *saoPicture = &h[SaoPicture()];
+    StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
+    Picture<Sample> *picture = stateReconstructedPicture->picture.get();
+    Picture<Sample> *saoPicture = stateReconstructedPicture->saoPicture.get();
     while (true)
     {
         const int rx = this->position % h[PicWidthInCtbsY()];
@@ -167,13 +168,12 @@ bool TaskSao<H>::run()
     {
         StateEncode *stateEncode = h;
         StatePicture *statePicture = h;
-        ReconstructedPicture2<Sample> *currPic = h;
+        StateReconstructedPicture<Sample> *currPic = h;
         if (stateEncode->psnrAnalysis)
         {
             StateEncodePicture *stateEncodePicture = h;
             PictureWrapper &pictureWrapper = *stateEncodePicture->docket->picture;
-            typedef typename Access<Concrete<ReconstructedPictureBase>, H>::ActualType::Sample Sample;
-            static_assert(std::is_same<Sample, uint8_t>::value || std::is_same<Sample, uint16_t>::value, "");
+            using Sample = typename SampleType<H>::Type;
             auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
             stateEncode->psnrAnalysis->analyse(*currPic->picture, picture);
         }

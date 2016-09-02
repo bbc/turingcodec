@@ -281,12 +281,13 @@ struct turing_encoder
         return &this->output.bitstream;
     }
 
-    static int line(int y, bool fieldCoding, bool bottomField)
+    static int line(int height, int y, bool fieldCoding, bool bottomField)
     {
         if (fieldCoding)
-            return (y << 1) + bottomField;
-        else
-            return y;
+            y = (y << 1) + bottomField;
+        if (y >= height)
+            y = height - 1;
+        return y;
     }
 
     turing_encoder_output* encode(turing_picture *picture)
@@ -321,7 +322,7 @@ struct turing_encoder
                         for (int cIdx = 0; cIdx < 3; ++cIdx)
                             for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
                             {
-                                auto p = frame[cIdx].p + line(y, fieldCoding, !field) * frame[cIdx].stride;
+                                auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                                 for (int x = 0; x < (*pictureWrap)[cIdx].width; ++x)
                                     (*pictureWrap)[cIdx](x, y) = p[x] << 2;
                             }
@@ -331,7 +332,7 @@ struct turing_encoder
                         for (int cIdx = 0; cIdx < 3; ++cIdx)
                             for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
                             {
-                                auto p = frame[cIdx].p + line(y, fieldCoding, !field) * frame[cIdx].stride;
+                                auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                                 memcpy(&(*pictureWrap)[cIdx](0, y), p, (*pictureWrap)[cIdx].width * sizeof(uint16_t));
                             }
                     }
@@ -347,7 +348,7 @@ struct turing_encoder
                     for (int cIdx = 0; cIdx < 3; ++cIdx)
                         for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
                         {
-                            auto p = frame[cIdx].p + line(y, fieldCoding, !field) * frame[cIdx].stride;
+                            auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                             memcpy(&(*pictureWrap)[cIdx](0, y), p, (*pictureWrap)[cIdx].width * sizeof(uint8_t));
                         }
 
@@ -528,7 +529,21 @@ int encode(int argc, const char* const argv[])
                 int bitdepth = encoder->vm.at("bit-depth").as<int>();
                 ShotChangeDetection sc(encoder->inputFilename.c_str(), bitdepth, encoder->encoder->frameWidth, encoder->encoder->frameHeight, (int)encoder->bytesPerInputFrame(), firstFrame, (int)nFrames);
                 std::vector<int> shotChangeList;
+                ifstream ifs("shotChangeLog.txt", ios::in);
+                if(ifs)
+                {
+                    int value, elements = 0;
+                    shotChangeList.resize(static_cast<int>(nFrames));
+                    memset(&shotChangeList[0], 0, sizeof(shotChangeList[0])*nFrames);
+                    while(ifs >> value && elements < shotChangeList.size())
+                    {
+                        shotChangeList[elements++] = value;
+                    }
+                }
+                else
+                {
                 sc.processSeq(shotChangeList);
+                }
                 encoder->encoder->setShotChangeList(shotChangeList);
             }
 
