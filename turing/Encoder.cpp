@@ -125,7 +125,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         }
     }
 
-    if (this->vm.count("psnr"))
+    if (this->vm.count("psnr") || (this->stateEncode.verbosity == 2))
         this->stateEncode.psnrAnalysis.reset(new PsnrAnalysis((this->vm["internal-bit-depth"].as<int>() > this->vm["bit-depth"].as<int>()) ? this->vm["internal-bit-depth"].as<int>() : this->vm["bit-depth"].as<int>()));
 
     if (this->vm.count("hash"))
