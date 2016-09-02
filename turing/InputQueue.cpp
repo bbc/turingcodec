@@ -94,6 +94,7 @@ struct InputQueue::State
     std::deque<Timestamp> timestamps;
 
     size_t pictureInputCount = 0;
+    size_t picturePreprocessCount = 0;
     int sequenceFront = 0;
     int sequenceIdr = 0;
     bool finish = false;
@@ -111,7 +112,7 @@ struct InputQueue::State
         return false;
 #endif
         if (delta == 0) return false;
-        int offset = sequenceIdr - sequenceFront + 1;
+        int offset =(sequenceIdr < sequenceFront)? this->entries.size() : (sequenceIdr - sequenceFront + 1);
         int deltaLimit = (static_cast<int>(this->entries.size() > offset)) ? offset : static_cast<int>(this->entries.size());
         if (i - 1 + delta >= deltaLimit) return false;
         return !!this->entries.at(i - 1 + delta).docket;
@@ -166,8 +167,8 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
         docket->sopLevel = sopLevel;
         if(shotChange)
         {
-            assert(docket->poc < m_shotChangeList.size());
-            docket->isShotChange = !!m_shotChangeList[docket->poc];
+            assert(docket->poc < scd->m_shotChangeList.size());
+            docket->isShotChange = !!scd->m_shotChangeList[docket->poc];
         }
         else
         {
@@ -212,7 +213,7 @@ void InputQueue::State::process()
         gopSize = int(entries.size());
         lastPicture = 0;
     }
-
+    
     const int gopSizeIdr = this->sequenceIdr - this->sequenceFront + 1;
     if ((this->sequenceIdr - this->sequenceFront)>=0 && gopSizeIdr <= gopSize)
     {
@@ -307,15 +308,15 @@ void InputQueue::append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr
 
     size_t const reorderDelay = 3; // review: could reduce - this relates to *_max_num_reorder_pics
 
-    if (this->state->pictureInputCount == 1)
+    if (this->state->picturePreprocessCount == 1)
     {
         // upon the second picture, we know the PTS period
         auto const period = picture->pts - timestamps.front().timestamp;
         for (size_t i=0; i<reorderDelay; ++i)
             timestamps.push_front({ timestamps.front().timestamp - period, i });
     }
-    timestamps.push_back({ picture->pts, this->state->pictureInputCount + reorderDelay });
-    ++this->state->pictureInputCount;
+    timestamps.push_back({ picture->pts, this->state->picturePreprocessCount + reorderDelay });
+    ++this->state->picturePreprocessCount;
 }
 
 
@@ -345,6 +346,7 @@ void InputQueue::preanalyse()
         {
             this->state->entries.push_back(this->state->entriesPreanalysis.front());
             this->state->entriesPreanalysis.pop_front();
+            ++this->state->pictureInputCount;
         }
     }
 }
@@ -359,15 +361,13 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
     if (this->state->pictureInputCount == 1 && !this->eos())
         return nullptr;
     
-
-
     this->state->process();
 
     int isIntraFrame = -1;
     bool encodeIntraFrame = false;
     int size = int(this->state->entries.size() > 8) ? 8 : int(this->state->entries.size());
-    //for (int i = 0; i < size; ++i)
-    for (int i = 0; i < int(this->state->entries.size()); ++i)
+    for (int i = 0; i < size; ++i)
+    //for (int i = 0; i < int(this->state->entries.size()); ++i)
     {
         if (!this->state->entries.at(i).docket || this->state->entries.at(i).done()) break;
         if (this->state->entries.at(i).docket->sliceType == I)
@@ -378,8 +378,8 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
     }
 
     std::shared_ptr<InputQueue::Docket> docket;
-    for (int i = 0; i < int(this->state->entries.size()); ++i)
-    //for (int i = 0; i < size; ++i)
+    //for (int i = 0; i < int(this->state->entries.size()); ++i)
+    for (int i = 0; i < size; ++i)
     {
         docket = this->state->entries.at(i).docket;
         if (!docket) 
@@ -388,8 +388,9 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
         bool canEncode = true;
 
         for (int deltaPoc : docket->references.positive)
-            if (!this->state->entries.at(i + deltaPoc).done()) 
+            if (!this->state->entries.at(i + deltaPoc).done())
                 canEncode = false;
+
        //if( abs(this->state->entries.at(i).docket->poc - this->state->scd->m_seqEnd) < 10)
        //    canEncode = false;
         //if (encodeIntraFrame && i != isIntraFrame)
