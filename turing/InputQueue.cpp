@@ -23,6 +23,10 @@ For more information, contact us at info @ turingcodec.org.
 #include <cassert>
 #include <deque>
 
+struct LookaheadAnalysisResults
+{
+};
+
 
 namespace {
 
@@ -37,6 +41,7 @@ struct Piece
     std::shared_ptr<InputQueue::Docket> docket;
     std::shared_ptr<PictureWrapper> picture;
     std::shared_ptr<AdaptiveQuantisation> aqInfo;
+    std::shared_ptr<LookaheadAnalysisResults> lookaheadAnalysisResults;
 
     bool done() const
     {
@@ -60,7 +65,8 @@ struct InputQueue::State
         maxGopN(maxGopN),
         maxGopM(maxGopM),
         fieldCoding(fieldCoding),
-        shotChange(shotChange)
+        shotChange(shotChange),
+        scd(new ShotChangeDetection())
     {
     }
 
@@ -69,6 +75,14 @@ struct InputQueue::State
     const bool fieldCoding;
     const bool shotChange;
 
+
+    // list of pictures in preanalysis stage
+    std::deque<Piece> entriesPreanalysis;
+
+    // Shot change detection engine
+    std::unique_ptr<ShotChangeDetection> scd;
+
+    //list of pictures use during SOP planning - ~8 pictures
     std::deque<Piece> entries;
 
     struct Timestamp
@@ -103,20 +117,21 @@ struct InputQueue::State
         return !!this->entries.at(i - 1 + delta).docket;
     }
 
-    std::vector<int>        m_shotChangeList;
-    void setShotChangeList(std::vector<int>& shotChangeList) { if (shotChangeList.size()) m_shotChangeList.swap(shotChangeList); };
-    int computeNextIdr(int sequenceFront, int nextDefaultIdr, bool fieldCoding = false)
+    int computeNextIdr(int sequenceFront, int currDefaultIdr, int intraPeriod)
     {
-        int nextIdr = nextDefaultIdr;
-        int scale = fieldCoding ? 1 : 0;
-        for (int i = sequenceFront; i < nextDefaultIdr; i++)
+        int nextIdr = currDefaultIdr + intraPeriod;
+        for (int i = sequenceFront; i < (currDefaultIdr + intraPeriod); i++)
         {
-            int index = (i >> scale);
+            int index = i;
             index = (index < 0) ? 0 : index;
-            if (index >= m_shotChangeList.size())
+            if (index >= this->scd->m_shotChangeList.size())
+            {
+                nextIdr = currDefaultIdr;
                 break;
+            }
+                
 
-            if (i % (fieldCoding + 1) == 0 && m_shotChangeList[index])
+            if (this->scd->m_shotChangeList[index])
             {
                 nextIdr = i;
                 break;
@@ -172,12 +187,12 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
 
 void InputQueue::State::process()
 {
-    if (this->entries.empty() || this->entries.front().docket) return;
+    if (this->entries.empty() ||  this->entries.front().docket) return;
 
     if (this->shotChange)
     {
         if ((this->sequenceIdr - this->sequenceFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->sequenceFront, (this->sequenceIdr + this->maxGopN), this->fieldCoding);
+            this->sequenceIdr = computeNextIdr(this->sequenceFront, this->sequenceIdr, this->maxGopN);
     }
     else
     {
@@ -199,7 +214,7 @@ void InputQueue::State::process()
     }
 
     const int gopSizeIdr = this->sequenceIdr - this->sequenceFront + 1;
-    if (gopSizeIdr <= gopSize)
+    if ((this->sequenceIdr - this->sequenceFront)>=0 && gopSizeIdr <= gopSize)
     {
         gopSize = gopSizeIdr;
         lastPicture = 'I';
@@ -285,8 +300,8 @@ void InputQueue::State::process()
 void InputQueue::append(std::shared_ptr<PictureWrapper> picture, std::shared_ptr<AdaptiveQuantisation> aqInfo)
 {
     assert(!this->state->finish);
-    this->state->entries.push_back(Piece(picture));
-    this->state->entries.back().aqInfo = aqInfo;
+    this->state->entriesPreanalysis.push_back(Piece(picture));
+    this->state->entriesPreanalysis.back().aqInfo = aqInfo;
 
     auto &timestamps = this->state->timestamps;
 
@@ -309,25 +324,50 @@ void InputQueue::endOfInput()
     this->state->finish = true;
 }
 
+void InputQueue::preanalyse()
+{
+    auto n = this->state->entriesPreanalysis.size();
+    if (n == 0)
+        return;
+    auto windowSize = this->state->shotChange ? 40 : this->state->maxGopM;
+
+    if (n >= windowSize ||  this->state->finish)
+    {
+        if (n > windowSize)
+            n = windowSize;
+
+        if (this->state->shotChange)
+        {
+            this->state->scd->processSeq(this->state->entriesPreanalysis, n);
+        }
+
+        for (int i = 0; i < n; ++i)
+        {
+            this->state->entries.push_back(this->state->entriesPreanalysis.front());
+            this->state->entriesPreanalysis.pop_front();
+        }
+    }
+}
 
 bool InputQueue::eos() const
 {
     return this->state->finish;
 }
 
-
 std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
 {
     if (this->state->pictureInputCount == 1 && !this->eos())
         return nullptr;
+    
 
-    this->state->setShotChangeList(m_shotChangeList);
+
     this->state->process();
 
     int isIntraFrame = -1;
     bool encodeIntraFrame = false;
     int size = int(this->state->entries.size() > 8) ? 8 : int(this->state->entries.size());
-    for (int i = 0; i < size; ++i)
+    //for (int i = 0; i < size; ++i)
+    for (int i = 0; i < int(this->state->entries.size()); ++i)
     {
         if (!this->state->entries.at(i).docket || this->state->entries.at(i).done()) break;
         if (this->state->entries.at(i).docket->sliceType == I)
@@ -339,6 +379,7 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
 
     std::shared_ptr<InputQueue::Docket> docket;
     for (int i = 0; i < int(this->state->entries.size()); ++i)
+    //for (int i = 0; i < size; ++i)
     {
         docket = this->state->entries.at(i).docket;
         if (!docket) 
@@ -349,12 +390,13 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
         for (int deltaPoc : docket->references.positive)
             if (!this->state->entries.at(i + deltaPoc).done()) 
                 canEncode = false;
+       //if( abs(this->state->entries.at(i).docket->poc - this->state->scd->m_seqEnd) < 10)
+       //    canEncode = false;
+        //if (encodeIntraFrame && i != isIntraFrame)
+        //    canEncode = false;
 
-        if (encodeIntraFrame && i != isIntraFrame)
-            canEncode = false;
-
-        if (encodeIntraFrame && i == isIntraFrame)
-            canEncode = true;
+       // if (encodeIntraFrame && i == isIntraFrame)
+        //    canEncode = true;
 
         if (canEncode)
         {

@@ -79,8 +79,8 @@ struct Encoder
     size_t frameCount = 0;
     size_t byteCount = 0;
     double frameRate;
-    std::vector<int> m_shotChangeList;
     Level bitstreamLevel;
+
 
     // Check whether one of the VUI parameters is set, so that VUI writing can be happen
     bool writeVui();
@@ -90,9 +90,6 @@ struct Encoder
 
     template <class H>
     void setupVps(H &hhh, ProfileTierLevel *ptl);
-
-    //set the shot-change list
-    void setShotChangeList(std::vector<int>& shotChangeList);
 
     static int log2Size(int size, int min, int max, const char *errorMessage)
     {

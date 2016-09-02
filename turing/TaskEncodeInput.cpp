@@ -41,12 +41,12 @@ template <class H>
 bool TaskEncodeInput<H>::blocked()
 {
     StateEncode *stateEncode = this->h;
-
     if (stateEncode->responses.size() < stateEncode->concurrentFrames)
     {
         // The number of frames presently being processed has not reached the maximum.
         return false;
     }
+
 
     return true;
 }
@@ -205,6 +205,7 @@ bool TaskEncodeInput<H>::run()
         StateEncode *stateEncode = this->h;
         InputQueue *inputQueue = this->h;
 
+        inputQueue->preanalyse();
         threadPool->lock();
         if (this->blocked())
         {
@@ -212,10 +213,12 @@ bool TaskEncodeInput<H>::run()
             return true;
         }
 
+        //inputQueue->preanalyse();
         auto docket = inputQueue->getDocket();
         const bool eos = inputQueue->eos();
         threadPool->unlock();
 
+        //inputQueue->preanalyse();
         if (docket)
         {
             EstimateIntraComplexity *icInfo = new EstimateIntraComplexity();

@@ -191,6 +191,8 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         this->pictureHeight *= minCuSize;
         // review - allow non-CU-multiple dimensions also for frame coding?
         // review - is it necessary to set the conformance window accordingly?
+        if (this->pictureHeight*2 != this->frameHeight)
+            std::cout << "Warning: picture height will be padded to " << (this->pictureHeight * 2) << " samples to allow field-coding with minimum cu size of " << minCuSize << "\n" << std::endl;
     }
 
     this->stateEncode.useRateControl = !!this->vm.count("bitrate");
@@ -259,6 +261,8 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
     cout << "Frame/Field    coding           : " << (this->stateEncode.fieldcoding ? "Field based coding\n" : "Frame based coding\n");
     cout << "Coding unit size (min/max)      : " << this->vm.at("ctu").as<int>() << " / " << this->vm.at("min-cu").as<int>() << "\n";
     cout << "Intra period                    : " << this->vm.at("max-gop-n").as<int>() << "\n";
+    if (this->stateEncode.scd)
+        cout << "Shot change detection enabled. Warning: up to 48 frames will be kept in the buffer.\n";
     cout << "Structure Of Picture (SOP) size : " << this->vm.at("max-gop-m").as<int>() << "\n";
     cout << "Quantisation Parameter (QP)     : " << this->vm.at("qp").as<int>() << "\n";
     if (this->stateEncode.useRateControl)
@@ -294,7 +298,6 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
     cout << " sdh=" << this->stateEncode.sdh;
     cout << " tskip=" << this->stateEncode.tskip;
     cout << " aps=" << this->stateEncode.aps;
-    cout << " shot-change=" << this->stateEncode.scd;
     cout << "\n\n";
     cout.flush();
 
@@ -395,7 +398,6 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
     if (this->stateEncode.verbosity == 2) this->frameCpuTimer.start();
 
     const bool eos = !picture;
-    this->stateEncode.setShotChangeList(m_shotChangeList);
 
     {
         threadPool->lock();
@@ -690,13 +692,6 @@ void Encoder::setupPps(H &hh)
         h[diff_cu_qp_delta_depth()] = this->vm.at("aq-depth").as<int>();
     }
 }
-
-
-void Encoder::setShotChangeList(std::vector<int>& shotChangeList)
-{
-    m_shotChangeList.swap(shotChangeList);
-}
-
 
 bool Encoder::writeVui()
 {

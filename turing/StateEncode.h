@@ -895,7 +895,7 @@ struct StateEncode :
             bool hungry;
             std::shared_ptr<StateEncodePicture> picture;
             bool done;
-            bool keyframe;
+            bool keyframe; //< true if IDR, CDR or BLA picture (for FFmpeg etc.)
         };
 
         // pictures currently being encoded (bitstream order)

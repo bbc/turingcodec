@@ -294,7 +294,6 @@ struct turing_encoder
     {
         this->bitstream.clear();
         this->output = { 0 };
-
         if (picture)
         {
             // note that encoder API is picture based but for interlaced coding it is being used to pass frames
@@ -320,23 +319,40 @@ struct turing_encoder
                     if (this->vm.at("bit-depth").as<int>() == 8)
                     {
                         for (int cIdx = 0; cIdx < 3; ++cIdx)
-                            for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
+                        {
+                            for (int y = 0; y < ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); ++y)
                             {
                                 auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                                 for (int x = 0; x < (*pictureWrap)[cIdx].width; ++x)
                                     (*pictureWrap)[cIdx](x, y) = p[x] << 2;
                             }
+                            if (fieldCoding)
+                            {
+                                for (int y = ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); y < (*pictureWrap)[cIdx].height; ++y)
+                                {
+                                    memset(&(*pictureWrap)[cIdx](0, y), 0, (*pictureWrap)[cIdx].width * sizeof(uint16_t));
+                                }
+                            }
+                        }
                     }
                     else
                     {
                         for (int cIdx = 0; cIdx < 3; ++cIdx)
-                            for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
+                        {
+                            for (int y = 0; y < ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); ++y)
                             {
                                 auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                                 memcpy(&(*pictureWrap)[cIdx](0, y), p, (*pictureWrap)[cIdx].width * sizeof(uint16_t));
                             }
+                            if (fieldCoding)
+                            {
+                                for (int y = ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); y < (*pictureWrap)[cIdx].height; ++y)
+                                {
+                                    memset(&(*pictureWrap)[cIdx](0, y), 0, (*pictureWrap)[cIdx].width * sizeof(uint16_t));
+                                }
+                            }
+                        }
                     }
-
                     pictureWrapper = pictureWrap;
                 }
                 else
@@ -346,11 +362,20 @@ struct turing_encoder
                     pictureWrap->fieldTB = (fieldCoding) ? (field + 1) : 0;
 
                     for (int cIdx = 0; cIdx < 3; ++cIdx)
-                        for (int y = 0; y < (*pictureWrap)[cIdx].height; ++y)
+                    {
+                        for (int y = 0; y < ((this->encoder->frameHeight>>(fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); ++y)
                         {
                             auto p = frame[cIdx].p + line(this->encoder->frameHeight >> (cIdx ? 1 : 0), y, fieldCoding, !field) * frame[cIdx].stride;
                             memcpy(&(*pictureWrap)[cIdx](0, y), p, (*pictureWrap)[cIdx].width * sizeof(uint8_t));
                         }
+                        if(fieldCoding)
+                        {
+                            for (int y = ((this->encoder->frameHeight >> (fieldCoding ? 1 : 0)) >> (cIdx ? 1 : 0)); y < (*pictureWrap)[cIdx].height; ++y)
+                            {
+                                memset(&(*pictureWrap)[cIdx](0, y), 0, (*pictureWrap)[cIdx].width * sizeof(uint8_t));
+                            }
+                        }
+                    }
 
                     pictureWrapper = pictureWrap;
                 }
@@ -523,30 +548,6 @@ int encode(int argc, const char* const argv[])
         {
             if (encoder->vm["verbosity"].as<int>())
                 encoder->encoder->printHeader(std::cout, encoder->inputFilename, encoder->outputFilename);
-
-            if (encoder->vm["shot-change"].as<bool>())
-            {
-                int bitdepth = encoder->vm.at("bit-depth").as<int>();
-                ShotChangeDetection sc(encoder->inputFilename.c_str(), bitdepth, encoder->encoder->frameWidth, encoder->encoder->frameHeight, (int)encoder->bytesPerInputFrame(), firstFrame, (int)nFrames);
-                std::vector<int> shotChangeList;
-                ifstream ifs("shotChangeLog.txt", ios::in);
-                if(ifs)
-                {
-                    int value, elements = 0;
-                    shotChangeList.resize(static_cast<int>(nFrames));
-                    memset(&shotChangeList[0], 0, sizeof(shotChangeList[0])*nFrames);
-                    while(ifs >> value && elements < shotChangeList.size())
-                    {
-                        shotChangeList[elements++] = value;
-                    }
-                }
-                else
-                {
-                sc.processSeq(shotChangeList);
-                }
-                encoder->encoder->setShotChangeList(shotChangeList);
-            }
-
             //ofs << *turing_encode_headers(encoder);
 
             for (int i = 0; i < nFrames; ++i)
