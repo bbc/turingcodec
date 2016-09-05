@@ -553,6 +553,9 @@ void PictureController::getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrIn
     qp = Clip3(minQP, maxQP, qp);
     qp = Clip3(0, 51, qp);
     m_ctuControllerEngine[ctbAddrInRs].setCtuQp(qp);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuLambda(lambda);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / lambda);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / sqrt(lambda));
 }
 
 int PictureController::getFinishedCtus()
@@ -639,11 +642,12 @@ void SOPController::updateSopController(int bitsSpent)
 {
     m_bitsLeft -= bitsSpent;
     m_framesLeft--;
+    m_framesLeft = Clip3(0, m_size, m_framesLeft);
 }
 
 int SOPController::allocateRateCurrentPicture(int level)
 {
-    int currentPicPosition = m_size - m_framesLeft;
+    int currentPicPosition = Clip3(0, m_size - 1, m_size - m_framesLeft);
     int currentPicRatio    = m_weight[currentPicPosition];
     int sumPicRatio        = 0;
     int headerBits         = getEstimatedHeaderBits(level);
@@ -792,9 +796,9 @@ SequenceController::SequenceController(double targetRate,
 
 #if WRITE_RC_LOG
     m_logFile.open("rcLogFileCpb.txt", ios::out);
-    m_logFile<<"---------------------------------------------------------------------------------\n";
-    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |      Total | CPB Status |\n";
-    m_logFile<<"---------------------------------------------------------------------------------\n";
+    m_logFile<<"----------------------------------------------------------------------------------\n";
+    m_logFile<<"|    POC |     Target |    Lambda |   QP | Coded bits |       Total | CPB Status |\n";
+    m_logFile<<"----------------------------------------------------------------------------------\n";
     m_logFile.flush();
 #endif
 }
@@ -886,8 +890,11 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel, int poc)
     // Cpb correction
     m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
 
-    assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
-    m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, picTargetBits, m_averageBpp);
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
+        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, picTargetBits, m_averageBpp);
+    }
 
 }
 
@@ -934,8 +941,11 @@ void SequenceController::updateSequenceController(bool isIntra, int sopLevel, in
     // Update Cpb status
     m_cpbControllerEngine.updateCpbStatus(codingBits);
 
-    // Delete the picture controller associated with this POC
-    assert(m_pictureControllerEngine.erase(poc) == 1);
+    {
+        // Delete the picture controller associated with this POC
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        assert(m_pictureControllerEngine.erase(poc) == 1);
+    }
 }
 
 double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel, int poc)
@@ -943,10 +953,13 @@ double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel, int
     int currentPictureLevel = isIntra ? 0 : sopLevel;
 
     double estLambda;
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
 
-    estLambda = currentPictureController->second->estimateLambda(currentPictureLevel, isIntra);
+        estLambda = currentPictureController->second->estimateLambda(currentPictureLevel, isIntra);
+    }
 
     return estLambda;
 }
@@ -1029,8 +1042,11 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
         currentBitsPerPicture = 200; // As in HM RC
     }
 
-    assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
-    m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, icInfo, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, currentBitsPerPicture, m_averageBpp);
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
+        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, icInfo, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, currentBitsPerPicture, m_averageBpp);
+    }
 
 
 }
@@ -1051,33 +1067,47 @@ void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel, int
 double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc)
 {
     int avgBits = 0;
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
+    double bpp;
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
 
-    const double bpp = currentPictureController->second->getCtuTargetBits(isIntraSlice, ctbAddrInRs);
+        bpp = currentPictureController->second->getCtuTargetBits(isIntraSlice, ctbAddrInRs);
+    }
     return bpp;
 }
 
 double SequenceController::getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel, int poc)
 {
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
-    double estLambdaCtu = currentPictureController->second->getCtuEstLambda(bpp, ctbAddrInRs, currentPictureLevel);
+    double estLambdaCtu;
+
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        estLambdaCtu = currentPictureController->second->getCtuEstLambda(bpp, ctbAddrInRs, currentPictureLevel);
+    }
 
     return estLambdaCtu;
 }
 
 int SequenceController::getCtuEstQp(int ctbAddrInRs, int currentPictureLevel, int poc)
 {
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
+    int ctuEstQp;
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
 
-    int ctuEstQp = currentPictureController->second->getCtuEstQp(ctbAddrInRs, currentPictureLevel);
+        ctuEstQp = currentPictureController->second->getCtuEstQp(ctbAddrInRs, currentPictureLevel);
+    }
     return ctuEstQp;
 }
 
 void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc)
 {
+    unique_lock<mutex> lock(m_pictureControllerMutex);
     auto currentPictureController = m_pictureControllerEngine.find(poc);
     assert(currentPictureController != m_pictureControllerEngine.end());
 
@@ -1087,6 +1117,7 @@ void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, in
 
 void SequenceController::getAveragePictureQpAndLambda(int &averageQp, double &averageLambda, int poc)
 {
+    unique_lock<mutex> lock(m_pictureControllerMutex);
     auto currentPictureController = m_pictureControllerEngine.find(poc);
     assert(currentPictureController != m_pictureControllerEngine.end());
 
@@ -1151,6 +1182,7 @@ double SequenceController::solveEquationWithBisection(double *coefficient, doubl
 
 void SequenceController::getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp, int poc)
 {
+    unique_lock<mutex> lock(m_pictureControllerMutex);
     auto currentPictureController = m_pictureControllerEngine.find(poc);
     assert(currentPictureController != m_pictureControllerEngine.end());
     currentPictureController->second->getCtuLambdaAndQp(bpp, sliceQp, ctbAddrInRs, lambda, qp);

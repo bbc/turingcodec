@@ -33,6 +33,7 @@ For more information, contact us at info @ turingcodec.org.
 #include <list>
 #include <array>
 #include <map>
+#include <mutex>
 #include "HevcMath.h"
 #include "EstimateIntraComplexity.h"
 
@@ -476,6 +477,7 @@ private:
     DataStorage       *m_dataStorageEngine;
     map<int, PictureController*> m_pictureControllerEngine;
     CpbInfo            m_cpbControllerEngine;
+    mutex  m_pictureControllerMutex;
     double m_lastCodedPictureLambda;
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
@@ -573,6 +575,7 @@ public:
 
     void   updateValidityFlag(bool flag, int ctuIdx, int poc)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         currentPictureController->second->updateCtuValidityFlag(flag, ctuIdx);
@@ -580,6 +583,7 @@ public:
 
     void setValidityFlag(bool flag, int ctuIdx, int poc)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         currentPictureController->second->setCtuValidityFlag(flag, ctuIdx);
@@ -587,9 +591,10 @@ public:
 
     int getCtuStoredQp(int ctuIdx, int poc)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
-        currentPictureController->second->getCtuStoredQp(ctuIdx);
+        return currentPictureController->second->getCtuStoredQp(ctuIdx);
     }
 
     void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda, int poc);
@@ -630,6 +635,7 @@ public:
     }
     int getPictureTargetBits(int poc)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getPictureTargetBits();
@@ -662,18 +668,21 @@ public:
 
     double getCtuLambda(int poc, int ctbAddrInRs)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtuLambda(ctbAddrInRs);
     }
     double getCtuReciprocalLambda(int poc, int ctbAddrInRs)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtuReciprocalLambda(ctbAddrInRs);
     }
     double getCtuReciprocalSqrtLambda(int poc, int ctbAddrInRs)
     {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtuReciprocalSqrtLambda(ctbAddrInRs);
