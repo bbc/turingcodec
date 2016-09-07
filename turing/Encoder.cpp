@@ -211,7 +211,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->vm["ctu"].as<int>(),
                 6,
                 this->vm["qp"].as<int>()));
-        this->stateEncode.concurrentFrames = 1;
+        //this->stateEncode.concurrentFrames = 1;
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
@@ -524,6 +524,17 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 // Implemented print out of reference frames used
                 std::cout << oss.str() << "\n";
                 std::cout.flush();
+            }
+
+            if(this->stateEncode.useRateControl)
+            {
+                auto &h = *response.picture;
+                size_t rate = (bytes) << 3;
+#if WRITE_RC_LOG
+                char data[100];
+                sprintf(data, " %10d | %10d |\n", (int)rate, stateEncode.rateControlEngine->getCpbFullness());
+                stateEncode.rateControlEngine->writetoLogFile(data);
+#endif
             }
 
             ++this->frameCount;

@@ -961,7 +961,6 @@ void Syntax<hrd_parameters>::go(const hrd_parameters &fun, H &h)
     if (fun.commonInfPresentFlag)
     {
         h(nal_hrd_parameters_present_flag(), u(1));
-        std::cout<<h[nal_hrd_parameters_present_flag()]<<std::endl;
         h(vcl_hrd_parameters_present_flag(), u(1));
         if (h[nal_hrd_parameters_present_flag()] || h[vcl_hrd_parameters_present_flag()])
         {

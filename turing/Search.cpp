@@ -86,6 +86,12 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
 
         Lambda lambda;
         lambda.set(getReciprocalSqrtLambda(h));
+        StateEncode *stateEncode = h;
+        if(stateEncode->useRateControl)
+        {
+            double value = stateEncode->rateControlEngine->getCtuReciprocalSqrtLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+            lambda.set(value);
+        }
 
         for (int n = 0; n < 35; ++n)
         {
@@ -205,7 +211,13 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
             auto m = h.template change<EstimateRateLuma<void>>();
             m(intraPartition);
 
-            const Lambda lambda = getReciprocalLambda(h);
+            Lambda lambda = getReciprocalLambda(h);
+            StateEncode *stateEncode = h;
+            if(stateEncode->useRateControl)
+            {
+                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                lambda.set(value);
+            }
             (*activeCandidate)->ContextsAndCost::lambdaDistortion += lambda * ssd;
         }
 
@@ -289,7 +301,14 @@ void searchIntraChroma(H &h, const coding_quadtree &cqt)
 
         ASSERT(challenger->codedDataAfter == challenger->residual.p);
 
-        challenger->ContextsAndCost::lambdaDistortion += getReciprocalLambda(h) * ssd;
+        Lambda reciprocalLambda = getReciprocalLambda(h);
+        StateEncode *stateEncode = h;
+        if(stateEncode->useRateControl)
+        {
+            double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+            reciprocalLambda.set(value);
+        }
+        challenger->ContextsAndCost::lambdaDistortion += reciprocalLambda * ssd;
 
         if (challenger->cost2() < champion->cost2())
         {
@@ -1346,8 +1365,8 @@ private:
 template <typename Sample>
 struct StateMeFullPel
 {
-    template <class H> StateMeFullPel(H &h, int refList, prediction_unit const &pu, MvCandidate &best)
-        :
+
+    template <class H> StateMeFullPel(H &h, int refList, prediction_unit const &pu, MvCandidate &best) :
         best(best),
         tableSad(h),
         tableSadMultiref(h),
@@ -1364,7 +1383,16 @@ struct StateMeFullPel
         auto &referencePicture = static_cast<StateReconstructedPicture<Sample> &>(*h[RefPicList(refList)][0].dp->reconstructedPicture);
         this->ref = Raster<Sample const>((*referencePicture.picture)[0], pu.x0, pu.y0);
 
-        this->lambda.set(getReciprocalSqrtLambda(h));
+        StateEncode *stateEncode = h;
+        if(stateEncode->useRateControl)
+        {
+            double value = stateEncode->rateControlEngine->getCtuReciprocalSqrtLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+            this->lambda.set(value);
+        }
+        else
+        {
+            this->lambda.set(getReciprocalSqrtLambda(h));
+        }
     }
 
     template <class H> bool considerPattern(H &h, MotionVector origin, MotionVector const *pattern, int n, int step, int dist, mvd_coding mvdc)
@@ -1489,6 +1517,12 @@ template <class H> static void searchMotionBi(H &h, int refList)
     // review: check limits
     Lambda lambda;
     lambda.set(getReciprocalSqrtLambda(h) * 0.5);
+    StateEncode *stateEncode = h;
+    if(stateEncode->useRateControl)
+    {
+        double value = stateEncode->rateControlEngine->getCtuReciprocalSqrtLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+        lambda.set(value * 0.5);
+    }
 
     Mvp::Predictors *predictors = h;
     int const refIdx = 0;
@@ -1603,6 +1637,12 @@ Cost measurePuCost(H &h)
 
     Lambda lambda;
     lambda.set(getReciprocalSqrtLambda(h));
+    StateEncode *stateEncode = h;
+    if(stateEncode->useRateControl)
+    {
+        double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+        lambda.set(value);
+    }
     StateEstimateRate *stateEstimateRate = h;
 
     return stateEstimateRate->rate + (satd[0] + satd[1] + satd[2]) * lambda;
@@ -1888,6 +1928,12 @@ Cost costDistortionMv(H& h, MotionVector mv, Raster<Sample> input, Raster<Sample
 
     Lambda lambda;
     lambda.set(getReciprocalSqrtLambda(h) * k);
+    StateEncode *stateEncode = h;
+    if(stateEncode->useRateControl)
+    {
+        double value = stateEncode->rateControlEngine->getCtuReciprocalSqrtLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+        lambda.set(value*k);
+    }
 
     return lambda * distortion;
 }
@@ -1972,6 +2018,13 @@ template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, Mv
 
     Lambda lambda;
     lambda.set(getReciprocalSqrtLambda(h));
+
+    if(stateEncode->useRateControl)
+    {
+        double value = stateEncode->rateControlEngine->getCtuReciprocalSqrtLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+        lambda.set(value);
+    }
+
     int searchWindow = (speed->useSmallSearchWindow()) ? 32 : 64;
     int maxCounter = (speed->useSmallSearchWindow()) ? 2 : 3;
     int rasterSearch = (speed->useSmallSearchWindow()) ? 120 : 240;
@@ -2266,7 +2319,14 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         // encode transform tree, measure distortion (SSD) and create corresponding CodedData
         auto const ssd = reconstructInter(tt, h);
         int rqtdepth = candidate->rqtdepth;
-        candidate->lambdaDistortion += ssd * getReciprocalLambda(h);
+        Lambda reciprocalLambda = getReciprocalLambda(h);
+        StateEncode *stateEncode = h;
+        if(stateEncode->useRateControl)
+        {
+            double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[ CtbAddrInRs()]);
+            reciprocalLambda.set(value);
+        }
+        candidate->lambdaDistortion += ssd * reciprocalLambda;
         StateCodedData codedDataAfter = *stateCodedData;
 
         // rewind CodedData pointers to start of CU in preparation for measuring rate
@@ -2371,7 +2431,12 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
             }
 
             // already have distortion measure
-            const Lambda lambda = getReciprocalLambda(h);
+            Lambda lambda = getReciprocalLambda(h);
+            if(stateEncode->useRateControl)
+            {
+                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                lambda.set(value);
+            }
             candidate->lambdaDistortion = stateEncodeSubstream->originalCandidate->lambdaDistortion;
             candidate->lambdaDistortion += lambda * stateEncodeSubstream->ssdPrediction[0];
             candidate->lambdaDistortion += lambda * stateEncodeSubstream->ssdPrediction[1];
