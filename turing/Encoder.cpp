@@ -211,7 +211,6 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->vm["ctu"].as<int>(),
                 6,
                 this->vm["qp"].as<int>()));
-        //this->stateEncode.concurrentFrames = 1;
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
@@ -847,10 +846,6 @@ void Encoder::setupVui(H &h)
         h[vui_hrd_parameters_present_flag()] = 0;
         h[field_seq_flag()] = 0;
         h[frame_field_info_present_flag()] = 1;
-        //h[pic_struct()] = 1;
-        //h[source_scan_type()] = 1;
-        //h[duplicate_flag()] = 1;
-
     }
     else
     {
