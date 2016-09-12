@@ -211,7 +211,6 @@ void InputQueue::State::process()
     if (this->finish && int(entries.size()) < gopSize)
     {
         gopSize = int(entries.size());
-        lastPicture = 0;
     }
     
     const int gopSizeIdr = this->sequenceIdr - this->sequenceFront + 1;
@@ -243,49 +242,46 @@ void InputQueue::State::process()
         max = gopSize - 1;
     }
 
-    if (!this->finish && gopSize != 8)
+    if (gopSize == 2)
     {
-        if (gopSize == 2)
-        {
-            this->createDocket(max, 1, nutR, 2, 0.6800, 2, -1, 1);
-        }
-        else if (gopSize == 3)
-        {
-            this->createDocket(max, 2, nutR, 2, 0.3536, 2, -2, 1);
-            this->createDocket(max, 1, nutN, 3, 0.6800, 3, -1, 2, 1);
-        }
-        else if (gopSize == 4)
-        {
-            this->createDocket(max, 2, nutR, 2, 0.3536, 2, -2, 2);
-            this->createDocket(max, 1, nutN, 3, 0.6800, 3, -1, 3, 1);
-            this->createDocket(max, 3, nutN, 3, 0.6800, 3, -1, 1);
-        }
-        else if (gopSize == 5)
-        {
-            this->createDocket(max, 3, nutR, 2, 0.3536, 2, -3, 2);
-            this->createDocket(max, 1, nutR, 2, 0.3536, 2, -1, 4, 2);
-            this->createDocket(max, 2, nutN, 3, 0.6800, 3, -2, 3, -1, 1);
-            this->createDocket(max, 4, nutN, 3, 0.6800, 3, -4, 1, -1);
-        }
-        else if (gopSize == 6)
-        {
-            this->createDocket(max, 3, nutR, 2, 0.3536, 2, -3, 3);
-            this->createDocket(max, 1, nutR, 3, 0.3536, 3, -1, 5, 2);
-            this->createDocket(max, 2, nutN, 4, 0.6800, 4, -2, 4, 1, -1);
-            this->createDocket(max, 5, nutR, 3, 0.3536, 3, -5, 1, -2);
-            this->createDocket(max, 4, nutN, 4, 0.6800, 4, -4, 2, -1, 1);
-        }
-        else if (gopSize == 7)
-        {
-            this->createDocket(max, 4, nutR, 2, 0.3536, 2, -4, 3);
-            this->createDocket(max, 2, nutR, 3, 0.3536, 3, -2, 5, 2);
-            this->createDocket(max, 1, nutN, 4, 0.6800, 4, -1, 6, 3, 1);
-            this->createDocket(max, 3, nutN, 4, 0.6800, 4, -3, 4, 1, -1);
-            this->createDocket(max, 6, nutR, 3, 0.3536, 3, -2, 1);
-            this->createDocket(max, 5, nutN, 4, 0.6800, 4, -1, 2, 1);
-        }
+        this->createDocket(max, 1, nutR, 2, 0.6800, 2, -1, 1);
     }
-    else
+    else if (gopSize == 3)
+    {
+        this->createDocket(max, 2, nutR, 2, 0.3536, 2, -2, 1);
+        this->createDocket(max, 1, nutN, 3, 0.6800, 3, -1, 2, 1);
+    }
+    else if (gopSize == 4)
+    {
+        this->createDocket(max, 2, nutR, 2, 0.3536, 2, -2, 2);
+        this->createDocket(max, 1, nutN, 3, 0.6800, 3, -1, 3, 1);
+        this->createDocket(max, 3, nutN, 3, 0.6800, 3, -1, 1);
+    }
+    else if (gopSize == 5)
+    {
+        this->createDocket(max, 3, nutR, 2, 0.3536, 2, -3, 2);
+        this->createDocket(max, 1, nutR, 2, 0.3536, 2, -1, 4, 2);
+        this->createDocket(max, 2, nutN, 3, 0.6800, 3, -2, 3, -1, 1);
+        this->createDocket(max, 4, nutN, 3, 0.6800, 3, -4, 1, -1);
+    }
+    else if (gopSize == 6)
+    {
+        this->createDocket(max, 3, nutR, 2, 0.3536, 2, -3, 3);
+        this->createDocket(max, 1, nutR, 3, 0.3536, 3, -1, 5, 2);
+        this->createDocket(max, 2, nutN, 4, 0.6800, 4, -2, 4, 1, -1);
+        this->createDocket(max, 5, nutR, 3, 0.3536, 3, -5, 1, -2);
+        this->createDocket(max, 4, nutN, 4, 0.6800, 4, -4, 2, -1, 1);
+    }
+    else if (gopSize == 7)
+    {
+        this->createDocket(max, 4, nutR, 2, 0.3536, 2, -4, 3);
+        this->createDocket(max, 2, nutR, 3, 0.3536, 3, -2, 5, 2);
+        this->createDocket(max, 1, nutN, 4, 0.6800, 4, -1, 6, 3, 1);
+        this->createDocket(max, 3, nutN, 4, 0.6800, 4, -3, 4, 1, -1);
+        this->createDocket(max, 6, nutR, 3, 0.3536, 3, -2, 1);
+        this->createDocket(max, 5, nutN, 4, 0.6800, 4, -1, 2, 1);
+    }
+    else if (gopSize == 8)
     {
         this->createDocket(max, 4, nutR, 2, 0.3536, 2, -4, 4);
         this->createDocket(max, 2, nutR, 3, 0.3536, 3, -2, 2, 6);

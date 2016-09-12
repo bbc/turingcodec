@@ -92,6 +92,24 @@ bool TaskEncodeSubstream<Sample>::blocked()
         }
     }
 
+    StateEncode *stateEncode = h;
+    if (stateEncode->useRateControl)
+    {
+        StateEncodePicture *stateEncodePictureCurr = h;
+        for (auto &response : stateEncode->responses)
+        {
+            if(response.picture)
+            {
+                StateEncodePicture *stateEncodePicture = response.picture.get();
+                if (stateEncodePicture->docket->poc < stateEncodePictureCurr->docket->poc && stateEncodePicture->docket->sopLevel == stateEncodePictureCurr->docket->sopLevel)
+                {
+                    StateWavefront *stateWavefrontRef = stateEncodePicture;
+                    if (!stateWavefrontRef->encoded(rx, ry)) return true;
+                }
+            }
+        }
+    }
+
     return false;
 }
 
