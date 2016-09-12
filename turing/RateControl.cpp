@@ -814,71 +814,7 @@ void SequenceController::initNewSop()
         currentBitsSop = 200; // As in HM RC
     }
 
-#if SOP_ADAPTIVE
-    if(m_lastCodedPictureLambda < 0.1)
-    {
-        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, m_frameWeight);
-    }
-    else
-    {
-        // Adaptive computation of frame weights
-        double *lambdaRatio = new double[m_sopSize];
-        double *coefficient = new double[m_sopSize];
-        double *exponent    = new double[m_sopSize];
-        int    *frameWeight = new int[m_sopSize];
-        double targetBpp    = (double)currentBitsSop / (double)m_pixelsPerPicture;
-
-        if ( m_lastCodedPictureLambda < 90.0 )
-        {
-            double lambdaP4 = 0.725 * log( m_lastCodedPictureLambda ) + 0.7963;
-            double sopLambdaRatio[7][8] = {{1.0, lambdaP4, 1.0, 1.0,  1.0     , 1.0, 1.0,   1.0},
-                                           {1.0, lambdaP4, 1.3, 1.0,  1.0     , 1.0, 1.0,   1.0},
-                                           {1.0, lambdaP4, 1.3, 1.3,  1.0     , 1.0, 1.0,   1.0},
-                                           {1.0, lambdaP4, 1.3, 1.3,  lambdaP4, 1.0, 1.0,   1.0},
-                                           {1.0, lambdaP4, 1.3, 1.3,  lambdaP4, 1.3, 1.0,   1.0},
-                                           {1.0, lambdaP4, 1.3, 3.25, 3.25    , 1.3, 3.25,  1.0},
-                                           {1.0, lambdaP4, 1.3, 3.25, 3.25    , 1.3, 3.25, 3.25}};
-            for(int idx = 0; idx < m_sopSize; idx++)
-            {
-                lambdaRatio[idx] = sopLambdaRatio[m_sopSize-2][idx];
-                if(idx > 1)
-                {
-                    lambdaRatio[idx] *= lambdaRatio[1];
-                }
-            }
-        }
-        else
-        {
-            double sopLambdaRatio[7][8] = {{1.0, 4.0, 1.0,  1.0,  1.0, 1.0,  1.0,  1.0},
-                                           {1.0, 4.0, 5.0,  1.0,  1.0, 1.0,  1.0,  1.0},
-                                           {1.0, 4.0, 5.0,  5.0,  1.0, 1.0,  1.0,  1.0},
-                                           {1.0, 4.0, 5.0,  5.0,  4.0, 1.0,  1.0,  1.0},
-                                           {1.0, 4.0, 5.0,  5.0,  4.0, 5.0,  1.0,  1.0},
-                                           {1.0, 4.0, 5.0, 12.3, 12.3, 5.0, 12.3,  1.0},
-                                           {1.0, 4.0, 5.0, 12.3, 12.3, 5.0, 12.3, 12.3}};
-            for(int idx = 0; idx < m_sopSize; idx++)
-            {
-                lambdaRatio[idx] = sopLambdaRatio[m_sopSize-2][idx];
-            }
-        }
-        computeEquationCoefficients(coefficient, exponent, lambdaRatio);
-
-        double adaptiveLambda = solveEquationWithBisection(coefficient, exponent, targetBpp);
-
-        for(int sopIdx = 0; sopIdx < m_sopSize; sopIdx++)
-        {
-            frameWeight[sopIdx] = (int)(coefficient[sopIdx] * pow(adaptiveLambda, exponent[sopIdx]) * m_pixelsPerPicture);
-        }
-        m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, frameWeight);
-
-        delete[] lambdaRatio;
-        delete[] coefficient;
-        delete[] exponent;
-        delete[] frameWeight;
-    }
-#else
     m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, m_frameWeight);
-#endif
 
 }
 void SequenceController::pictureRateAllocation(int currentPictureLevel, int poc)
@@ -1123,62 +1059,6 @@ void SequenceController::getAveragePictureQpAndLambda(int &averageQp, double &av
 
     currentPictureController->second->getAveragePictureQpAndLambda(averageQp, averageLambda);
 }
-
-#if SOP_ADAPTIVE
-void SequenceController::computeEquationCoefficients(double *coefficient, double *exponent, double *lambdaRatio)
-{
-    int    sopPosition2Level[7][8] = {{1, 2, 0, 0, 0, 0, 0, 0},  //[SOP size][SOP position]
-                                        {1, 2, 3, 0, 0, 0, 0, 0},
-                                        {1, 2, 3, 3, 0, 0, 0, 0},
-                                        {1, 2, 3, 3, 2, 0, 0, 0},
-                                        {1, 2, 3, 3, 2, 3, 0, 0},
-                                        {1, 2, 3, 4, 4, 3, 4, 0},
-                                        {1, 2, 3, 4, 4, 3, 4, 4}};
-    for ( int sopIdx = 0; sopIdx < m_sopSize; sopIdx++ )
-    {
-        int level    = sopPosition2Level[m_sopSize-2][sopIdx];
-        CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(level);
-        double alpha = pictureAtLevel.getAlpha();
-        double beta  = pictureAtLevel.getBeta();
-        coefficient[sopIdx] = pow( 1.0/alpha, 1.0/beta ) * pow( lambdaRatio[sopIdx], 1.0/beta );
-        exponent[sopIdx]    = 1.0/beta;
-    }
-}
-
-double SequenceController::solveEquationWithBisection(double *coefficient, double *exponent, double targetBpp)
-{
-    double lambdaSolution = 100.0;
-    double m = 0.1;
-    double M = 10000.0;
-    for ( int iteration = 0; iteration < BISECTION_MAX_IT; iteration++ )
-    {
-        double currentSopBpp = 0.0;
-        for ( int sopIdx = 0; sopIdx < m_sopSize; sopIdx++ )
-        {
-            currentSopBpp += coefficient[sopIdx] * pow( lambdaSolution, exponent[sopIdx] );
-        }
-
-        if ( fabs( currentSopBpp - targetBpp ) < 0.000001 )
-        {
-            break;
-        }
-
-        if ( currentSopBpp > targetBpp )
-        {
-            m = lambdaSolution;
-            lambdaSolution = ( lambdaSolution + M ) / 2.0;
-        }
-        else
-        {
-            M = lambdaSolution;
-            lambdaSolution = ( lambdaSolution + m ) / 2.0;
-        }
-    }
-
-    lambdaSolution = Clip3( 0.1, 10000.0, lambdaSolution );
-    return lambdaSolution;
-}
-#endif
 
 void SequenceController::getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp, int poc)
 {

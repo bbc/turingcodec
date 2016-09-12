@@ -54,7 +54,6 @@ For more information, contact us at info @ turingcodec.org.
 #define MAX_NUM_LEVELS     6
 #define CTU_SMOOTH_WINDOW  4
 #define BISECTION_MAX_IT   40
-#define SOP_ADAPTIVE       0
 #define BETA_INTRA_MAD     1.2517
 #define WRITE_RC_LOG       1
 
@@ -487,11 +486,6 @@ private:
     int    m_ctuSize;
 #if WRITE_RC_LOG
     ofstream m_logFile;
-#endif
-
-#if SOP_ADAPTIVE
-    void   computeEquationCoefficients(double *coefficient, double *exponent, double *lambdaRatio);
-    double solveEquationWithBisection (double *coefficient, double *exponent, double targetBpp);
 #endif
 
     bool insertHeaderBitsData(const int headerBits, const int poc);
