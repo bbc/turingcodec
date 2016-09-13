@@ -313,7 +313,7 @@ void PictureController::updatePictureController(int currentLevel,
     assert(m_pictureSizeInCtbs == counter);
 }
 
-double PictureController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
+void PictureController::computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
 {
     int avgBits = 0;
     assert(ctbAddrInRs < m_pictureSizeInCtbs);
@@ -350,15 +350,13 @@ double PictureController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
     {
         avgBits = 1;
     }
-
-    const double bpp = (double)avgBits / m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels();
     m_ctuControllerEngine[ctbAddrInRs].setTargetBits(avgBits);
-    return bpp;
+    const double bpp = static_cast<double>(avgBits) / static_cast<double>(m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels());
+    m_ctuControllerEngine[ctbAddrInRs].setCtuBpp(bpp);
 }
 
 void PictureController::getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeight)
 {
-
     assert(ctbAddrInRs < m_pictureSizeInCtbs);
     int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
     int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - 1;
@@ -383,12 +381,26 @@ void PictureController::getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulati
 
 }
 
-double PictureController::getCtuEstLambda(double bpp, int ctbAddrInRs, int pictureLevel)
+int PictureController::estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int pictureLevel, int sliceQp)
 {
     assert(ctbAddrInRs < m_pictureSizeInCtbs);
+    if(isIntra)
+    {
+        return estimateCtuLambdaAndQpIntra(sliceQp, ctbAddrInRs);
+    }
+    else
+    {
+        return estimateCtuLambdaAndQpInter(ctbAddrInRs, pictureLevel);
+    }
+}
+
+int PictureController::estimateCtuLambdaAndQpInter(int ctbAddrInRs, int pictureLevel)
+{
+    // Step 1: Estimate the lambda from lambda = alpha * (bpp)^beta;
     CodedCtu *codedCtuAtLevel = m_dataStorageAccess->getCodedCtuAtLevel(pictureLevel);
     const double alpha = codedCtuAtLevel[ctbAddrInRs].getAlpha();
     const double beta  = codedCtuAtLevel[ctbAddrInRs].getBeta();
+    const double bpp   = m_ctuControllerEngine[ctbAddrInRs].getCtuBpp();
 
     double estLambdaCtu = alpha * pow(bpp, beta);
 
@@ -409,21 +421,12 @@ double PictureController::getCtuEstLambda(double bpp, int ctbAddrInRs, int pictu
         estLambdaCtu = 0.1;
     }
 
+    // Step 2: Estimate the QP from lambda using the nonlinear relationship
     m_ctuControllerEngine[ctbAddrInRs].setCtuLambda(estLambdaCtu);
     m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / estLambdaCtu);
     m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalSqrtLambda(1.0 / sqrt(estLambdaCtu));
-    return estLambdaCtu;
+    int ctuEstQp = (int)( 4.2005 * log( estLambdaCtu ) + 13.7122 + 0.5 );
 
-}
-
-int PictureController::getCtuEstQp(int ctbAddrInRs, int pictureLevel)
-{
-    assert(ctbAddrInRs < m_pictureSizeInCtbs);
-
-    const double ctuLambda = m_ctuControllerEngine[ctbAddrInRs].getCtuLambda();
-    int ctuEstQp = (int)( 4.2005 * log( ctuLambda ) + 13.7122 + 0.5 );
-
-    CodedPicture &currentPicture = m_dataStorageAccess->getPictureAtLevel(pictureLevel);
     int pictureQp = currentPicture.getQp();
 
     ctuEstQp = Clip3( pictureQp - 2, pictureQp + 2, ctuEstQp );
@@ -433,6 +436,39 @@ int PictureController::getCtuEstQp(int ctbAddrInRs, int pictureLevel)
     m_ctuControllerEngine[ctbAddrInRs].setCtuQp(ctuEstQp);
 
     return ctuEstQp;
+}
+
+int PictureController::estimateCtuLambdaAndQpIntra(int sliceQp, int ctbAddrInRs)
+{
+    // Step 1: Estimate the lambda from the model lambda = (alpha/256) * (cost/bpp)^beta
+    CodedPicture &pictureAtLevel = m_dataStorageAccess->getPictureAtLevel(0); // Level 0 for intra pictures only
+
+    double   alpha = pictureAtLevel.getAlpha();
+    double   beta  = pictureAtLevel.getBeta();
+
+    double costPixelBased = m_ctuControllerEngine[ctbAddrInRs].getCostIntra() /
+            static_cast<double>(m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels());
+    const double bpp = m_ctuControllerEngine[ctbAddrInRs].getCtuBpp();
+    costPixelBased = pow(costPixelBased, BETA_INTRA_MAD);
+    double lambda = (alpha/256.0) * pow( costPixelBased/bpp, beta );
+
+    const int minQP = sliceQp - 2;
+    const int maxQP = sliceQp + 2;
+
+    double maxLambda = exp(((double)(maxQP+0.49)-13.7122)/4.2005);
+    double minLambda = exp(((double)(minQP-0.49)-13.7122)/4.2005);
+
+    lambda = Clip3(minLambda, maxLambda, lambda);
+
+    // Step 2: Estimate the QP using the nonlinear relationship
+    int qp = int( 4.2005 * log(lambda) + 13.7122 + 0.5 );
+    qp = Clip3(minQP, maxQP, qp);
+    qp = Clip3(0, 51, qp);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuQp(qp);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuLambda(lambda);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / lambda);
+    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / sqrt(lambda));
+    return qp;
 }
 
 void PictureController::updateCtuController(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel)
@@ -524,38 +560,6 @@ void PictureController::getAveragePictureQpAndLambda(int &averageQp, double &ave
         averageQp     = NON_VALID_QP;
         averageLambda = NON_VALID_LAMBDA;
     }
-}
-
-void PictureController::getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp)
-{
-
-    assert(ctbAddrInRs < m_pictureSizeInCtbs);
-    int currentLevel = 0; // only called for intra slices!
-    CodedPicture &pictureAtLevel = m_dataStorageAccess->getPictureAtLevel(currentLevel);
-
-    double   alpha = pictureAtLevel.getAlpha();
-    double   beta  = pictureAtLevel.getBeta();
-
-    double costPixelBased = m_ctuControllerEngine[ctbAddrInRs].getCostIntra() /
-            (double)m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels();
-    costPixelBased = pow(costPixelBased, BETA_INTRA_MAD);
-    lambda = (alpha/256.0) * pow( costPixelBased/bpp, beta );
-
-    const int minQP = sliceQp - 2;
-    const int maxQP = sliceQp + 2;
-
-    double maxLambda = exp(((double)(maxQP+0.49)-13.7122)/4.2005);
-    double minLambda = exp(((double)(minQP-0.49)-13.7122)/4.2005);
-
-    lambda = Clip3(minLambda, maxLambda, lambda);
-
-    qp = int( 4.2005 * log(lambda) + 13.7122 + 0.5 );
-    qp = Clip3(minQP, maxQP, qp);
-    qp = Clip3(0, 51, qp);
-    m_ctuControllerEngine[ctbAddrInRs].setCtuQp(qp);
-    m_ctuControllerEngine[ctbAddrInRs].setCtuLambda(lambda);
-    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / lambda);
-    m_ctuControllerEngine[ctbAddrInRs].setCtuReciprocalLambda(1.0 / sqrt(lambda));
 }
 
 int PictureController::getFinishedCtus()
@@ -1000,45 +1004,21 @@ void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel, int
     }
 }
 
-double SequenceController::getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc)
+void SequenceController::computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc)
 {
-    int avgBits = 0;
-    double bpp;
-    {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
-        auto currentPictureController = m_pictureControllerEngine.find(poc);
-        assert(currentPictureController != m_pictureControllerEngine.end());
+    unique_lock<mutex> lock(m_pictureControllerMutex);
+    auto currentPictureController = m_pictureControllerEngine.find(poc);
+    assert(currentPictureController != m_pictureControllerEngine.end());
 
-        bpp = currentPictureController->second->getCtuTargetBits(isIntraSlice, ctbAddrInRs);
-    }
-    return bpp;
+    currentPictureController->second->computeCtuTargetBits(isIntraSlice, ctbAddrInRs);
 }
 
-double SequenceController::getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel, int poc)
+int SequenceController::estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc, int sliceQp)
 {
-    double estLambdaCtu;
-
-    {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
-        auto currentPictureController = m_pictureControllerEngine.find(poc);
-        assert(currentPictureController != m_pictureControllerEngine.end());
-        estLambdaCtu = currentPictureController->second->getCtuEstLambda(bpp, ctbAddrInRs, currentPictureLevel);
-    }
-
-    return estLambdaCtu;
-}
-
-int SequenceController::getCtuEstQp(int ctbAddrInRs, int currentPictureLevel, int poc)
-{
-    int ctuEstQp;
-    {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
-        auto currentPictureController = m_pictureControllerEngine.find(poc);
-        assert(currentPictureController != m_pictureControllerEngine.end());
-
-        ctuEstQp = currentPictureController->second->getCtuEstQp(ctbAddrInRs, currentPictureLevel);
-    }
-    return ctuEstQp;
+    unique_lock<mutex> lock(m_pictureControllerMutex);
+    auto currentPictureController = m_pictureControllerEngine.find(poc);
+    assert(currentPictureController != m_pictureControllerEngine.end());
+    return currentPictureController->second->estimateCtuLambdaAndQp(isIntra, ctbAddrInRs, currentPictureLevel, sliceQp);
 }
 
 void SequenceController::updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc)
@@ -1058,14 +1038,6 @@ void SequenceController::getAveragePictureQpAndLambda(int &averageQp, double &av
     assert(currentPictureController != m_pictureControllerEngine.end());
 
     currentPictureController->second->getAveragePictureQpAndLambda(averageQp, averageLambda);
-}
-
-void SequenceController::getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp, int poc)
-{
-    unique_lock<mutex> lock(m_pictureControllerMutex);
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
-    currentPictureController->second->getCtuLambdaAndQp(bpp, sliceQp, ctbAddrInRs, lambda, qp);
 }
 
 void SequenceController::resetSequenceControllerMemory()

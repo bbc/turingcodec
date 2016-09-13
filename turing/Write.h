@@ -745,21 +745,14 @@ struct Encode<coding_quadtree>
                 {
                     StateEncodePicture *stateEncodePicture = h;
                     int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-                    bool isIntraSlice = h[slice_type()] == I;
                     stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
-                    double bpp = stateEncode->rateControlEngine->getCtuTargetBits(isIntraSlice, h[CtbAddrInRs()], h[PicOrderCntVal()]);
-                    double estLambda;
-                    int qp;
 
-                    if (isIntraSlice)
-                    {
-                        stateEncode->rateControlEngine->getCtuEstLambdaAndQp(bpp, h[SliceQpY()], h[CtbAddrInRs()], estLambda, qp, h[PicOrderCntVal()]);
-                    }
-                    else
-                    {
-                        estLambda = stateEncode->rateControlEngine->getCtuEstLambda(bpp, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
-                        qp = stateEncode->rateControlEngine->getCtuEstQp(h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
-                    }
+                    // Step 1: Allocate the bit budget for the current CTU
+                    stateEncode->rateControlEngine->computeCtuTargetBits(h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+
+                    // Step 2: Estimate the lambda and QP from the model and the allocated bits
+                    int qp = stateEncode->rateControlEngine->estimateCtuLambdaAndQp(h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()], h[SliceQpY()]);
+
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, qp, 0);
                 }
                 else

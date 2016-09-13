@@ -250,6 +250,7 @@ private:
     double m_ctuReciprocalSqrtLambda;
     double m_ctuWeight;
     double m_costIntra;
+    double m_bpp;
     int m_numberOfPixels;
     bool m_isValid;       // non fully skipped CTU
     bool m_finished;
@@ -267,7 +268,8 @@ public:
     m_targetBitsEst(0),
     m_finished(false),
     m_ctuReciprocalLambda(NON_VALID_LAMBDA),
-    m_ctuReciprocalSqrtLambda(NON_VALID_LAMBDA) {}
+    m_ctuReciprocalSqrtLambda(NON_VALID_LAMBDA),
+    m_bpp(0.0) {}
 
     void setCodedBits(int bits)                   { m_codedBits      = bits;           }
     void setCtuQp(int qp)                         { m_ctuQp          = qp;             }
@@ -284,7 +286,8 @@ public:
     {
         m_isValid       |= flag;
     }
-    void setFinishedFlag(bool flag)    { m_finished       = flag;   }
+    void setFinishedFlag(bool flag)               { m_finished       = flag;           }
+    void setCtuBpp(double bpp)                    { m_bpp            = bpp;            }
 
     int     getCodedBits()               { return m_codedBits;               }
     int     getCtuQp()                   { return m_ctuQp;                   }
@@ -298,6 +301,7 @@ public:
     double  getCostIntra()               { return m_costIntra;               }
     bool    getValidityFlag()            { return m_isValid;                 }
     bool    getFinishedFlag()            { return m_finished;                }
+    double  getCtuBpp()                  { return m_bpp;                     }
 };
 
 class PictureController
@@ -318,6 +322,12 @@ private:
     CtuController *m_ctuControllerEngine;
 
     void getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeigth);
+    int  estimateCtuLambdaAndQpIntra(int sliceQp, int ctbAddrInRs);
+    int  estimateCtuLambdaAndQpInter(int ctbAddrInRs, int pictureLevel);
+    void updateLambdaModelIntra(double &alpha,
+                                double &beta,
+                                CodedPicture &picture,
+                                int actualBits);
 
 public:
     PictureController() :
@@ -345,20 +355,14 @@ public:
             delete[] m_ctuControllerEngine;
     }
 
-    void updateLambdaModelIntra(double &alpha,
-                                double &beta,
-                                CodedPicture &picture,
-                                int actualBits);
-
     double estimateLambda(int level, bool isIntra);
 
     void updatePictureController(int currentLevel,
                                  bool isIntra,
                                  double &lastCodedLambda);
 
-    double getAlphaUpdateStep()     { return m_alphaUpdateStep; }
-    double getBetaUpdateStep()      { return m_betaUpdateStep;  }
     int    getPictureTargetBits()   { return m_targetBits;      }
+
     void   updateCtuValidityFlag(bool flag, int ctuIdx)
     {
         assert(ctuIdx < m_pictureSizeInCtbs);
@@ -374,12 +378,10 @@ public:
         assert(ctuIdx < m_pictureSizeInCtbs);
         return m_ctuControllerEngine[ctuIdx].getCtuQp();
     }
-    double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
-    double getCtuEstLambda(double bpp, int ctbAddrInRs, int pictureLevel);
-    int    getCtuEstQp(int ctbAddrInRs, int pictureLevel);
+    void   computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
+    int    estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int pictureLevel, int sliceQp);
     void   updateCtuController(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel);
     void   getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
-    void   getCtuLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp);
     int    getFinishedCtus();
     double getCtuLambda(int ctbAddrInRs)
     {
@@ -558,12 +560,9 @@ public:
 
     void setHeaderBits(int bits, bool isIntra, int sopLevel, int poc);
 
-    double getCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc);
+    void   computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc);
 
-    double getCtuEstLambda(double bpp, int ctbAddrInRs, int currentPictureLevel, int poc);
-    void   getCtuEstLambdaAndQp(double bpp, int sliceQp, int ctbAddrInRs, double &lambda, int &qp, int poc);
-
-    int    getCtuEstQp(int ctbAddrInRs, int currentPictureLevel, int poc);
+    int    estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc, int sliceQp);
 
     void   updateCtuController(int codingBitsCtu, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc);
 
