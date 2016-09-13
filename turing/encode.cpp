@@ -96,6 +96,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
         ("field-coding", po::bool_switch()->default_value(false), "enable field coding")
         ("max-gop-n", po::value<int>()->default_value(250), "maximum intra picture interval")
         ("max-gop-m", po::value<int>()->default_value(8), "maximum anchor picture interval (1 or 8)")
+        ("segment-length", po::value<int>()->default_value(-1), "Enable IDR segmentation (-1 for Disabled)")
         ("wpp", po::bool_switch()->default_value(true), "enable wave-front parallel processing (default enabled)")
         ("ctu", po::value<int>()->default_value(64), "CTU size in luma pixels")
         ("min-cu", po::value<int>()->default_value(8), "minimum CU size in luma pixels")

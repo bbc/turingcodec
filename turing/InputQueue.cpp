@@ -60,12 +60,13 @@ void addReference(InputQueue::Docket &docket, int ref)
 
 struct InputQueue::State
 {
-    State(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange)
+    State(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength)
         :
         maxGopN(maxGopN),
         maxGopM(maxGopM),
         fieldCoding(fieldCoding),
         shotChange(shotChange),
+        segmentLength(segmentLength),
         scd(new ShotChangeDetection())
     {
     }
@@ -74,7 +75,7 @@ struct InputQueue::State
     const int maxGopM;
     const bool fieldCoding;
     const bool shotChange;
-
+    const int segmentLength;
 
     // list of pictures in preanalysis stage
     std::deque<Piece> entriesPreanalysis;
@@ -95,8 +96,10 @@ struct InputQueue::State
 
     size_t pictureInputCount = 0;
     size_t picturePreprocessCount = 0;
+    int segmentFront = 0;
     int sequenceFront = 0;
     int sequenceIdr = 0;
+    int sequenceSeg = 0;
     bool finish = false;
     int gopSize;
 
@@ -112,18 +115,18 @@ struct InputQueue::State
         return false;
 #endif
         if (delta == 0) return false;
-        int offset =(sequenceIdr < sequenceFront)? this->entries.size() : (sequenceIdr - sequenceFront + 1);
+        int offset =(sequenceIdr < segmentFront)? this->entries.size() : (sequenceIdr - segmentFront + 1);
         int deltaLimit = (static_cast<int>(this->entries.size() > offset)) ? offset : static_cast<int>(this->entries.size());
         if (i - 1 + delta >= deltaLimit) return false;
         return !!this->entries.at(i - 1 + delta).docket;
     }
 
-    int computeNextIdr(int sequenceFront, int currDefaultIdr, int intraPeriod)
+    int computeNextIdr(int segmentFront, int sequenceFront, int currDefaultIdr, int intraPeriod)
     {
         int nextIdr = currDefaultIdr + intraPeriod;
-        for (int i = sequenceFront; i < (currDefaultIdr + intraPeriod); i++)
+        for (int i = segmentFront; i < (currDefaultIdr + intraPeriod); i++)
         {
-            int index = i;
+            int index = i + sequenceFront - segmentFront;
             index = (index < 0) ? 0 : index;
             if (index >= this->scd->m_shotChangeList.size())
             {
@@ -131,7 +134,6 @@ struct InputQueue::State
                 break;
             }
                 
-
             if (this->scd->m_shotChangeList[index])
             {
                 nextIdr = i;
@@ -143,9 +145,9 @@ struct InputQueue::State
 };
 
 
-InputQueue::InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange)
+InputQueue::InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength)
     :
-    state(new State(maxGopN, maxGopM, fieldCoding, shotChange))
+    state(new State(maxGopN, maxGopM, fieldCoding, shotChange, segmentLength))
 {
 }
 
@@ -159,7 +161,7 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
     if (i <= max)
     {
         Docket *docket = new Docket();
-        docket->poc = this->sequenceFront + i - 1;
+        docket->poc = this->segmentFront + i - 1;
         docket->nut = nut;
         docket->qpOffset = qpOffset;
         docket->qpFactor = qpFactor;
@@ -167,8 +169,9 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
         docket->sopLevel = sopLevel;
         if(shotChange)
         {
-            assert(docket->poc < scd->m_shotChangeList.size());
-            docket->isShotChange = !!scd->m_shotChangeList[docket->poc];
+            int absolutePoc = this->sequenceFront + i - 1;
+            assert(absolutePoc < scd->m_shotChangeList.size());
+            docket->isShotChange = !!scd->m_shotChangeList[absolutePoc];
         }
         else
         {
@@ -192,15 +195,20 @@ void InputQueue::State::process()
 
     if (this->shotChange)
     {
-        if ((this->sequenceIdr - this->sequenceFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->sequenceFront, this->sequenceIdr, this->maxGopN);
+        if ((this->sequenceIdr - this->segmentFront) < 0)
+            this->sequenceIdr = computeNextIdr(this->segmentFront, this->sequenceFront, this->sequenceIdr, this->maxGopN);
     }
     else
     {
-        if (this->sequenceIdr - this->sequenceFront < 0)
+        if (this->sequenceIdr - this->segmentFront < 0)
             this->sequenceIdr += this->maxGopN;
     }
 
+    if (this->segmentLength != -1) 
+    {
+        if (this->sequenceSeg - this->segmentFront < 0)
+            this->sequenceSeg += this->segmentLength;
+    }
     gopSize = this->maxGopM;
 
     if (gopSize != 1 && gopSize != 8) 
@@ -213,11 +221,28 @@ void InputQueue::State::process()
         gopSize = int(entries.size());
     }
     
-    const int gopSizeIdr = this->sequenceIdr - this->sequenceFront + 1;
-    if ((this->sequenceIdr - this->sequenceFront)>=0 && gopSizeIdr <= gopSize)
+    const int gopSizeIdr = this->sequenceIdr - this->segmentFront + 1;
+    if ((this->sequenceIdr - this->segmentFront)>=0 && gopSizeIdr <= gopSize)
     {
         gopSize = gopSizeIdr;
         lastPicture = 'I';
+    }
+
+    if (this->segmentLength != -1)
+    {
+        const int gopSizeSeg = this->sequenceSeg - this->segmentFront + 1;
+        if (gopSizeSeg <= gopSize) 
+        {
+            gopSize = gopSizeSeg;
+            if (gopSizeSeg == 1) 
+            {
+                lastPicture = 'R'; //R for IDR;
+            }
+            else 
+            {
+                gopSize = gopSize - 1;
+            }
+        }
     }
 
     if (int(entries.size()) < gopSize) 
@@ -230,7 +255,17 @@ void InputQueue::State::process()
 
     if (lastPicture == 'I')
     {
-        int nut = this->sequenceFront ? CRA_NUT : IDR_N_LP;
+        int nut = this->segmentFront ? CRA_NUT : IDR_N_LP;
+        this->createDocket(gopSize, gopSize, nut, 0, 0.4420, 1, -gopSize);
+        max = gopSize - 1;
+        nutR = RASL_R;
+        nutN = RASL_N;
+    }
+    else if (lastPicture == 'R') 
+    {
+        this->segmentFront = 0;
+        this->sequenceIdr = 0;
+        int nut = IDR_N_LP;
         this->createDocket(gopSize, gopSize, nut, 0, 0.4420, 1, -gopSize);
         max = gopSize - 1;
         nutR = RASL_R;
@@ -407,6 +442,7 @@ std::shared_ptr<InputQueue::Docket> InputQueue::getDocket()
     while (!this->state->entries.empty() && this->state->entries.front().done())
     {
         this->state->entries.pop_front();
+        ++this->state->segmentFront;
         ++this->state->sequenceFront;
     }
 

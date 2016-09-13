@@ -89,6 +89,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
     this->stateEncode.saoslow = this->booleanSwitchSetting("sao-slow-mode", speed.useSaoSlow());
     this->stateEncode.verbosity = this->vm["verbosity"].as<int>();
     this->stateEncode.gopM = std::min(this->vm["max-gop-m"].as<int>(), this->vm["max-gop-n"].as<int>());
+    this->stateEncode.segmentLength = this->vm["segment"].as<int>();
     this->stateEncode.maxnummergecand = (this->vm["max-num-merge-cand"].defaulted()) ? (speed.setMaxNumMergeCand()) : this->vm["max-num-merge-cand"].as<int>();
     this->stateEncode.preferredTransferCharacteristics = this->vm["atc-sei"].as<int>();
 
@@ -261,6 +262,8 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
     cout << "Frame/Field    coding           : " << (this->stateEncode.fieldcoding ? "Field based coding\n" : "Frame based coding\n");
     cout << "Coding unit size (min/max)      : " << this->vm.at("ctu").as<int>() << " / " << this->vm.at("min-cu").as<int>() << "\n";
     cout << "Intra period                    : " << this->vm.at("max-gop-n").as<int>() << "\n";
+    if (this->vm.at("segment").as<int>() != -1)
+        cout << "IDR Segment length              : " << this->vm.at("segment").as<int>() << "\n";
     if (this->stateEncode.scd)
         cout << "Shot change detection enabled. Warning: up to 48 frames will be kept in the buffer.\n";
     cout << "Structure Of Picture (SOP) size : " << this->vm.at("max-gop-m").as<int>() << "\n";
@@ -492,7 +495,7 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 int sliceType = h[slice_type()];
 
                 std::ostringstream oss;
-
+                
                 oss << "POC" << std::setw(5) << h[PicOrderCntVal()] << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
                 oss << std::setw(12) << 8 * bytes << " bits ";
                 oss << std::setprecision(4);

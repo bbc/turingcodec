@@ -733,7 +733,8 @@ struct StateEncode :
         StateEncode(const boost::program_options::variables_map &vm) :
             InputQueue(vm["max-gop-n"].as<int>(), vm["max-gop-m"].as<int>(),
                        vm["field-coding"].as<bool>(),
-                       vm["shot-change"].as<bool>()),
+                       vm["shot-change"].as<bool>(),
+                       vm["segment-length"].as<int>()),
             ThreadPool((vm["no-parallel-processing"].as<bool>())? 1 : vm["threads"].as<int>()),
             StateFunctionTables(true,
 #ifdef VALGRIND_FRIENDLY
@@ -870,6 +871,7 @@ struct StateEncode :
         bool decodedHashSei;
         int verbosity;
         int gopM;
+        int segmentLength;
         int maxnummergecand;
         size_t concurrentFrames;
         int internalbitdepth;
