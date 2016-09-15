@@ -167,6 +167,8 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
         docket->qpFactor = qpFactor;
         docket->currentGopSize = gopSize;
         docket->sopLevel = sopLevel;
+        docket->pocInSop = i;
+        docket->sopId = this->segmentFront;
         if(shotChange)
         {
             int absolutePoc = this->sequenceFront + i - 1;

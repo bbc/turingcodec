@@ -583,6 +583,27 @@ int PictureController::getTotalCodingBits()
     return total;
 }
 
+SOPController::SOPController(DataStorage *dataAccess, int sopId, int size, int *bitrateWeight, int targetBits) :
+    m_size(size),
+    m_targetBits(targetBits),
+    m_dataStorageAccess(dataAccess),
+    m_sopId(sopId),
+    m_framesCoded(0),
+    m_bitsCoded(0)
+{
+    m_weight = new int[m_size];
+    int totalSum = 0;
+    for(int i = 0; i < m_size; i++)
+    {
+        totalSum += bitrateWeight[i];
+    }
+
+    for(int i = 0; i < m_size; i++)
+    {
+        m_weight[i] = (bitrateWeight[i] * targetBits) / totalSum;
+    }
+}
+
 int SOPController::getEstimatedHeaderBits(int level)
 {
     int totalPreviousPics = 0;
@@ -609,75 +630,21 @@ int SOPController::getEstimatedHeaderBits(int level)
     return estHeaderBits;
 }
 
-void SOPController::initSOPController(int size,
-                                      int targetBits,
-                                      int *weight)
+int SOPController::getRateCurrentPicture(int pocInSop)
 {
-    if(m_weight == 0)
-    {
-        m_weight = new int[size];
-    }
-    else
-    {
-        // Reallocate the memory in case SOP changes its size
-        delete[] m_weight;
-        m_weight = new int[size];
-    }
-    m_size = size;
-
-    m_targetBits = targetBits;
-
-    int ratioSum = 0;
-    for(int i = 0; i < m_size; i++)
-    {
-        ratioSum += weight[i];
-    }
-
-    for(int i = 0; i < m_size; i++)
-    {
-        m_weight[i] = (int)(((double)targetBits * weight[i])/ratioSum);
-    }
-
-    m_bitsLeft = targetBits;
-    m_framesLeft = m_size;
+    assert(pocInSop <= m_size);
+    const int headerBits = 0; // To be updated with the right function call
+    int pictureRate = m_weight[pocInSop - 1] - headerBits;
+    if(pictureRate < 100)
+        pictureRate = 100; // As in HM
+    return pictureRate;
 }
 
-void SOPController::updateSopController(int bitsSpent)
+void SOPController::updateSopController(int bitsCoded)
 {
-    m_bitsLeft -= bitsSpent;
-    m_framesLeft--;
-    m_framesLeft = Clip3(0, m_size, m_framesLeft);
-}
-
-int SOPController::allocateRateCurrentPicture(int level)
-{
-    int currentPicPosition = Clip3(0, m_size - 1, m_size - m_framesLeft);
-    int currentPicRatio    = m_weight[currentPicPosition];
-    int sumPicRatio        = 0;
-    int headerBits         = getEstimatedHeaderBits(level);
-
-    for(int picIdx = currentPicPosition; picIdx < m_size; picIdx++)
-    {
-        sumPicRatio += m_weight[picIdx];
-    }
-
-    int picTargetBits = (int)((double)m_bitsLeft * (double)currentPicRatio / (double)sumPicRatio);
-
-    if(picTargetBits < 100)
-    {
-        picTargetBits = 100; // Same as in HM
-    }
-
-    picTargetBits = static_cast<int>(0.1 * (double)picTargetBits + 0.9 * (double)m_weight[currentPicPosition]);
-
-    if( picTargetBits < headerBits + 100 )
-    {
-        picTargetBits = headerBits + 100;
-    }
-
-    picTargetBits -= headerBits;
-
-    return picTargetBits;
+    m_framesCoded++;
+    m_bitsCoded += bitsCoded;
+    assert(m_framesCoded <= m_size);
 }
 
 void DataStorage::addCodedPicture(int level)
@@ -737,42 +704,24 @@ SequenceController::SequenceController(double targetRate,
                                        int picHeight,
                                        int picWidth,
                                        int ctuSize,
-                                       int totalLevels,
                                        int baseQp)
 {
-    m_targetRate       = targetRate * 1000; // kbps to bps conversion
-    m_smoothingWindow  = static_cast<int>(frameRate);
-    int totalFrames    = intraPeriod != 1 ? intraPeriod : ((static_cast<int>(frameRate) + 4)/8)*8;
-    m_totalFrames      = totalFrames;
-    m_frameRate        = frameRate;
-    m_sopSize          = sopSize;
+    m_targetRate        = targetRate * 1000; // kbps to bps conversion
+    m_smoothingWindow   = static_cast<int>(frameRate);
+    int totalFrames     = intraPeriod != 1 ? intraPeriod : ((static_cast<int>(frameRate) + 4)/8)*8;
+    m_totalFrames       = totalFrames;
+    m_frameRate         = frameRate;
+    m_sopSize           = sopSize;
 
-    m_averageRate      = m_targetRate / m_frameRate;
-    m_targetBits       = static_cast<int64_t>(m_averageRate * totalFrames);
-    m_bitsPerPicture   = (int)(m_targetBits / (double)totalFrames);
-    m_bitsLeft         = m_targetBits;
-    m_pixelsPerPicture = picHeight * picWidth;
-    m_totalLevels      = totalLevels;
-    m_baseQp           = baseQp;
+    m_averageRate       = m_targetRate / m_frameRate;
+    m_targetBits        = static_cast<int64_t>(m_averageRate * totalFrames);
+    m_bitsPerPicture    = (int)(m_targetBits / static_cast<double>(totalFrames));
+    m_bitsLeft          = m_targetBits;
+    m_pixelsPerPicture  = picHeight * picWidth;
+    m_baseQp            = baseQp;
 
     //	Compute the bit per pixel
     m_averageBpp = m_averageRate / (double)m_pixelsPerPicture;
-
-    // Initialise the frame-based weights according to the value of bpp
-    if(m_averageBpp <= 0.05)
-    {
-        m_frameWeight = m_sopWeight[m_sopSize-2][0];
-    }
-    else if(0.05 < m_averageBpp && m_averageBpp <= 0.1)
-    {
-        m_frameWeight = m_sopWeight[m_sopSize-2][1];
-    }
-    else if(0.1 < m_averageBpp && m_averageBpp <= 0.2)
-    {
-        m_frameWeight = m_sopWeight[m_sopSize-2][2];
-    }
-    else
-        m_frameWeight = m_sopWeight[m_sopSize-2][3];
 
     m_lastCodedPictureLambda = 0.0;
     m_picHeight = picHeight;
@@ -787,9 +736,8 @@ SequenceController::SequenceController(double targetRate,
     m_picWidthInCtbs     = picWidthInCtbsY;
 
     m_dataStorageEngine       = new DataStorage();
-
-    m_sopControllerEngine     = new SOPController(m_dataStorageEngine);
     m_dataStorageEngine->initCtuStorage(m_picSizeInCtbsY);
+    m_averageBitsPerCtb = m_bitsPerPicture / m_picSizeInCtbsY;
 
     CodedPicture &pictureIntra = m_dataStorageEngine->getPictureAtLevel(0);
     pictureIntra.setAlpha(ALPHA_INTRA);
@@ -807,25 +755,52 @@ SequenceController::SequenceController(double targetRate,
 #endif
 }
 
-void SequenceController::initNewSop()
+void SequenceController::initNewSop(int sopId, int sopSize)
 {
-    int realInfluencePicture  = m_smoothingWindow;
-    int currentBitsPerPicture = (m_bitsPerPicture * (m_codedFrames + m_smoothingWindow) - m_bitsSpent) / realInfluencePicture;
-    int currentBitsSop = currentBitsPerPicture * m_sopSize;
-
-    if(currentBitsSop < 200)
+    // Initialise the frame-based weights according to the value of bpp
+    int *bitrateProfile = 0;
+    int sopOneSizeProfile = 1;
+    if(sopSize == 1)
     {
-        currentBitsSop = 200; // As in HM RC
+        bitrateProfile = &sopOneSizeProfile;
+    }
+    else
+    {
+        if(m_averageBpp <= 0.05)
+        {
+            bitrateProfile = m_sopWeight[sopSize-2][0];
+        }
+        else if(0.05 < m_averageBpp && m_averageBpp <= 0.1)
+        {
+            bitrateProfile = m_sopWeight[sopSize-2][1];
+        }
+        else if(0.1 < m_averageBpp && m_averageBpp <= 0.2)
+        {
+            bitrateProfile = m_sopWeight[sopSize-2][2];
+        }
+        else
+            bitrateProfile = m_sopWeight[sopSize-2][3];
     }
 
-    m_sopControllerEngine->initSOPController(m_sopSize, currentBitsSop, m_frameWeight);
-
+    unique_lock<mutex> lock(m_sopControllerMutex);
+    assert(m_sopControllerEngine.find(sopId) == m_sopControllerEngine.end());
+    m_sopControllerEngine[sopId] = new SOPController(m_dataStorageEngine, sopId, sopSize, bitrateProfile, m_bitsPerPicture*sopSize);
 }
-void SequenceController::pictureRateAllocation(int currentPictureLevel, int poc)
+void SequenceController::pictureRateAllocation(std::shared_ptr<InputQueue::Docket> docket)
 {
+    int currentPictureLevel = docket->sopLevel;
+    int pocInSop            = docket->pocInSop;
+    int poc                 = docket->poc;
+    int picTargetBits;
     CodedPicture &codedPictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
     codedPictureAtLevel.setLevel(currentPictureLevel);
-    int picTargetBits = m_sopControllerEngine->allocateRateCurrentPicture(currentPictureLevel);
+    {
+        int sopId = docket->sopId;
+        unique_lock<mutex> lock(m_sopControllerMutex);
+        auto currentSopController = m_sopControllerEngine.find(sopId);
+        assert(currentSopController != m_sopControllerEngine.end());
+        picTargetBits = currentSopController->second->getRateCurrentPicture(pocInSop);
+    }
 
     // Cpb correction
     m_cpbControllerEngine.adjustAllocatedBits(picTargetBits);
@@ -838,54 +813,61 @@ void SequenceController::pictureRateAllocation(int currentPictureLevel, int poc)
 
 }
 
-void SequenceController::updateSequenceController(bool isIntra, int sopLevel, int poc)
+void SequenceController::updateSequenceController(bool isIntra, int sopLevel, int poc, int sopId)
 {
-    // Update the bit budget and frames to be encoded at sequence and SOP levels
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
-    const int codingBits = currentPictureController->second->getTotalCodingBits();
-    m_bitsLeft -= static_cast<int64_t>(codingBits);
-    m_codedFrames++;
-    m_bitsSpent += codingBits;
-    double lambda;
-    int qp;
-
-    currentPictureController->second->getAveragePictureQpAndLambda(qp, lambda);
-
-    int currentPictureLevel = isIntra ? 0 : sopLevel;
-
-    CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
-
-    if(!isIntra)
+    int codingBits, pictureTargetBits;
+    // Take the lock on the picture controller and update it
     {
-        pictureAtLevel.setQp(qp);
-        pictureAtLevel.setLambda(lambda);
-    }
-    pictureAtLevel.setPoc(poc);
+        unique_lock<mutex> lockPicture(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+        codingBits = currentPictureController->second->getTotalCodingBits();
+        pictureTargetBits = currentPictureController->second->getPictureTargetBits();
+        m_bitsLeft -= static_cast<int64_t>(codingBits);
+        m_codedFrames++;
+        m_bitsSpent += codingBits;
+        double lambda;
+        int qp;
 
-    if(!isIntra)
+        currentPictureController->second->getAveragePictureQpAndLambda(qp, lambda);
+        int currentPictureLevel = isIntra ? 0 : sopLevel;
+        CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
+        if(!isIntra)
+        {
+            pictureAtLevel.setQp(qp);
+            pictureAtLevel.setLambda(lambda);
+        }
+        pictureAtLevel.setPoc(poc);
+        m_dataStorageEngine->addCodedPicture(currentPictureLevel);
+        currentPictureController->second->updatePictureController(currentPictureLevel,
+                                                                  isIntra,
+                                                                  m_lastCodedPictureLambda);
+        assert(m_pictureControllerEngine.erase(poc) == 1);
+        // Lock released
+    }
+
     {
-        m_sopControllerEngine->updateSopController(codingBits);
-    }
-    else
-    {
-        m_sopControllerEngine->updateSopController(currentPictureController->second->getPictureTargetBits());
-    }
+        unique_lock<mutex> lockSop(m_sopControllerMutex);
+        auto currentSopController = m_sopControllerEngine.find(sopId);
+        assert(currentSopController != m_sopControllerEngine.end());
 
-    m_dataStorageEngine->addCodedPicture(currentPictureLevel);
-
-    currentPictureController->second->updatePictureController(currentPictureLevel,
-                                                              isIntra,
-                                                              m_lastCodedPictureLambda);
+        if(!isIntra)
+        {
+            currentSopController->second->updateSopController(codingBits);
+        }
+        else
+        {
+            currentSopController->second->updateSopController(pictureTargetBits);
+        }
+        // Remove this SOP controller if all frames have been encoded
+        if(currentSopController->second->finished())
+        {
+            assert(m_sopControllerEngine.erase(sopId) == 1);
+        }
+    }
 
     // Update Cpb status
     m_cpbControllerEngine.updateCpbStatus(codingBits);
-
-    {
-        // Delete the picture controller associated with this POC
-        unique_lock<mutex> lock(m_pictureControllerMutex);
-        assert(m_pictureControllerEngine.erase(poc) == 1);
-    }
 }
 
 double SequenceController::estimatePictureLambda(bool isIntra, int sopLevel, int poc)
