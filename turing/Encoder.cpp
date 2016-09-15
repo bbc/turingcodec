@@ -210,7 +210,6 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->pictureHeight,
                 this->pictureWidth,
                 this->vm["ctu"].as<int>(),
-                6,
                 this->vm["qp"].as<int>()));
     }
 

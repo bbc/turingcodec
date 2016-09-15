@@ -36,6 +36,7 @@ For more information, contact us at info @ turingcodec.org.
 #include <mutex>
 #include "HevcMath.h"
 #include "EstimateIntraComplexity.h"
+#include "InputQueue.h"
 
 #define NON_VALID_LAMBDA  -1.0
 #define NON_VALID_QP      -1000
@@ -67,6 +68,7 @@ private:
     int m_cpbStatus;
     int m_cpbSize;
     int m_cpbBufferingRate;
+    mutex m_cpbStatusMutex;
 
 public:
     CpbInfo() : m_cpbStatus(0),
@@ -81,6 +83,7 @@ public:
     }
     void updateCpbStatus(int codingBits)
     {
+        unique_lock<mutex> lock(m_cpbStatusMutex);
         m_cpbStatus += m_cpbBufferingRate - codingBits;
     }
 
@@ -93,6 +96,7 @@ public:
 
     int getCpbStatus()
     {
+        unique_lock<mutex> lock(m_cpbStatusMutex);
         return m_cpbStatus;
     }
 
@@ -108,6 +112,8 @@ public:
 
     void adjustAllocatedBits(int &currentBitsPerPicture)
     {
+        unique_lock<mutex> lock(m_cpbStatusMutex);
+
         // Cpb correction
         int estimatedCpbFullness = m_cpbStatus + m_cpbBufferingRate;
 
@@ -406,10 +412,10 @@ class SOPController
 private:
     int  m_size;
     int  m_targetBits;
-    int  m_bitsLeft;
-    int  m_framesLeft;
+    int  m_sopId;
+    int  m_framesCoded;
+    int  m_bitsCoded;
     int *m_weight;
-    double m_averageBpp;
     DataStorage *m_dataStorageAccess;
 
     int getEstimatedHeaderBits(int level);
@@ -417,33 +423,30 @@ private:
 public:
     SOPController() : m_size(0),
     m_targetBits(0),
-    m_bitsLeft(0),
-    m_framesLeft(0),
     m_weight(0),
-    m_averageBpp(0.0),
-    m_dataStorageAccess(0) {}
+    m_dataStorageAccess(0),
+    m_sopId(-1),
+    m_framesCoded(0),
+    m_bitsCoded(0) {}
 
-    SOPController(DataStorage *dataAccess) :
-        m_size(0),
-        m_targetBits(0),
-        m_bitsLeft(0),
-        m_framesLeft(0),
-        m_weight(0),
-        m_averageBpp(0.0),
-        m_dataStorageAccess(dataAccess) {}
+    SOPController(DataStorage *dataAccess, int sopId, int size, int *bitrateWeight, int targetBits);
+
     ~SOPController()
     {
         if(m_weight)
+        {
             delete[] m_weight;
+        }
     }
 
-    void initSOPController(int size,
-                           int targetBits,
-                           int *weight);
+    int getRateCurrentPicture(int pocInSop);
 
-    void updateSopController(int bitsSpent);
+    void updateSopController(int bitsCoded);
 
-    int allocateRateCurrentPicture(int level);
+    bool finished()
+    {
+        return m_framesCoded == m_size;
+    }
 
 };
 
@@ -463,22 +466,31 @@ private:
     int64_t m_bitsLeft;
     int64_t m_targetBits;
     int     m_pixelsPerPicture;
-    int     m_sopWeight[7][4][8] = {{{30, 8, 0, 0, 0, 0, 0, 0}, {25, 7, 0, 0, 0, 0, 0, 0}, {20, 6, 0, 0, 0, 0, 0, 0}, {15, 5, 0, 0, 0, 0, 0, 0}},
-                                    {{30, 8, 4, 0, 0, 0, 0, 0}, {25, 7, 4, 0, 0, 0, 0, 0}, {20, 6, 4, 0, 0, 0, 0, 0}, {15, 5, 4, 0, 0, 0, 0, 0}},
-                                    {{30, 8, 4, 4, 0, 0, 0, 0}, {25, 7, 4, 4, 0, 0, 0, 0}, {20, 6, 4, 4, 0, 0, 0, 0}, {15, 5, 4, 4, 0, 0, 0, 0}},
-                                    {{30, 8, 4, 4, 8, 0, 0, 0}, {25, 7, 4, 4, 7, 0, 0, 0}, {20, 6, 4, 4, 6, 0, 0, 0}, {15, 5, 4, 4, 5, 0, 0, 0}},
-                                    {{30, 8, 4, 4, 8, 4, 0, 0}, {25, 7, 4, 4, 7, 4, 0, 0}, {20, 6, 4, 4, 6, 4, 0, 0}, {15, 5, 4, 4, 5, 4, 0, 0}},
-                                    {{30, 8, 4, 1, 1, 4, 1, 0}, {25, 7, 4, 1, 1, 4, 1, 0}, {20, 6, 4, 1, 1, 4, 1, 0}, {15, 5, 4, 1, 1, 4, 1, 0}},
-                                    {{30, 8, 4, 1, 1, 4, 1, 1}, {25, 7, 4, 1, 1, 4, 1, 1}, {20, 6, 4, 1, 1, 4, 1, 1}, {15, 5, 4, 1, 1, 4, 1, 1}}}; // As in HM
+//    int     m_sopWeight[7][4][8] = {{{30, 8, 0, 0, 0, 0, 0, 0}, {25, 7, 0, 0, 0, 0, 0, 0}, {20, 6, 0, 0, 0, 0, 0, 0}, {15, 5, 0, 0, 0, 0, 0, 0}},
+//                                    {{30, 8, 4, 0, 0, 0, 0, 0}, {25, 7, 4, 0, 0, 0, 0, 0}, {20, 6, 4, 0, 0, 0, 0, 0}, {15, 5, 4, 0, 0, 0, 0, 0}},
+//                                    {{30, 8, 4, 4, 0, 0, 0, 0}, {25, 7, 4, 4, 0, 0, 0, 0}, {20, 6, 4, 4, 0, 0, 0, 0}, {15, 5, 4, 4, 0, 0, 0, 0}},
+//                                    {{30, 8, 4, 4, 8, 0, 0, 0}, {25, 7, 4, 4, 7, 0, 0, 0}, {20, 6, 4, 4, 6, 0, 0, 0}, {15, 5, 4, 4, 5, 0, 0, 0}},
+//                                    {{30, 8, 4, 4, 8, 4, 0, 0}, {25, 7, 4, 4, 7, 4, 0, 0}, {20, 6, 4, 4, 6, 4, 0, 0}, {15, 5, 4, 4, 5, 4, 0, 0}},
+//                                    {{30, 8, 4, 1, 1, 4, 1, 0}, {25, 7, 4, 1, 1, 4, 1, 0}, {20, 6, 4, 1, 1, 4, 1, 0}, {15, 5, 4, 1, 1, 4, 1, 0}},
+//                                    {{30, 8, 4, 1, 1, 4, 1, 1}, {25, 7, 4, 1, 1, 4, 1, 1}, {20, 6, 4, 1, 1, 4, 1, 1}, {15, 5, 4, 1, 1, 4, 1, 1}}}; // As in HM
+    int     m_sopWeight[7][4][8] = {{{8, 30, 0, 0, 0, 0, 0, 0}, {7, 25, 0, 0, 0, 0, 0, 0}, {6, 20, 0, 0, 0, 0, 0, 0}, {5, 15, 0, 0, 0, 0, 0, 0}},
+                                    {{4, 8, 30, 0, 0, 0, 0, 0}, {4, 7, 25, 0, 0, 0, 0, 0}, {4, 6, 20, 0, 0, 0, 0, 0}, {4, 5, 15, 0, 0, 0, 0, 0}},
+                                    {{4, 4, 8, 30, 0, 0, 0, 0}, {4, 4, 7, 25, 0, 0, 0, 0}, {4, 4, 6, 20, 0, 0, 0, 0}, {4, 4, 5, 15, 0, 0, 0, 0}},
+                                    {{4, 4, 8, 8, 30, 0, 0, 0}, {4, 4, 7, 7, 25, 0, 0, 0}, {4, 4, 6, 6, 20, 0, 0, 0}, {4, 4, 5, 5, 15, 0, 0, 0}},
+                                    {{4, 4, 8, 4, 8, 30, 0, 0}, {4, 4, 7, 4, 7, 25, 0, 0}, {4, 4, 6, 4, 6, 20, 0, 0}, {4, 4, 5, 6, 5, 15, 0, 0}},
+                                    {{1, 4, 1, 8, 1, 4, 30, 0}, {1, 4, 1, 7, 1, 4, 25, 0}, {1, 4, 1, 6, 1, 4, 20, 0}, {1, 4, 1, 6, 1, 4, 15, 0}},
+                                    {{1, 4, 1, 8, 1, 4, 1, 30}, {1, 4, 1, 7, 1, 4, 1, 25}, {1, 4, 1, 6, 1, 4, 1, 20}, {1, 4, 1, 5, 1, 4, 1, 15}}}; // As in HM
 
-    int   *m_frameWeight;
-    int    m_totalLevels;
     int    m_baseQp;
-    SOPController     *m_sopControllerEngine;
-    DataStorage       *m_dataStorageEngine;
+
+    DataStorage                 *m_dataStorageEngine;
     map<int, PictureController*> m_pictureControllerEngine;
-    CpbInfo            m_cpbControllerEngine;
+    map<int, SOPController*>     m_sopControllerEngine;
+    CpbInfo                      m_cpbControllerEngine;
+
     mutex  m_pictureControllerMutex;
+    mutex  m_sopControllerMutex;
+
     double m_lastCodedPictureLambda;
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
@@ -486,6 +498,7 @@ private:
     int    m_picHeight;
     int    m_picWidth;
     int    m_ctuSize;
+    int    m_averageBitsPerCtb;
 #if WRITE_RC_LOG
     ofstream m_logFile;
 #endif
@@ -502,14 +515,11 @@ public:
     m_bitsPerPicture(0),
     m_bitsLeft(0),
     m_pixelsPerPicture(0),
-    m_frameWeight(0),
     m_totalFrames(0),
-    m_totalLevels(0),
     m_baseQp(0),
     m_lastCodedPictureLambda(0.0),
     m_averageBpp(0.0),
     m_dataStorageEngine(0),
-    m_sopControllerEngine(0),
     m_picSizeInCtbsY(0),
     m_picHeightInCtbs(0),
     m_picWidthInCtbs(0),
@@ -517,7 +527,8 @@ public:
     m_bitsSpent(0),
     m_picHeight(0),
     m_picWidth(0),
-    m_ctuSize(0)
+    m_ctuSize(0),
+    m_averageBitsPerCtb(0)
     {
     }
 
@@ -528,27 +539,25 @@ public:
                        int picHeight,
                        int picWidth,
                        int ctuSize,
-                       int totalLevels,
                        int baseQp);
 
     ~SequenceController()
     {
         if(m_dataStorageEngine)
             delete m_dataStorageEngine;
-        if(m_sopControllerEngine)
-            delete m_sopControllerEngine;
         m_pictureControllerEngine.clear();
+        m_sopControllerEngine.clear();
 #if WRITE_RC_LOG
         if(m_logFile)
             m_logFile.close();
 #endif
     }
 
-    void initNewSop();
+    void initNewSop(int sopId, int sopSize);
 
-    void pictureRateAllocation(int currentPictureLevel, int poc);
+    void pictureRateAllocation(std::shared_ptr<InputQueue::Docket> docket);
 
-    void updateSequenceController(bool isIntra, int sopLevel, int poc);
+    void updateSequenceController(bool isIntra, int sopLevel, int poc, int sopId);
 
     int getBaseQp() { return m_baseQp; }
 
@@ -591,27 +600,6 @@ public:
     }
 
     void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda, int poc);
-
-    void setSopSize(int size)
-    {
-        m_sopSize = size;
-
-        // Initialise the frame-based weights according to the value of bpp
-        if(m_averageBpp <= 0.05)
-        {
-            m_frameWeight = m_sopWeight[m_sopSize-2][0];
-        }
-        else if(0.05 < m_averageBpp && m_averageBpp <= 0.1)
-        {
-            m_frameWeight = m_sopWeight[m_sopSize-2][1];
-        }
-        else if(0.1 < m_averageBpp && m_averageBpp <= 0.2)
-        {
-            m_frameWeight = m_sopWeight[m_sopSize-2][2];
-        }
-        else
-            m_frameWeight = m_sopWeight[m_sopSize-2][3];
-    }
 
     void resetSequenceControllerMemory();
 

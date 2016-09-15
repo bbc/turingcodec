@@ -145,9 +145,9 @@ bool TaskEncodeSubstream<Sample>::run()
         bool isShotChange = this->stateEncodePicture->docket->isShotChange;
         int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
         int currentPoc = h[PicOrderCntVal()];
-        int sopSize = this->stateEncodePicture->docket->currentGopSize;
-        if(sopSize > 1)
-            stateEncode->rateControlEngine->setSopSize(sopSize);
+        int sopSize  = this->stateEncodePicture->docket->currentGopSize;
+        int sopId    = this->stateEncodePicture->docket->sopId;
+        int pocInSop = this->stateEncodePicture->docket->pocInSop;
 
         if (currentPoc && ((currentPoc % stateEncode->rateControlEngine->getTotalFrames()) == 0 || isShotChange))
         {
@@ -162,17 +162,18 @@ bool TaskEncodeSubstream<Sample>::run()
             }
             EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
             stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo, h[PicOrderCntVal()]);
-            stateEncode->rateControlEngine->initNewSop();
+            stateEncode->rateControlEngine->initNewSop(sopId, sopSize);
         }
         else
         {
             if(currentPictureLevel == 1)
             {
                 // New SOP starts, set the rate budget for GOP and this current picture
-                stateEncode->rateControlEngine->initNewSop();
+                stateEncode->rateControlEngine->initNewSop(sopId, sopSize);
             }
-            stateEncode->rateControlEngine->pictureRateAllocation(currentPictureLevel, h[PicOrderCntVal()]);
+            stateEncode->rateControlEngine->pictureRateAllocation(this->stateEncodePicture->docket);
         }
+
         // Compute lambda
         this->stateEncodePicture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
 
@@ -230,7 +231,7 @@ bool TaskEncodeSubstream<Sample>::run()
     if(stateEncode->useRateControl && h[CtbAddrInRs()] == h[PicSizeInCtbsY()])
     {
         int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
-        stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
+        stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()], this->stateEncodePicture->docket->sopId);
     }
 
     threadPool->lock();

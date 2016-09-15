@@ -70,6 +70,8 @@ struct InputQueue
         double qpFactor;
         int currentGopSize;
         int sopLevel;
+        int pocInSop;
+        int sopId;
         References references;
         int64_t dts;
         bool isShotChange;
