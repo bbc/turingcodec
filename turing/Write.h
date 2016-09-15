@@ -748,7 +748,8 @@ struct Encode<coding_quadtree>
                     stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     // Step 1: Allocate the bit budget for the current CTU
-                    stateEncode->rateControlEngine->computeCtuTargetBits(h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    //stateEncode->rateControlEngine->computeCtuTargetBits(h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    stateEncode->rateControlEngine->computeCtuTargetBits(h, h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     // Step 2: Estimate the lambda and QP from the model and the allocated bits
                     int qp = stateEncode->rateControlEngine->estimateCtuLambdaAndQp(h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()], h[SliceQpY()]);

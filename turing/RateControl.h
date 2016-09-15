@@ -321,13 +321,14 @@ private:
     int m_ctusLeft;
     int m_ctusCoded;
     int m_totalCostIntra;
+    bool m_isIntra;
+    int m_sopLevel;
     double m_averageBpp;
     double m_alphaUpdateStep;
     double m_betaUpdateStep;
     DataStorage   *m_dataStorageAccess;
     CtuController *m_ctuControllerEngine;
 
-    void getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeigth);
     int  estimateCtuLambdaAndQpIntra(int sliceQp, int ctbAddrInRs);
     int  estimateCtuLambdaAndQpInter(int ctbAddrInRs, int pictureLevel);
     void updateLambdaModelIntra(double &alpha,
@@ -351,15 +352,23 @@ public:
     m_ctusLeft(0),
     m_totalCostIntra(0) {}
 
-    PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp);
+    PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp, bool isIntra, int sopLevel);
 
-    PictureController(DataStorage *storageAccess, EstimateIntraComplexity &icInfo, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp);
+    PictureController(DataStorage *storageAccess, EstimateIntraComplexity &icInfo, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp, bool isIntra, int sopLevel);
 
     ~PictureController()
     {
         if(m_ctuControllerEngine)
             delete[] m_ctuControllerEngine;
     }
+
+    void computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int cumulativeMad, int cumulativeBitsEstimated, int cumulativeBitsSpent, int cumulativeCtusCoded, double cumulativeWeight);
+
+    bool getIsIntra() { return m_isIntra; }
+
+    int getSopLevel() { return m_sopLevel; }
+
+    void getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeigth, bool currFrame);
 
     double estimateLambda(int level, bool isIntra);
 
@@ -384,7 +393,7 @@ public:
         assert(ctuIdx < m_pictureSizeInCtbs);
         return m_ctuControllerEngine[ctuIdx].getCtuQp();
     }
-    void   computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs);
+
     int    estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int pictureLevel, int sliceQp);
     void   updateCtuController(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel);
     void   getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
@@ -553,9 +562,258 @@ public:
 #endif
     }
 
+    template <class H>
+    void   computeCtuTargetBits(H h, bool isIntraSlice, int ctbAddrInRs, int poc)
+    {
+        unique_lock<mutex> lock(m_pictureControllerMutex);
+        auto currentPictureController = m_pictureControllerEngine.find(poc);
+        assert(currentPictureController != m_pictureControllerEngine.end());
+
+        int avgBits = 0;
+        int cumulativeMad = 0, cumulativeBitsEstimated = 0, cumulativeBitsSpent = 0, cumulativeCtusCoded = 0;
+        double cumulativeWeight = 0.0;
+
+
+        StateEncode *stateEncode = h;
+
+        // review: initialise to zero. best to initialise to "current cumulative" numbers
+
+        getCodedInfoCtus(h, ctbAddrInRs, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight);
+
+        currentPictureController->second->computeCtuTargetBits(isIntraSlice, ctbAddrInRs, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight);
+
+    }
+
+    template <class H>
+    void SequenceController::getCodedInfoCtus(H h, int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeight)
+    {
+        // RC deterministic: review: for now only works with SOP size 8
+        int poc = h[PicOrderCntVal()];
+        const int rx = ctbAddrInRs % h[PicWidthInCtbsY()];
+        const int ry = ctbAddrInRs / h[PicWidthInCtbsY()];
+        int depX = rx, depY = ry;
+        StateEncodePicture* stateEncodePictureCurr = h;
+        StateEncodePicture* stateEncodePictureRef;
+        StatePicture* statePicture = dynamic_cast<StatePicture *>(stateEncodePictureCurr);
+        StateEncode *stateEncode = h;
+        int relPoc = poc % 8; //review: address case of POC = 0 (first frame in the sequence!!)
+        int absPoc = (poc / 8) * 8; //review: address case of POC = 0 (first frame in the sequence!!)
+
+        if (h[PicOrderCntVal()] == 0)
+        {
+            auto currentPictureController = m_pictureControllerEngine.find(h[PicOrderCntVal()]);
+            assert(currentPictureController != m_pictureControllerEngine.end());
+            currentPictureController->second->getCodedInfoFromWavefront(stateEncode->wpp, ctbAddrInRs, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight, true);
+            return;
+        }
+        const int vec[6][2] = { { 0, 0 },{ 4, 4 },{ 2, 2 },{ 1, 6 },{ 3, 5 },{ -1, 7 }, };
+
+        int index, v;
+        for (int j = 0; j < 6; j++)
+        {
+            if (relPoc == vec[j][0])
+            {
+                v = (relPoc == vec[j][1] ? 2 : 0);
+                index = j;
+                break;
+            }
+            else if (relPoc == vec[j][1])
+            {
+                v = 1;
+                index = j;
+                break;
+            }
+        }
+
+        int currPoc0 = -1, currPoc1 = -1;
+        for (int i = 0; i < 4; i++)
+        {
+            if (v == 0 || v == 2)
+                currPoc0 = vec[(index - i) % 6][0];
+            if (v == 1 || v == 2)
+                currPoc1 = vec[(index - i) % 6][1];
+            //depX = i ? std::min(depX + 2, h[PicWidthInCtbsY()] - 1) : depX;
+            //depY = i ? std::min(depY + 1, h[PicHeightInCtbsY()] - 1) : depY;
+            if (i >(stateEncode->concurrentFrames - 1)) //in case concurrentFrames < 4
+            {
+                depX = (h[PicWidthInCtbsY()] - 1);
+                depY = (h[PicHeightInCtbsY()] - 1);
+            }
+            int ctbAddrInRsRef = depY*h[PicWidthInCtbsY()] + depX;
+            if (currPoc0 != -1)
+            {
+                currPoc0 += absPoc;
+                if ((index - i) < 0)
+                    currPoc0 -= 8;
+                if (currPoc0 > 0)
+                {
+                    auto currentPictureController = m_pictureControllerEngine.find(currPoc0);
+                    assert(currentPictureController != m_pictureControllerEngine.end());
+                    currentPictureController->second->getCodedInfoFromWavefront(stateEncode->wpp, ctbAddrInRsRef, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight, (currPoc0 == h[PicOrderCntVal()]));
+
+                }
+            }
+            if (currPoc1 != -1)
+            {
+                currPoc1 += absPoc;
+                if ((index - i) < 0)
+                    currPoc1 -= 8;
+                if (currPoc1 != currPoc0 && currPoc1 > 0)
+                {
+                    auto currentPictureController = m_pictureControllerEngine.find(currPoc1);
+                    assert(currentPictureController != m_pictureControllerEngine.end());
+                    currentPictureController->second->getCodedInfoFromWavefront(stateEncode->wpp, ctbAddrInRsRef, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight, (currPoc1 == h[PicOrderCntVal()]));
+                }
+            }
+        }
+    }
+
+    template <class H>
+    void updateSequenceControllerFinishedFrames(H h, int poc)
+    {
+        //(H h, bool isIntra, int sopLevel, int poc, int sopId)
+
+        int codingBits, pictureTargetBits;
+
+        //First: given the current POC, understand which POC(s) need to be updated and removed from the map:
+        int currPoc0 = -1, currPoc1 = -1;
+        {
+            const int vec[6][2] = { { 0, 0 },{ 4, 4 },{ 2, 2 },{ 1, 6 },{ 3, 5 },{ -1, 7 }, };
+            int relPoc = poc % 8; //review: address case of POC = 0 (first frame in the sequence!!)
+            int absPoc = (poc / 8) * 8; //review: address case of POC = 0 (first frame in the sequence!!)
+            int index, v;
+            for (int j = 0; j < 6; j++)
+            {
+                if (relPoc == vec[j][0])
+                {
+                    v = (relPoc == vec[j][1] ? 2 : 0);
+                    index = j;
+                    break;
+                }
+                else if (relPoc == vec[j][1])
+                {
+                    v = 1;
+                    index = j;
+                    break;
+                }
+            }
+
+
+            if (v == 0 || v == 2)
+                currPoc0 = vec[(index - 4) % 6][0];
+            if (v == 1 || v == 2)
+                currPoc1 = vec[(index - 4) % 6][1];
+
+            if (currPoc0 != -1)
+            {
+                currPoc0 += absPoc;
+                if ((index - 4) < 0)
+                    currPoc0 -= 8;
+            }
+            if (currPoc1 != -1)
+            {
+                currPoc1 += absPoc;
+                if ((index - 4) < 0)
+                    currPoc1 -= 8;
+            }
+        }
+        // Take the lock on the picture controller and update it
+        if (currPoc0 != -1)
+        {
+            unique_lock<mutex> lockPicture(m_pictureControllerMutex);
+            auto currentPictureController = m_pictureControllerEngine.find(currPoc0);
+            if (currentPictureController != m_pictureControllerEngine.end()) 
+            {
+                codingBits = currentPictureController->second->getTotalCodingBits();
+                pictureTargetBits = currentPictureController->second->getPictureTargetBits();
+                m_bitsLeft -= static_cast<int64_t>(codingBits);
+                m_codedFrames++;
+                m_bitsSpent += codingBits;
+                double lambda;
+                int qp;
+                int sopLevel = currentPictureController->second->getSopLevel();
+                bool isIntra = currentPictureController->second->getIsIntra();
+                currentPictureController->second->getAveragePictureQpAndLambda(qp, lambda);
+                int currentPictureLevel = isIntra ? 0 : sopLevel;
+                CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
+                if (!isIntra)
+                {
+                    pictureAtLevel.setQp(qp);
+                    pictureAtLevel.setLambda(lambda);
+                }
+                pictureAtLevel.setPoc(currPoc0);
+                m_dataStorageEngine->addCodedPicture(currentPictureLevel);
+                currentPictureController->second->updatePictureController(currentPictureLevel,
+                    isIntra,
+                    m_lastCodedPictureLambda);
+                assert(m_pictureControllerEngine.erase(currPoc0) == 1);
+                // Lock released
+            }
+        }
+
+        if (currPoc1 != -1)
+        {
+            unique_lock<mutex> lockPicture(m_pictureControllerMutex);
+            auto currentPictureController = m_pictureControllerEngine.find(currPoc1);
+            if (currentPictureController != m_pictureControllerEngine.end())
+            {
+                codingBits = currentPictureController->second->getTotalCodingBits();
+                pictureTargetBits = currentPictureController->second->getPictureTargetBits();
+                m_bitsLeft -= static_cast<int64_t>(codingBits);
+                m_codedFrames++;
+                m_bitsSpent += codingBits;
+                double lambda;
+                int qp;
+                int sopLevel = currentPictureController->second->getSopLevel();
+                bool isIntra = currentPictureController->second->getIsIntra();
+                currentPictureController->second->getAveragePictureQpAndLambda(qp, lambda);
+                int currentPictureLevel = isIntra ? 0 : sopLevel;
+                CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
+                if (!isIntra)
+                {
+                    pictureAtLevel.setQp(qp);
+                    pictureAtLevel.setLambda(lambda);
+                }
+                pictureAtLevel.setPoc(currPoc1);
+                m_dataStorageEngine->addCodedPicture(currentPictureLevel);
+                currentPictureController->second->updatePictureController(currentPictureLevel,
+                    isIntra,
+                    m_lastCodedPictureLambda);
+                assert(m_pictureControllerEngine.erase(currPoc1) == 1);
+                // Lock released
+            }
+
+        }
+
+        //{
+        //    unique_lock<mutex> lockSop(m_sopControllerMutex);
+        //    auto currentSopController = m_sopControllerEngine.find(sopId);
+        //    assert(currentSopController != m_sopControllerEngine.end());
+
+        //    if (!isIntra)
+        //    {
+        //        currentSopController->second->updateSopController(codingBits);
+        //    }
+        //    else
+        //    {
+        //        currentSopController->second->updateSopController(pictureTargetBits);
+        //    }
+        //    // Remove this SOP controller if all frames have been encoded
+        //    if (currentSopController->second->finished())
+        //    {
+        //        assert(m_sopControllerEngine.erase(sopId) == 1);
+        //    }
+        //}
+
+        //// Update Cpb status
+        //m_cpbControllerEngine.updateCpbStatus(codingBits);
+    }
+
     void initNewSop(int sopId, int sopSize);
 
     void pictureRateAllocation(std::shared_ptr<InputQueue::Docket> docket);
+
+    //void updateSequenceControllerFinishedFrames(bool isIntra, int sopLevel, int poc, int sopId);
 
     void updateSequenceController(bool isIntra, int sopLevel, int poc, int sopId);
 
@@ -568,8 +826,6 @@ public:
     void pictureRateAllocationIntra(EstimateIntraComplexity &icInfo, int poc);
 
     void setHeaderBits(int bits, bool isIntra, int sopLevel, int poc);
-
-    void   computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc);
 
     int    estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc, int sliceQp);
 

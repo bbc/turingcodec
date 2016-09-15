@@ -27,7 +27,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "RateControl.h"
 #include "EstimateIntraComplexity.h"
 
-PictureController::PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp) :
+PictureController::PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp, bool isIntra, int sopLevel) :
     m_targetBits(targetBits),
     m_pixelsPerPicture(pictureHeight*pictureWidth),
     m_averageBpp(averageBpp),
@@ -36,6 +36,8 @@ PictureController::PictureController(DataStorage *storageAccess, int pictureHeig
     m_pictureWidthInCtbs(pictureWidthInCtbs),
     m_pictureSizeInCtbs(pictureHeightInCtbs*pictureWidthInCtbs),
     m_ctusCoded(0),
+    m_isIntra(isIntra),
+    m_sopLevel(sopLevel),
     m_ctusLeft(m_pictureSizeInCtbs),
     m_totalCostIntra(0)
 {
@@ -80,7 +82,7 @@ PictureController::PictureController(DataStorage *storageAccess, int pictureHeig
     }
 }
 
-PictureController::PictureController(DataStorage *storageAccess, EstimateIntraComplexity &icInfo, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp) :
+PictureController::PictureController(DataStorage *storageAccess, EstimateIntraComplexity &icInfo, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctuSize, int targetBits, double averageBpp, bool isIntra, int sopLevel) :
     m_targetBits(targetBits),
     m_pixelsPerPicture(pictureHeight*pictureWidth),
     m_averageBpp(averageBpp),
@@ -89,6 +91,8 @@ PictureController::PictureController(DataStorage *storageAccess, EstimateIntraCo
     m_pictureWidthInCtbs(pictureWidthInCtbs),
     m_pictureSizeInCtbs(pictureHeightInCtbs*pictureWidthInCtbs),
     m_ctusCoded(0),
+    m_isIntra(isIntra),
+    m_sopLevel(sopLevel),
     m_ctusLeft(m_pictureSizeInCtbs)
 {
     int cost = icInfo.getSatdSum();
@@ -313,70 +317,30 @@ void PictureController::updatePictureController(int currentLevel,
     assert(m_pictureSizeInCtbs == counter);
 }
 
-void PictureController::computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs)
-{
-    int avgBits = 0;
-    assert(ctbAddrInRs < m_pictureSizeInCtbs);
-
-    int cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded;
-    double cumulativeWeight;
-    getCodedInfoFromWavefront(ctbAddrInRs, cumulativeMad, cumulativeBitsEstimated, cumulativeBitsSpent, cumulativeCtusCoded, cumulativeWeight);
-    int currentCtusLeft = m_pictureSizeInCtbs - cumulativeCtusCoded;
-    int influence = std::min<int>(CTU_SMOOTH_WINDOW, currentCtusLeft);
-
-    if(isIntraSlice)
-    {
-        double MAD        = m_ctuControllerEngine[ctbAddrInRs].getCostIntra();
-        int remainingCostIntra = m_totalCostIntra - cumulativeMad;
-
-        if (remainingCostIntra > 0.1 )
-        {
-            int estimateBitsCtu = static_cast<int>((MAD / static_cast<double>(cumulativeMad + MAD)) * static_cast<double>(m_targetBits));
-            avgBits = estimateBitsCtu + (cumulativeBitsEstimated - cumulativeBitsSpent) / influence;
-        }
-        else
-        {
-            avgBits = static_cast<int>( (m_targetBits - cumulativeBitsSpent) / currentCtusLeft );
-        }
-    }
-    else
-    {
-        const double currentCtuWeight = m_ctuControllerEngine[ctbAddrInRs].getCtuWeight();
-        const double totalWeight = cumulativeWeight + currentCtuWeight;
-        avgBits = static_cast<int>(currentCtuWeight + (totalWeight - static_cast<double>(cumulativeBitsSpent))/static_cast<double>(influence));
-    }
-
-    if(avgBits < 1)
-    {
-        avgBits = 1;
-    }
-    m_ctuControllerEngine[ctbAddrInRs].setTargetBits(avgBits);
-    const double bpp = static_cast<double>(avgBits) / static_cast<double>(m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels());
-    m_ctuControllerEngine[ctbAddrInRs].setCtuBpp(bpp);
-}
-
-void PictureController::getCodedInfoFromWavefront(int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeight)
+void PictureController::getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int &cumulativeMad, int &cumulativeBitsEstimated, int &cumulativeBitsSpent, int &cumulativeCtusCoded, double &cumulativeWeight, bool currFrame)
 {
     assert(ctbAddrInRs < m_pictureSizeInCtbs);
     int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
-    int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - 1;
+    int colStart = (ctbAddrInRs % m_pictureWidthInCtbs) - (int)currFrame;
     cumulativeMad = cumulativeBitsEstimated = cumulativeBitsSpent = cumulativeCtusCoded = 0;
     cumulativeWeight = 0.0;
 
-    for(int r = rowStart; r >= 0; r--)
+
+
+    for (int r = rowStart; r >= 0; r--)
     {
-        for(int c = colStart; c >= 0; c--)
+        for (int c = colStart; c >= 0; c--)
         {
             int currentIdx = r*m_pictureWidthInCtbs + c;
             assert(0 <= currentIdx && currentIdx < m_pictureSizeInCtbs);
             assert(m_ctuControllerEngine[currentIdx].getFinishedFlag());
-            cumulativeMad           += static_cast<int>(m_ctuControllerEngine[currentIdx].getCostIntra());
+            cumulativeMad += static_cast<int>(m_ctuControllerEngine[currentIdx].getCostIntra());
             cumulativeBitsEstimated += m_ctuControllerEngine[currentIdx].getTargetBitsEst();
-            cumulativeBitsSpent     += m_ctuControllerEngine[currentIdx].getCodedBits();
-            cumulativeWeight        += m_ctuControllerEngine[currentIdx].getCtuWeight();
+            cumulativeBitsSpent += m_ctuControllerEngine[currentIdx].getCodedBits();
+            cumulativeWeight += m_ctuControllerEngine[currentIdx].getCtuWeight();
             cumulativeCtusCoded++;
         }
-        colStart = min<int>(m_pictureWidthInCtbs - 1, colStart + 1);
+        colStart = wpp ? (min<int>(m_pictureWidthInCtbs - 1, colStart + 2)) : (m_pictureWidthInCtbs - 1);
     }
 
 }
@@ -560,6 +524,45 @@ void PictureController::getAveragePictureQpAndLambda(int &averageQp, double &ave
         averageQp     = NON_VALID_QP;
         averageLambda = NON_VALID_LAMBDA;
     }
+}
+
+
+void   PictureController::computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int cumulativeMad, int cumulativeBitsEstimated, int cumulativeBitsSpent, int cumulativeCtusCoded, double cumulativeWeight)
+{
+
+    int avgBits = 0;
+    int currentCtusLeft = m_pictureSizeInCtbs - cumulativeCtusCoded;
+    int influence = std::min<int>(CTU_SMOOTH_WINDOW, currentCtusLeft);
+
+    if (isIntraSlice)
+    {
+        double MAD = m_ctuControllerEngine[ctbAddrInRs].getCostIntra();
+        int remainingCostIntra = m_totalCostIntra - cumulativeMad;
+
+        if (remainingCostIntra > 0.1)
+        {
+            int estimateBitsCtu = static_cast<int>((MAD / static_cast<double>(cumulativeMad + MAD)) * static_cast<double>(m_targetBits));
+            avgBits = estimateBitsCtu + (cumulativeBitsEstimated - cumulativeBitsSpent) / influence;
+        }
+        else
+        {
+            avgBits = static_cast<int>((m_targetBits - cumulativeBitsSpent) / currentCtusLeft);
+        }
+    }
+    else
+    {
+        const double currentCtuWeight = m_ctuControllerEngine[ctbAddrInRs].getCtuWeight();
+        const double totalWeight = cumulativeWeight + currentCtuWeight;
+        avgBits = static_cast<int>(currentCtuWeight + (totalWeight - static_cast<double>(cumulativeBitsSpent)) / static_cast<double>(influence));
+    }
+
+    if (avgBits < 1)
+    {
+        avgBits = 1;
+    }
+    m_ctuControllerEngine[ctbAddrInRs].setTargetBits(avgBits);
+    const double bpp = static_cast<double>(avgBits) / static_cast<double>(m_ctuControllerEngine[ctbAddrInRs].getNumberOfPixels());
+    m_ctuControllerEngine[ctbAddrInRs].setCtuBpp(bpp);
 }
 
 int PictureController::getFinishedCtus()
@@ -808,10 +811,11 @@ void SequenceController::pictureRateAllocation(std::shared_ptr<InputQueue::Docke
     {
         unique_lock<mutex> lock(m_pictureControllerMutex);
         assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
-        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, picTargetBits, m_averageBpp);
+        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, picTargetBits, m_averageBpp,false,currentPictureLevel);
     }
 
 }
+
 
 void SequenceController::updateSequenceController(bool isIntra, int sopLevel, int poc, int sopId)
 {
@@ -967,7 +971,7 @@ void SequenceController::pictureRateAllocationIntra(EstimateIntraComplexity &icI
     {
         unique_lock<mutex> lock(m_pictureControllerMutex);
         assert(m_pictureControllerEngine.find(poc) == m_pictureControllerEngine.end());
-        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, icInfo, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, currentBitsPerPicture, m_averageBpp);
+        m_pictureControllerEngine[poc] = new PictureController(m_dataStorageEngine, icInfo, m_picHeight, m_picWidth, m_picHeightInCtbs, m_picWidthInCtbs, m_ctuSize, currentBitsPerPicture, m_averageBpp,false,0);
     }
 
 
@@ -984,15 +988,6 @@ void SequenceController::setHeaderBits(int bits, bool isIntra, int sopLevel, int
         CodedPicture &pictureAtLevel = m_dataStorageEngine->getPictureAtLevel(currentPictureLevel);
         pictureAtLevel.setHeaderBits(bits);
     }
-}
-
-void SequenceController::computeCtuTargetBits(bool isIntraSlice, int ctbAddrInRs, int poc)
-{
-    unique_lock<mutex> lock(m_pictureControllerMutex);
-    auto currentPictureController = m_pictureControllerEngine.find(poc);
-    assert(currentPictureController != m_pictureControllerEngine.end());
-
-    currentPictureController->second->computeCtuTargetBits(isIntraSlice, ctbAddrInRs);
 }
 
 int SequenceController::estimateCtuLambdaAndQp(bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc, int sliceQp)

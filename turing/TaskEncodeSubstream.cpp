@@ -106,6 +106,16 @@ bool TaskEncodeSubstream<Sample>::blocked()
                     StateWavefront *stateWavefrontRef = stateEncodePicture;
                     if (!stateWavefrontRef->encoded(rx, ry)) return true;
                 }
+
+                // RC deterministic: review: for now only works with SOP size 8
+                if (stateEncodePictureCurr->docket->sopLevel == 1)
+                {
+                    if (stateEncodePictureCurr->docket->poc == (stateEncodePicture->docket->poc + 9) || stateEncodePictureCurr->docket->poc == (stateEncodePicture->docket->poc + 13))
+                    {
+                        StateWavefront *stateWavefrontRef = stateEncodePicture;
+                        if (!stateWavefrontRef->encoded(rx, ry)) return true;
+                    }
+                }
             }
         }
     }
@@ -153,6 +163,13 @@ bool TaskEncodeSubstream<Sample>::run()
         {
             stateEncode->rateControlEngine->resetSequenceControllerState(!isShotChange);
         }
+
+        //RC deterministic: here is where the appropriate frames are removed from the map
+        {
+            int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+            stateEncode->rateControlEngine->updateSequenceControllerFinishedFrames(h, h[PicOrderCntVal()]);
+        }
+
 
         if(h[slice_type()] == I)
         {
@@ -228,11 +245,11 @@ bool TaskEncodeSubstream<Sample>::run()
 
     BitWriter::insertEp3Bytes(*static_cast<CabacWriter *>(h)->data, 0);
 
-    if(stateEncode->useRateControl && h[CtbAddrInRs()] == h[PicSizeInCtbsY()])
-    {
-        int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
-        stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()], this->stateEncodePicture->docket->sopId);
-    }
+    //if(stateEncode->useRateControl && h[CtbAddrInRs()] == h[PicSizeInCtbsY()])
+    //{
+    //    int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
+    //    stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()], this->stateEncodePicture->docket->sopId);
+    //}
 
     threadPool->lock();
     const int n = --stateWavefront->nSubstreamsUnfinished;
