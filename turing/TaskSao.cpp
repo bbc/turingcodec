@@ -169,18 +169,19 @@ bool TaskSao<H>::run()
         StateEncode *stateEncode = h;
         StatePicture *statePicture = h;
         StateReconstructedPicture<Sample> *currPic = h;
+        const int currentPoc = stateEncodePicture->docket->poc;
         if (stateEncode->psnrAnalysis)
         {
             StateEncodePicture *stateEncodePicture = h;
             PictureWrapper &pictureWrapper = *stateEncodePicture->docket->picture;
             using Sample = typename SampleType<H>::Type;
             auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
-            stateEncode->psnrAnalysis->analyse(*currPic->picture, picture);
+            stateEncode->psnrAnalysis->analyse(currentPoc, *currPic->picture, picture);
         }
 
         if (stateEncode->decodedHashSei)
         {
-            stateEncode->hashElement.clear();
+            StateEncode::FrameHash currentFrameHash;
             auto &picture = *currPic->picture;
 
             if (stateEncode->hashType == MD5)
@@ -211,9 +212,10 @@ bool TaskSao<H>::run()
                     for (int i = 0; i < 16; i++)
                     {
                         h[picture_md5(cIdx, i)] = digest[i];
-                        stateEncode->hashElement.push_back(digest[i]);
+                        currentFrameHash.hash.push_back(digest[i]);
                     }
                 }
+                stateEncode->addFrameHash(currentPoc, currentFrameHash);
             }
             else if (stateEncode->hashType == CRC)
             {
@@ -238,9 +240,10 @@ bool TaskSao<H>::run()
                             currentBitDepth);
                     }
                     h[picture_crc(cIdx)] = crc;
-                    stateEncode->hashElement.push_back((crc >> 8) & 0xff);
-                    stateEncode->hashElement.push_back(crc & 0xff);
+                    currentFrameHash.hash.push_back((crc >> 8) & 0xff);
+                    currentFrameHash.hash.push_back(crc & 0xff);
                 }
+                stateEncode->addFrameHash(currentPoc, currentFrameHash);
             }
             else if (stateEncode->hashType == CHKSUM)
             {
@@ -267,11 +270,12 @@ bool TaskSao<H>::run()
                             );
                     }
                     h[picture_checksum(cIdx)] = checkSum;
-                    stateEncode->hashElement.push_back((checkSum >> 24) & 0xff);
-                    stateEncode->hashElement.push_back((checkSum >> 16) & 0xff);
-                    stateEncode->hashElement.push_back((checkSum >> 8) & 0xff);
-                    stateEncode->hashElement.push_back(checkSum & 0xff);
+                    currentFrameHash.hash.push_back((checkSum >> 24) & 0xff);
+                    currentFrameHash.hash.push_back((checkSum >> 16) & 0xff);
+                    currentFrameHash.hash.push_back((checkSum >> 8) & 0xff);
+                    currentFrameHash.hash.push_back(checkSum & 0xff);
                 }
+                stateEncode->addFrameHash(currentPoc, currentFrameHash);
             }
         }
 

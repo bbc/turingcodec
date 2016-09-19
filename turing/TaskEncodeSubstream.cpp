@@ -69,8 +69,8 @@ bool TaskEncodeSubstream<Sample>::blocked()
     }
 
     // To encode the current CTU at (rx, ry), the CTU (rx+2, ry+1) of each reference picture must be ready for prediction.
-    int depX = std::min(rx + 2, h[PicWidthInCtbsY()] - 1);
-    int depY = std::min(ry + 1, h[PicHeightInCtbsY()] - 1);
+    int depX = std::min(rx + ctbWaitingOffsetX, h[PicWidthInCtbsY()] - 1);
+    int depY = std::min(ry + ctbWaitingOffsetY, h[PicHeightInCtbsY()] - 1);
 
     if (h[slice_type()] != I)
     {
@@ -98,28 +98,29 @@ bool TaskEncodeSubstream<Sample>::blocked()
         StateEncodePicture *stateEncodePictureCurr = h;
         for (auto &response : stateEncode->responses)
         {
+            const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
+            const int ry = h[CtbAddrInRs()] / h[PicWidthInCtbsY()];
+
             if(response.picture)
             {
+
                 StateEncodePicture *stateEncodePicture = response.picture.get();
-                if (stateEncodePicture->docket->poc < stateEncodePictureCurr->docket->poc && stateEncodePicture->docket->sopLevel == stateEncodePictureCurr->docket->sopLevel)
+                const bool previousHierarchyLevel = stateEncodePicture->docket->hierarchyLevel < stateEncodePictureCurr->docket->hierarchyLevel;
+                const bool previousIntraPeriod = stateEncodePicture->docket->intraFramePoc < stateEncodePictureCurr->docket->intraFramePoc;
+                const bool sameIntraPeriod = stateEncodePicture->docket->intraFramePoc == stateEncodePictureCurr->docket->intraFramePoc;
+                if ((previousHierarchyLevel && sameIntraPeriod) || previousIntraPeriod)
                 {
                     StateWavefront *stateWavefrontRef = stateEncodePicture;
                     if (!stateWavefrontRef->encoded(rx, ry)) return true;
                 }
 
-                // RC deterministic: review: for now only works with SOP size 8
-                if (stateEncodePictureCurr->docket->sopLevel == 1)
+                if (previousHierarchyLevel && sameIntraPeriod && stateEncode->rateControlEngine->numLeftSameHierarchyLevel(stateEncodePicture->docket->poc) > 1)
                 {
-                    if (stateEncodePictureCurr->docket->poc == (stateEncodePicture->docket->poc + 9) || stateEncodePictureCurr->docket->poc == (stateEncodePicture->docket->poc + 13))
-                    {
-                        StateWavefront *stateWavefrontRef = stateEncodePicture;
-                        if (!stateWavefrontRef->encoded(rx, ry)) return true;
-                    }
+                    return true;
                 }
             }
         }
     }
-
     return false;
 }
 
@@ -147,63 +148,10 @@ bool TaskEncodeSubstream<Sample>::run()
 
     if(h[cu_qp_delta_enabled_flag()] && (h[CtbAddrInRs()] % h[PicWidthInCtbsY()] == 0))
     {
-        static_cast<QpState *>(h)->initInternalMemory(h);
-    }
-
-    if(stateEncode->useRateControl && h[CtbAddrInRs()] == 0)
-    {
-        bool isShotChange = this->stateEncodePicture->docket->isShotChange;
-        int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
-        int currentPoc = h[PicOrderCntVal()];
-        int sopSize  = this->stateEncodePicture->docket->currentGopSize;
-        int sopId    = this->stateEncodePicture->docket->sopId;
-        int pocInSop = this->stateEncodePicture->docket->pocInSop;
-
-        if (currentPoc && ((currentPoc % stateEncode->rateControlEngine->getTotalFrames()) == 0 || isShotChange))
+        if(h[CtbAddrInRs()] == 0 || stateEncode->wpp)
         {
-            stateEncode->rateControlEngine->resetSequenceControllerState(!isShotChange);
+            static_cast<QpState *>(h)->initInternalMemory(h);
         }
-
-        //RC deterministic: here is where the appropriate frames are removed from the map
-        {
-            int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
-            stateEncode->rateControlEngine->updateSequenceControllerFinishedFrames(h, h[PicOrderCntVal()]);
-        }
-
-
-        if(h[slice_type()] == I)
-        {
-            if(isShotChange)
-            {
-                stateEncode->rateControlEngine->resetSequenceControllerMemory();
-            }
-            EstimateIntraComplexity &icInfo = dynamic_cast<EstimateIntraComplexity&>(*static_cast<StateEncodePicture *>(h)->docket->icInfo);
-            stateEncode->rateControlEngine->pictureRateAllocationIntra(icInfo, h[PicOrderCntVal()]);
-            stateEncode->rateControlEngine->initNewSop(sopId, sopSize);
-        }
-        else
-        {
-            if(currentPictureLevel == 1)
-            {
-                // New SOP starts, set the rate budget for GOP and this current picture
-                stateEncode->rateControlEngine->initNewSop(sopId, sopSize);
-            }
-            stateEncode->rateControlEngine->pictureRateAllocation(this->stateEncodePicture->docket);
-        }
-
-        // Compute lambda
-        this->stateEncodePicture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
-
-        // Derive QP from lambda
-        int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(this->stateEncodePicture->lambda, h[slice_type()] == I, currentPictureLevel);
-        h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
-        this->stateEncodePicture->reciprocalLambda.set(1.0 / this->stateEncodePicture->lambda);
-        this->stateEncodePicture->reciprocalSqrtLambda = sqrt(1.0 / this->stateEncodePicture->lambda);
-#if WRITE_RC_LOG
-        char data[100];
-        sprintf(data, "| %06d | %10d | %9.2f | %4d |", this->stateEncodePicture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(h[PicOrderCntVal()]), this->stateEncodePicture->lambda, currentQP);
-        stateEncode->rateControlEngine->writetoLogFile(data);
-#endif
     }
 
     while (h[CtbAddrInRs()] != this->end)
@@ -244,12 +192,6 @@ bool TaskEncodeSubstream<Sample>::run()
     }
 
     BitWriter::insertEp3Bytes(*static_cast<CabacWriter *>(h)->data, 0);
-
-    //if(stateEncode->useRateControl && h[CtbAddrInRs()] == h[PicSizeInCtbsY()])
-    //{
-    //    int currentPictureLevel = this->stateEncodePicture->docket->sopLevel;
-    //    stateEncode->rateControlEngine->updateSequenceController(h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()], this->stateEncodePicture->docket->sopId);
-    //}
 
     threadPool->lock();
     const int n = --stateWavefront->nSubstreamsUnfinished;

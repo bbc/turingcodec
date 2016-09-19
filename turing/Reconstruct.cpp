@@ -275,7 +275,7 @@ struct ReconstructIntraBlock
                 double lambda;
                 if(stateEncode->useRateControl)
                 {
-                    lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                 }
                 else
                 {
@@ -430,7 +430,7 @@ struct ReconstructIntraBlock
                         double lambda;
                         if(stateEncode->useRateControl)
                         {
-                            lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                            lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                         }
                         else
                         {
@@ -528,7 +528,7 @@ struct ReconstructIntraBlock
                 Lambda reciprocalLambda = getReciprocalLambda(h);
                 if(stateEncode->useRateControl)
                 {
-                    double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                     reciprocalLambda.set(value);
                 }
                 contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
@@ -741,7 +741,7 @@ template <class Cbf> struct ReconstructInterBlock
                 double lambda;
                 if(stateEncode->useRateControl)
                 {
-                    lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                 }
                 else
                 {
@@ -867,7 +867,7 @@ template <class Cbf> struct ReconstructInterBlock
                     double lambda;
                     if(stateEncode->useRateControl)
                     {
-                        lambda = stateEncode->rateControlEngine->getCtuLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                        lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                     }
                     else
                     {
@@ -935,7 +935,7 @@ template <class Cbf> struct ReconstructInterBlock
             Lambda reciprocalLambda = getReciprocalLambda(h);
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                 reciprocalLambda.set(value);
             }
             contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
@@ -1010,7 +1010,7 @@ template <class Cbf> struct ReconstructInterBlock
                 Lambda reciprocalLambda = getReciprocalLambda(h);
                 if(stateEncode->useRateControl)
                 {
-                    double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                     reciprocalLambda.set(value);
                 }
                 contextsCostCbf1.lambdaDistortion += (stateEncodeSubstream->ssd[rc.cIdx]) * reciprocalLambda;
@@ -1280,7 +1280,7 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
             Lambda reciprocalLambda = getReciprocalLambda(h);
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                 reciprocalLambda.set(value);
             }
             contextsAndCostOne.lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * reciprocalLambda;

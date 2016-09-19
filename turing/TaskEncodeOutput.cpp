@@ -155,17 +155,7 @@ bool writeOut(H &h)
 
     // Write the slice segment NALU (slice_segment_data() and slice_segment_trailing_bits() suppressed here)
     NalWriter *nalWriter = h;
-    size_t rateBefore = (nalWriter->data->size()) << 3;
     h(byte_stream_nal_unit(0));
-
-    size_t rateAfter = (nalWriter->data->size()) << 3;
-    if(stateEncode->useRateControl)
-    {
-        StateEncodePicture *stateEncodePicture = h;
-        int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-        int poc = stateEncodePicture->docket->poc;
-        stateEncode->rateControlEngine->setHeaderBits(static_cast<int>(rateAfter - rateBefore), h[slice_type()] == I, currentPictureLevel, poc);
-    }
 
     {
         // Write out substream data (already with emulation prevention applied)
@@ -182,6 +172,22 @@ bool writeOut(H &h)
         h[hash_type()] = stateEncode->hashType;
         h[last_payload_type_byte()] = PayloadTypeOf<decoded_picture_hash>::value;
         h(byte_stream_nal_unit(0));
+    }
+
+    if (stateEncode->useRateControl)
+    {
+        StateEncodePicture *stateEncodePicture = h;
+        int currentPictureLevel = stateEncodePicture->docket->sopLevel;
+        size_t codingBits = (nalWriter->data->size()) << 3;
+
+        stateEncode->rateControlEngine->updateAfterEncoding(stateEncodePicture->docket, static_cast<int>(codingBits));
+
+        stateEncode->rateControlEngine->updateSequenceControllerFinishedFrames(stateEncodePicture->docket);
+#if WRITE_RC_LOG
+        char data[100];
+        sprintf(data, " %10d |\n", static_cast<int>(codingBits));
+        stateEncode->rateControlEngine->writetoLogFile(data);
+#endif
     }
 
     return isKeyframe;
