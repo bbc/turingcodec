@@ -129,6 +129,24 @@ bool writeOut(H &h)
         stateEncode->userDataUnregSeiWritten = true;
     }
 
+    const bool writeMasterDisplayInfoSei = stateEncode->masteringDisplayInfoPresent && (isIrap(nut) || h[PicOrderCntVal()] == 0);
+    if(writeMasterDisplayInfoSei)
+    {
+        for(int c = 0; c < 3; c++)
+        {
+            h[display_primaries_x(c)] = stateEncode->masterDisplayInfo.displayPrimariesX[c];
+            h[display_primaries_y(c)] = stateEncode->masterDisplayInfo.displayPrimariesY[c];
+        }
+        h[white_point_x()] = stateEncode->masterDisplayInfo.whitePointX;
+        h[white_point_y()] = stateEncode->masterDisplayInfo.whitePointY;
+        h[max_display_mastering_luminance()] = stateEncode->masterDisplayInfo.maxDisplayMasteringLuma;
+        h[min_display_mastering_luminance()] = stateEncode->masterDisplayInfo.minDisplayMasteringLuma;
+
+        h[nal_unit_type()] = PREFIX_SEI_NUT;
+        h[last_payload_type_byte()] = PayloadTypeOf<mastering_display_colour_volume>::value;
+        h(byte_stream_nal_unit(0));
+    }
+
     if (stateEncode->fieldcoding)
     {
         PictureWrapper picturewrapper = *static_cast<StateEncodePicture *>(h)->docket->picture;
