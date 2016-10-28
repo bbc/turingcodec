@@ -46,6 +46,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "sei/pic_timing.h"
 #include "sei/active_parameter_sets.h"
 #include "sei/user_data_unregistered.h"
+#include "sei/mastering_display_colour_volume.h"
 #include "AdaptiveQuantisation.h"
 #include "RateControl.h"
 #include <boost/program_options.hpp>
@@ -514,7 +515,8 @@ struct StateEncodePictureSei :
     DecodedPictureHash,
     ActiveParameterSets2,
     AlternativeTransferCharacteristics,
-    UserDataUnregistered
+    UserDataUnregistered,
+    MasteringDisplayColourVolume
     {
     };
 
@@ -904,6 +906,7 @@ struct StateEncode :
         bool userDataUnregSeiWritten;
         int userDataUnregMsgLen;
         bool repeatHeaders;
+        bool masteringDisplayInfoPresent;
 
         DecodedPictureHash decodedPictureHash;
         std::ofstream fileOutYuvPictures;
@@ -926,6 +929,19 @@ struct StateEncode :
         {
             std::vector<int> hash;
         };
+
+        struct MasteringDisplayInfo
+        {
+            uint16_t displayPrimariesX[3];
+            uint16_t displayPrimariesY[3];
+            uint16_t whitePointX;
+            uint16_t whitePointY;
+            uint32_t maxDisplayMasteringLuma;
+            uint32_t minDisplayMasteringLuma;
+        };
+
+        // Structure to store the information about the mastering display colour volume as specified in ST.2086
+        MasteringDisplayInfo masterDisplayInfo;
 
         // Map to store hashes on a frame basis, associated mutex and helper functions
         std::map<int, FrameHash> hashOnFrameBasis;

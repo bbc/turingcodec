@@ -40,6 +40,7 @@ For more information, contact us at info @ turingcodec.org.
 #include <cassert>
 #include <string>
 #include <sstream>
+#include <stdio.h>
 
 
 void Encoder::parseInputRes()
@@ -216,6 +217,28 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
+
+    if(this->vm.count("mastering-display-info"))
+    {
+        this->stateEncode.masteringDisplayInfoPresent = true;
+        string masteringDisplayInfo = this->vm["mastering-display-info"].as<string>();
+
+        sscanf(masteringDisplayInfo.c_str(), "G(%hu,%hu)B(%hu,%hu)R(%hu,%hu)WP(%hu,%hu)L(%u,%u)",
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesX[0],
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesY[0],
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesX[1],
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesY[1],
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesX[2],
+                   &this->stateEncode.masterDisplayInfo.displayPrimariesY[2],
+                   &this->stateEncode.masterDisplayInfo.whitePointX,
+                   &this->stateEncode.masterDisplayInfo.whitePointY,
+                   &this->stateEncode.masterDisplayInfo.maxDisplayMasteringLuma,
+                   &this->stateEncode.masterDisplayInfo.minDisplayMasteringLuma);
+    }
+    else
+    {
+        this->stateEncode.masteringDisplayInfoPresent = false;
+    }
 
     this->setupPps(h);
     ProfileTierLevel *ptl = this->setupSps(h);

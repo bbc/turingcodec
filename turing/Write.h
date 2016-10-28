@@ -1798,7 +1798,6 @@ template <> struct Write<scalable_nesting> : NotImplemented { };
 template <> struct Write<region_refresh_info> : NotImplemented { };
 template <> struct Write<no_display> : NotImplemented { };
 template <> struct Write<time_code> : NotImplemented { };
-template <> struct Write<mastering_display_colour_volume> : NotImplemented { };
 template <> struct Write<segmented_rect_frame_packing_arrangement> : NotImplemented { };
 template <> struct Write<temporal_motion_constrained_tile_sets> : NotImplemented { };
 template <> struct Write<chroma_resampling_filter_hint> : NotImplemented { };
