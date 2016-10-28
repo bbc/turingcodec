@@ -210,7 +210,9 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->pictureHeight,
                 this->pictureWidth,
                 this->vm["ctu"].as<int>(),
-                this->vm["qp"].as<int>()));
+                this->vm["qp"].as<int>(),
+                this->stateEncode.wpp,
+                this->stateEncode.concurrentFrames));
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
@@ -494,48 +496,43 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
 
                 std::ostringstream oss;
                 
-                oss << "POC" << std::setw(5) << h[PicOrderCntVal()] << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
+                const int currentPoc = h[PicOrderCntVal()];
+                double psnrY, psnrU, psnrV;
+                stateEncode.psnrAnalysis->getPsnrFrameData(currentPoc, psnrY, psnrU, psnrV);
+                oss << "POC" << std::setw(5) << currentPoc << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
                 oss << std::setw(12) << 8 * bytes << " bits ";
                 oss << std::setprecision(4);
                 oss << std::fixed;
-                oss << "[ Y" << std::setw(8) << stateEncode.psnrAnalysis->currentPsnr[0] << " dB  ";
-                oss << " U" << std::setw(8) << stateEncode.psnrAnalysis->currentPsnr[1] << " dB  ";
-                oss << " V" << std::setw(8) << stateEncode.psnrAnalysis->currentPsnr[2] << " dB ]";
+                oss << "[ Y" << std::setw(8) << psnrY << " dB  ";
+                oss << " U" << std::setw(8) << psnrU << " dB  ";
+                oss << " V" << std::setw(8) << psnrV << " dB ]";
                 oss << std::setprecision(1);
                 oss << " [ ET " << frameEncoderTimeSec.count() << " ] ";
+                stateEncode.psnrAnalysis->removePsnrFrameData(currentPoc);
 
                 if (this->stateEncode.decodedHashSei)
                 {
+                    StateEncode::FrameHash currentHash = stateEncode.getFrameHash(currentPoc);
                     std::string digestHashString;
                     switch (this->stateEncode.hashType)
                     {
                         case MD5:
-                            digestHashString = "[MD5:" + hashToString(this->stateEncode.hashElement, 16) + "]";
+                            digestHashString = "[MD5:" + hashToString(currentHash.hash, 16) + "]";
                             break;
                         case CRC:
-                            digestHashString = "[CRC:" + hashToString(this->stateEncode.hashElement, 2) + "]";
+                            digestHashString = "[CRC:" + hashToString(currentHash.hash, 2) + "]";
                             break;
                         case CHKSUM:
-                            digestHashString = "[CKS:" + hashToString(this->stateEncode.hashElement, 4) + "]";
+                            digestHashString = "[CKS:" + hashToString(currentHash.hash, 4) + "]";
                             break;
                     }
                     oss << digestHashString << " ";
+                    stateEncode.removeFrameHash(currentPoc);
                 }
 
                 // Implemented print out of reference frames used
                 std::cout << oss.str() << "\n";
                 std::cout.flush();
-            }
-
-            if(this->stateEncode.useRateControl)
-            {
-                auto &h = *response.picture;
-                size_t rate = (bytes) << 3;
-#if WRITE_RC_LOG
-                char data[100];
-                sprintf(data, " %10d | %10d |\n", (int)rate, stateEncode.rateControlEngine->getCpbFullness());
-                stateEncode.rateControlEngine->writetoLogFile(data);
-#endif
             }
 
             ++this->frameCount;

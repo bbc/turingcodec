@@ -163,12 +163,59 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
     // Allocate various picture memories
     response.picture->resize<Sample>(h);
+    
+    StateEncode* stateEncode = h;
 
-    // Lambda computations - review: better elsewhere?
-    response.picture->qpFactor = response.picture->docket->qpFactor;
-    response.picture->lambda = computeLambda(h);
-    response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
-    response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
+    if (stateEncode->useRateControl)
+    {
+        bool isShotChange = response.picture->docket->isShotChange;
+        int currentPictureLevel = response.picture->docket->sopLevel;
+        int currentPoc = response.picture->docket->poc;
+        int segmentPoc = response.picture->docket->segmentPoc;
+        int sopSize = response.picture->docket->currentGopSize;
+        int sopId = response.picture->docket->sopId;
+        int pocInSop = response.picture->docket->pocInSop;
+
+        if (h[slice_type()] == I)
+        {
+            stateEncode->rateControlEngine->initNewIntraPeriod(response.picture->docket);
+            stateEncode->rateControlEngine->pictureRateAllocationIntra(response.picture->docket);
+            stateEncode->rateControlEngine->initNewSop(response.picture->docket);
+        }
+        else
+        {
+            if (currentPictureLevel == 1)
+            {
+                // New SOP starts, set the rate budget for GOP and this current picture
+                stateEncode->rateControlEngine->initNewSop(response.picture->docket);
+            }
+            stateEncode->rateControlEngine->pictureRateAllocation(response.picture->docket);
+        }
+
+        // Compute lambda
+        response.picture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(currentPoc);
+
+        // Derive QP from lambda
+        int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(response.picture->lambda, h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
+
+        response.picture->qpFactor = response.picture->docket->qpFactor;
+        h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
+        response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
+        response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
+#if WRITE_RC_LOG
+        char data[100];
+        sprintf(data, "| %06d | %10d | %9.2f | %4d |", response.picture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(h[PicOrderCntVal()]), response.picture->lambda, currentQP);
+        stateEncode->rateControlEngine->writetoLogFile(data);
+#endif
+    }
+    else
+    {
+        // Lambda computations - review: better elsewhere?
+        response.picture->qpFactor = response.picture->docket->qpFactor;
+        response.picture->lambda = computeLambda(h);
+        response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
+        response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
+    }
 
     const int nCtusInFirstSubstream = h[entropy_coding_sync_enabled_flag()] ? h[PicWidthInCtbsY()] : h[PicSizeInCtbsY()];
 
@@ -179,6 +226,10 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
         std::unique_lock<std::mutex> lock(threadPool->mutex());
         stateEncode->responses.push_back(response);
+        if (stateEncode->useRateControl)
+        {
+            stateEncode->rateControlEngine->decreaseNumLeftSameHierarchyLevel(response.picture->docket);
+        }
         stateEncode->responsesAvailable.notify_all();
     }
 

@@ -64,6 +64,7 @@ struct InputQueue
         std::shared_ptr<EstimateIntraComplexity> icInfo;
         std::shared_ptr<AdaptiveQuantisation> aqInfo;
         int poc;
+        int absolutePoc;
         int nut;
         int sliceType;
         int qpOffset;
@@ -75,6 +76,10 @@ struct InputQueue
         References references;
         int64_t dts;
         bool isShotChange;
+        int hierarchyLevel;
+        int numSameHierarchyLevel;
+        int intraFramePoc;
+        int segmentPoc;
     };
 
     // Retrieves a docket: a packet of work containing a picture and instructions of how to encode it.

@@ -744,14 +744,13 @@ struct Encode<coding_quadtree>
                 if (stateEncode->useRateControl)
                 {
                     StateEncodePicture *stateEncodePicture = h;
-                    int currentPictureLevel = stateEncodePicture->docket->sopLevel;
                     stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     // Step 1: Allocate the bit budget for the current CTU
-                    stateEncode->rateControlEngine->computeCtuTargetBits(h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    stateEncode->rateControlEngine->computeCtbTargetBits(h, h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     // Step 2: Estimate the lambda and QP from the model and the allocated bits
-                    int qp = stateEncode->rateControlEngine->estimateCtuLambdaAndQp(h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()], h[SliceQpY()]);
+                    int qp = stateEncode->rateControlEngine->estimateCtbLambdaAndQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, qp, 0);
                 }
@@ -859,7 +858,7 @@ struct Encode<coding_quadtree>
             StateEncode *stateEncode = h;
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtuReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
                 reciprocalLambda.set(value);
             }
             Cost lambdaDistortion = reciprocalLambda * ssd;
@@ -929,7 +928,7 @@ struct Encode<coding_quadtree>
                 int currentPictureLevel = stateEncodePicture->docket->sopLevel;
 
                 // Update the rate controller engine
-                stateEncode->rateControlEngine->updateCtuController(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
+                stateEncode->rateControlEngine->storeCtbParameters(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
             }
 
             // review: test should pass even if this flag set
@@ -1001,7 +1000,7 @@ struct Write<coding_unit>
             StateEncode *stateEncode = h;
             int QpY;
             if(stateEncode->useRateControl)
-                QpY = stateEncode->rateControlEngine->getCtuStoredQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                QpY = stateEncode->rateControlEngine->getCtbStoredQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
             else
                 QpY = h[SliceQpY()];
 
@@ -1700,12 +1699,8 @@ struct Write<prediction_unit>
             (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
         {
             // Populate loop filter and temporal motion buffers accordingly.
-
             StatePicture *statePictureBase = h;
             statePictureBase->loopFilterPicture->processPu(h, pu);
-            // }
-             //if (std::is_same<typename H::Tag, Write<void>>::value)
-             //{
             StatePicture *decodedPicture = h;
             decodedPicture->motion->fillRectangle(pu, blockData);
         }
