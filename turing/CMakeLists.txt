@@ -44,7 +44,7 @@ if (CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
     set(LINK_LIBRARIES ${LINK_LIBRARIES} rt)
-endif (CMAKE_COMPILER_IS_GNUCC	)
+endif (CMAKE_COMPILER_IS_GNUCC)
 
 set(SEI_HEADERS
     sei/ReadSei.h
@@ -205,7 +205,9 @@ source_group(SEI FILES ${SEI_HEADERS})
 
 target_link_libraries (turing LINK_PUBLIC havoc)
 
-add_executable (turing-exe main.cpp )
+add_executable (turing-exe main.cpp)
+
+set_target_properties(turing-exe PROPERTIES OUTPUT_NAME turing)
 
 target_link_libraries (turing-exe LINK_PUBLIC turing ${LINK_LIBRARIES})
 

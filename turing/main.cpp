@@ -111,7 +111,7 @@ int main(int argc, const char *argv[])
     {
         if (arguments.size() == 2) return help(arguments[0], false);
 
-        // translate "turing-exe help command" to "turing-exe command --help"
+        // translate "turing help command" to "turing command --help"
         arguments.resize(3);
         command = arguments[1] = arguments[2];
         arguments[2] =  "--help";

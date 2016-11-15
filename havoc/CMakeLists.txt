@@ -52,4 +52,6 @@ add_executable(havoc-exe
 
 target_link_libraries(havoc-exe havoc)
 
+set_target_properties(havoc-exe PROPERTIES OUTPUT_NAME havoc)
+
 install(TARGETS havoc LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
