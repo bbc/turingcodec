@@ -27,6 +27,5 @@ script:
   - cd build
   - cmake -DCMAKE_CXX_COMPILER=g++-5 -DCMAKE_C_COMPILER=gcc-5 ..
   - make
-  - sde64 -nhm -- ./havoc-exe --no-measure-speed
-  - sde64 -hsw -- ./havoc-exe --no-measure-speed
-
+  - sde64 -nhm -- ./havoc --no-measure-speed
+  - sde64 -hsw -- ./havoc --no-measure-speed
