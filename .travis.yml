@@ -16,5 +16,5 @@ script:
   - cd bitstreams
   - git checkout b19d683
   - cd ..
-  - ./turing/turing-exe signature ../test/
-  - ./turing/turing-exe testdecode
+  - ./turing/turing signature ../test/
+  - ./turing/turing testdecode

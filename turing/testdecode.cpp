@@ -18,7 +18,7 @@ the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
 
-// Self-test code relating to the "turing-exe testdecode" command.
+// Self-test code relating to the "turing testdecode" command.
 
 #include "ConformanceStreams.h"
 #include <boost/program_options.hpp>
