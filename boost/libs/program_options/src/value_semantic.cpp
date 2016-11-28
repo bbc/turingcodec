@@ -11,6 +11,7 @@
 #include <set>
 
 #include <cctype>
+#include <iostream>
 
 namespace boost { namespace program_options {
 
@@ -204,8 +205,7 @@ namespace boost { namespace program_options {
         void check_first_occurrence(const boost::any& value)
         {
             if (!value.empty())
-                boost::throw_exception(
-                    multiple_occurrences());
+                cerr<<"Warning: multiple values submitted for command line option: "<<endl;
         }
     }
 

@@ -9,11 +9,11 @@ else()
 endif()
 
 configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/git-describe.h.in 
+    ${CMAKE_CURRENT_SOURCE_DIR}/git-describe.h.in
     ${CMAKE_CURRENT_SOURCE_DIR}/git-describe.h)
 
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR} 
+    ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 if (USE_SYSTEM_BOOST)
@@ -93,30 +93,30 @@ set(SEI_HEADERS
     sei/user_data_unregistered.h)
 
 add_library(turing
-    Cabac.cpp 
-    encode.cpp 
-    psnr.cpp 
-    TaskEncodeInput.cpp 
+    Cabac.cpp
+    encode.cpp
+    psnr.cpp
+    TaskEncodeInput.cpp
     decode.cpp
-    Encoder.cpp 
-    Rdoq.cpp 
-    TaskEncodeOutput.cpp 
-    DecodeCtu.cpp 
-    InputQueue.cpp 
-    Reconstruct.cpp 
-    TaskEncodeSubstream.cpp 
-    DecodeRbsp.cpp 
-    ThreadPool.cpp 
+    Encoder.cpp
+    Rdoq.cpp
+    TaskEncodeOutput.cpp
+    DecodeCtu.cpp
+    InputQueue.cpp
+    Reconstruct.cpp
+    TaskEncodeSubstream.cpp
+    DecodeRbsp.cpp
+    ThreadPool.cpp
     md5.c
-    ScalingMatrices.cpp 
-    Picture.cpp 
-    Search.cpp 
-    sao.cpp 
+    ScalingMatrices.cpp
+    Picture.cpp
+    Search.cpp
+    sao.cpp
     signature.cpp
-    ProgressReporter.cpp 
-    TaskDeblock.cpp 
-    testdecode.cpp 
-	TaskSao.cpp 
+    ProgressReporter.cpp
+    TaskDeblock.cpp
+    testdecode.cpp
+    TaskSao.cpp
     Aps.h
     Binarization.h
     BitField.h
@@ -133,7 +133,7 @@ add_library(turing
     DecodedPicture.h
     Dsp.h
     Encoder.h
-	EncSao.h
+    EncSao.h
     EstimateRate.h
     EstimateIntraComplexity.h
     FixedPoint.h
@@ -191,7 +191,7 @@ add_library(turing
     SyntaxRbsp.hpp
     SyntaxSei.h
     TaskDeblock.h
-	TaskSao.h
+    TaskSao.h
     TaskEncodeInput.h
     TaskEncodeOutput.h
     TaskEncodeSubstream.h
@@ -210,6 +210,13 @@ add_executable (turing-exe main.cpp)
 set_target_properties(turing-exe PROPERTIES OUTPUT_NAME turing)
 
 target_link_libraries (turing-exe LINK_PUBLIC turing ${LINK_LIBRARIES})
+if(UNIX)
+	include(FindPkgConfig QUIET)
+	if(PKG_CONFIG_FOUND)
+		configure_file("libturing.pc.in" "libturing.pc" @ONLY)
+		install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libturing.pc" DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
+	endif()
+endif()
 
 install(TARGETS turing LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
 install(FILES turing.h DESTINATION include)
