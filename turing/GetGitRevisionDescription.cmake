@@ -102,6 +102,7 @@ function(git_describe _var)
 	#	message(FATAL_ERROR "Looks like someone's doing something nefarious with git_describe! Passed arguments ${ARGN}")
 	#endif()
 
+	set(ARGN --always)
 	#message(STATUS "Arguments to execute_process: ${ARGN}")
 
 	execute_process(COMMAND

@@ -35,6 +35,7 @@ For more information, contact us at info @ turingcodec.org.
 #include <fstream>
 #include <memory>
 #include <cstring>
+#include <map>
 
 
 #pragma optimize ("", off)
@@ -241,6 +242,62 @@ const char *gitDescribe()
     return (s[0] >= '0' && s[0] <= '9') ? s : "<unknown>";
 }
 
+int turing_check_binary_option(const char *option)
+{
+    map<string, bool> supportedBinaryOptions; // option name and default value
+
+    supportedBinaryOptions["aq"] = false;
+    supportedBinaryOptions["shot-change"] = false;
+    supportedBinaryOptions["field-coding"] = false;
+    supportedBinaryOptions["wpp"] = true;
+    supportedBinaryOptions["repeat-headers"] = true;
+    supportedBinaryOptions["deblock"] = true;
+    supportedBinaryOptions["sao"] = false;
+    supportedBinaryOptions["strong-intra-smoothing"] = true;
+    supportedBinaryOptions["rqt"] = true;
+    supportedBinaryOptions["amp"] = true;
+    supportedBinaryOptions["smp"] = false;
+    supportedBinaryOptions["rdoq"] = true;
+    supportedBinaryOptions["sdh"] = true;
+    supportedBinaryOptions["tskip"] = true;
+    supportedBinaryOptions["fdm"] = true;
+    supportedBinaryOptions["fdam"] = true;
+    supportedBinaryOptions["ecu"] = true;
+    supportedBinaryOptions["esd"] = true;
+    supportedBinaryOptions["cfm"] = true;
+    supportedBinaryOptions["met"] = true;
+    supportedBinaryOptions["aps"] = true;
+    supportedBinaryOptions["rcudepth"] = true;
+    supportedBinaryOptions["sao-slow-mode"] = false;
+    supportedBinaryOptions["no-parallel-processing"] = true;
+
+    string currentOption(option);
+    int isBinaryOption = 0;
+
+    if(currentOption == "no-parallel-processing")
+    {
+        isBinaryOption = 1;
+    }
+    else
+    {
+        // Strip out any no- prefix for disabling-like options
+        const int idx = currentOption.find("no-", 0);
+        if(idx != string::npos)
+        {
+            const int length = currentOption.length() - 3;
+            currentOption = currentOption.substr(idx+3, length);
+        }
+
+        auto optionPresent = supportedBinaryOptions.find(currentOption);
+        if(optionPresent != supportedBinaryOptions.end())
+        {
+            isBinaryOption = 1;
+        }
+    }
+
+    return isBinaryOption;
+}
+
 
 // Review - no need for Encoder and turing_encoder - merge these two?
 struct turing_encoder
@@ -442,7 +499,7 @@ struct turing_encoder
 
 const char *turing_version()
 {
-    return "1.01";
+    return "1.1";
 }
 
 
