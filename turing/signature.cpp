@@ -228,13 +228,13 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
 
     static const Test tests[] =
     {
-        { "371ae2fb", "9e14bdb3", "caminandes2", "--no-sao" },
-        { "77aac733", "d463c072", "caminandes2", "--speed fast" },
-        { "77aac733", "d463c072", "caminandes2", "--speed fast --asm 0" },
-        { "77aac733", "d463c072", "caminandes2", "--speed fast --threads 1" },
-        { "1a958b17", "d463c072", "caminandes2", "--speed fast --atc-sei 0" },
-        { "2d895158", "4fa7a0a3", "caminandes2", "--speed fast --field-coding" },
-        { "d9b799be", "515892ec", "caminandes2", "--speed fast --bit-depth 8 --internal-bit-depth 10" },
+        { "171f3c07", "971e01a7", "caminandes2", "--no-sao" },
+        { "c0504280", "28a0a772", "caminandes2", "--speed fast" },
+        { "c0504280", "28a0a772", "caminandes2", "--speed fast --asm 0" },
+        { "c0504280", "28a0a772", "caminandes2", "--speed fast --threads 1" },
+        { "9db713c0", "28a0a772", "caminandes2", "--speed fast --atc-sei 14" },
+        { "b503aaad", "8fe00cc7", "caminandes2", "--speed fast --field-coding" },
+        { "743e5b4d", "edd64864", "caminandes2", "--speed fast --bit-depth 8 --internal-bit-depth 10" },
     };
 
     auto mismatchCount = 0;
@@ -266,7 +266,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
         if (rv < 0)
         {
             cerr << "signature test failed\n";
-        ++mismatchCount;
+            ++mismatchCount;
         }
 
         if (rv > 0)
