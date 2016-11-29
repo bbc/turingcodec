@@ -16,6 +16,9 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if (USE_SYSTEM_BOOST)
 else()
     include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../boost")
@@ -44,7 +47,9 @@ if (CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
     set(LINK_LIBRARIES ${LINK_LIBRARIES} rt)
-endif (CMAKE_COMPILER_IS_GNUCC)
+elseif(APPLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-operator-names")
+endif()
 
 set(SEI_HEADERS
     sei/ReadSei.h

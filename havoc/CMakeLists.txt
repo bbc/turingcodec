@@ -16,10 +16,15 @@ if (MSVC)
 	endforeach(flag_var)
 endif (MSVC)
 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if (CMAKE_COMPILER_IS_GNUCC)
-	set(GCC_COMPILE_FLAGS "-fno-operator-names -std=c++0x -O3")
+	set(GCC_COMPILE_FLAGS "-fno-operator-names -O3")
 	set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
-endif (CMAKE_COMPILER_IS_GNUCC	)
+elseif(APPLE)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-operator-names")
+endif()
 
 add_library (havoc
 	diff.h
