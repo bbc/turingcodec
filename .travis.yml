@@ -1,20 +1,93 @@
 language: generic
+sudo: false
+
+compiler:
+  - gcc
+  - clang
+
+os:
+  - linux
+  - osx
+
+matrix:
+  exclude:
+    os:
+    - linux
+    - osx
+  include:
+    - os: linux
+      compiler: gcc
+      env:
+        - CC=gcc-4.9
+        - CXX=g++-4.9
+    - os: linux
+      compiler: gcc
+      env:
+        - CC=gcc-5
+        - CXX=g++-5
+    - os: linux
+      compiler: gcc
+      env:
+        - CC=gcc-6
+        - CXX=g++-6
+    - os: linux
+      compiler: clang
+      env:
+        - CC=clang-3.6
+        - CXX=clang++-3.6
+    - os: linux
+      compiler: clang
+      env:
+        - CC=clang-3.7
+        - CXX=clang++-3.7
+      dist: trusty
+    - os: osx
+      osx_image: xcode7.2
+      env:
+        - CC=clang
+        - CXX=clang++
+    - os: osx
+      osx_image: xcode8
+      env:
+        - CC=clang
+        - CXX=clang++
+    - os: osx
+      osx_image: xcode8.1
+      env:
+        - CC=clang
+        - CXX=clang++
+    - os: osx
+      env:
+        - CC=gcc-4.9
+        - CXX=g++-4.9
+    - os: osx
+      env:
+        - CC=gcc-5
+        - CXX=g++-5
+    - os: osx
+      env:
+        - CC=gcc-6
+        - CXX=g++-6
 
 addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test
+      - llvm-toolchain-precise-3.6
+      - llvm-toolchain-precise-3.7
     packages:
       - g++-5
+      - g++-6
+      - clang-3.6
+      - clang-3.7
+
+cache:
+  directories:
+    - bitstreams
+
+before_install:
+  - if [ ! -d bitstreams ]; then git clone -n https://github.com/kupix/bitstreams.git && cd bitstreams && git checkout b19d683 && cd - ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./.travis/osx_compiler.sh ; fi
 
 script:
-  - mkdir build
-  - cd build
-  - cmake -DCMAKE_CXX_COMPILER=g++-5 -DCMAKE_C_COMPILER=gcc-5 ..
-  - make
-  - git clone -n https://github.com/kupix/bitstreams.git
-  - cd bitstreams
-  - git checkout b19d683
-  - cd ..
-  - ./turing/turing signature ../test/
-  - ./turing/turing testdecode
+  - ./.travis/build.sh
