@@ -7,5 +7,5 @@ Name: @CMAKE_PROJECT_NAME@
 Description: Turing codec library
 Version: @GIT_DESCRIBE@
 Libs: -L${libdir}  -lturing -lhavoc
-Libs.private: -lstdc++ -L@PROJECT_BINARY_DIR@/boost/libs/program_options/src -L@PROJECT_BINARY_DIR@/boost/libs/chrono/src -L@PROJECT_BINARY_DIR@/boost/libs/timer/src -L@PROJECT_BINARY_DIR@/boost/libs/system/src -L@PROJECT_BINARY_DIR@/boost/libs/filesystem/src -lboost_program_options -lboost_timer -lboost_system -lboost_filesystem -lboost_chrono
+Libs.private: -lstdc++ -L@CMAKE_INSTALL_PREFIX@/lib/boost -lboost_program_options -lboost_timer -lboost_system -lboost_filesystem -lboost_chrono
 Cflags: -I${includedir}
