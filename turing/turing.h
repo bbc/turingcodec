@@ -21,6 +21,8 @@ For more information, contact us at info @ turingcodec.org.
 #ifndef INCLUDED_turing_h
 #define INCLUDED_turing_h
 
+#define TURING_API_VERSION 2
+
 /* This file represents the public API of the Turing encoder */
 
 #include <stdint.h>
