@@ -45,101 +45,103 @@ struct SaoCtuData :
         }
     };
 
+
 struct Neighbourhood :
     Snake<BlockData>::Cursor
+{
+    Snake<BlockData>::Pointer snake;
+    Snake<BlockData>::Pointer snakeMerge;
+    int MinCbLog2SizeYMinus1;
+
+    template <class H>
+    void recordMerge(H &h, const prediction_unit &pu)
     {
-        Snake<BlockData>::Pointer snake;
-        Snake<BlockData>::Pointer snakeMerge;
-        int MinCbLog2SizeYMinus1;
+        const auto parMrgLevel = 1 << h[Log2ParMrgLevel()];
+        coding_quadtree *cqt = h;
+        const auto nCbS = 1 << cqt->log2CbSize;
 
-        template <class H>
-        void recordMerge(H &h, const prediction_unit &pu)
+        if (parMrgLevel > 4 && nCbS == 8)
         {
-            const auto parMrgLevel = 1 << h[Log2ParMrgLevel()];
-            coding_quadtree *cqt = h;
-            const auto nCbS = 1 << cqt->log2CbSize;
+            // Record merge data at CU resolution instead
+        }
+        else
+        {
+            // dimensions rounded
+            const int x = pu.x0 & ~(parMrgLevel - 1);
+            const int y = pu.y0 & ~(parMrgLevel - 1);
+            int xRight = (pu.x0 + pu.nPbW) & ~(parMrgLevel - 1);
+            int yBottom = (pu.y0 + pu.nPbH) & ~(parMrgLevel - 1);
 
-            if (parMrgLevel > 4 && nCbS == 8)
+            if (pu.x0 + pu.nPbW == h[pic_width_in_luma_samples()]) xRight = h[pic_width_in_luma_samples()];
+            if (pu.y0 + pu.nPbH == h[pic_height_in_luma_samples()]) yBottom = h[pic_height_in_luma_samples()];
+
+            if (x != xRight && y != yBottom)
             {
-                // Record merge data at CU resolution instead
-            }
-            else
-            {
-                // dimensions rounded
-                const int x = pu.x0 & ~(parMrgLevel - 1);
-                const int y = pu.y0 & ~(parMrgLevel - 1);
-                int xRight = (pu.x0 + pu.nPbW) & ~(parMrgLevel - 1);
-                int yBottom = (pu.y0 + pu.nPbH) & ~(parMrgLevel - 1);
-
-                if (pu.x0 + pu.nPbW == h[pic_width_in_luma_samples()]) xRight = h[pic_width_in_luma_samples()];
-                if (pu.y0 + pu.nPbH == h[pic_height_in_luma_samples()]) yBottom = h[pic_height_in_luma_samples()];
-
-                if (x != xRight && y != yBottom)
+                for (int xx = x; xx < xRight; xx += (1 << this->MinCbLog2SizeYMinus1))
                 {
-                    for (int xx = x; xx < xRight; xx += (1 << this->MinCbLog2SizeYMinus1))
-                    {
-                        this->snakeMerge.commit(this->snake.at(xx, pu.y0 + pu.nPbH - 1, this->MinCbLog2SizeYMinus1), xx, yBottom - 1, this->MinCbLog2SizeYMinus1);
-                    }
-                    for (int yy = y; yy < yBottom; yy += (1 << this->MinCbLog2SizeYMinus1))
-                    {
-                        this->snakeMerge.commit(this->snake.at(pu.x0 + pu.nPbW - 1, yy, this->MinCbLog2SizeYMinus1), xRight - 1, yy, this->MinCbLog2SizeYMinus1);
-                    }
+                    this->snakeMerge.commit(this->snake.at(xx, pu.y0 + pu.nPbH - 1, this->MinCbLog2SizeYMinus1), xx, yBottom - 1, this->MinCbLog2SizeYMinus1);
+                }
+                for (int yy = y; yy < yBottom; yy += (1 << this->MinCbLog2SizeYMinus1))
+                {
+                    this->snakeMerge.commit(this->snake.at(pu.x0 + pu.nPbW - 1, yy, this->MinCbLog2SizeYMinus1), xRight - 1, yy, this->MinCbLog2SizeYMinus1);
                 }
             }
         }
+    }
 
-        // review: this can be optimised because a cqt is always square, power-of-two size and aligned.
-        template <class H>
-        void recordMerge(H &h, const coding_quadtree &cqt, bool isIntra)
+    // review: this can be optimised because a cqt is always square, power-of-two size and aligned.
+    template <class H>
+    void recordMerge(H &h, const coding_quadtree &cqt, bool isIntra)
+    {
+        const auto parMrgLevel = 1 << h[Log2ParMrgLevel()];
+        const auto nCbS = 1 << cqt.log2CbSize;
+
+        if (isIntra || (parMrgLevel > 4 && nCbS == 8))
         {
-            const auto parMrgLevel = 1 << h[Log2ParMrgLevel()];
-            const auto nCbS = 1 << cqt.log2CbSize;
+            // dimensions rounded
+            const int x = cqt.x0 & ~(parMrgLevel - 1);
+            const int y = cqt.y0 & ~(parMrgLevel - 1);
+            int xRight = (cqt.x0 + nCbS) & ~(parMrgLevel - 1);
+            int yBottom = (cqt.y0 + nCbS) & ~(parMrgLevel - 1);
 
-            if (isIntra || (parMrgLevel > 4 && nCbS == 8))
+            if (cqt.x0 + nCbS == h[pic_width_in_luma_samples()]) xRight = h[pic_width_in_luma_samples()];
+            if (cqt.y0 + nCbS == h[pic_height_in_luma_samples()]) yBottom = h[pic_height_in_luma_samples()];
+
+            if (x != xRight && y != yBottom)
             {
-                // dimensions rounded
-                const int x = cqt.x0 & ~(parMrgLevel - 1);
-                const int y = cqt.y0 & ~(parMrgLevel - 1);
-                int xRight = (cqt.x0 + nCbS) & ~(parMrgLevel - 1);
-                int yBottom = (cqt.y0 + nCbS) & ~(parMrgLevel - 1);
-
-                if (cqt.x0 + nCbS == h[pic_width_in_luma_samples()]) xRight = h[pic_width_in_luma_samples()];
-                if (cqt.y0 + nCbS == h[pic_height_in_luma_samples()]) yBottom = h[pic_height_in_luma_samples()];
-
-                if (x != xRight && y != yBottom)
+                for (int xx = x; xx < xRight; xx += (1 << this->MinCbLog2SizeYMinus1))
                 {
-                    for (int xx = x; xx < xRight; xx += (1 << this->MinCbLog2SizeYMinus1))
-                    {
-                        this->snakeMerge.commit(this->snake.at(xx, cqt.y0 + nCbS - 1, this->MinCbLog2SizeYMinus1), xx, yBottom - 1, this->MinCbLog2SizeYMinus1);
-                    }
-                    for (int yy = y; yy < yBottom; yy += (1 << this->MinCbLog2SizeYMinus1))
-                    {
-                        this->snakeMerge.commit(this->snake.at(cqt.x0 + nCbS - 1, yy, this->MinCbLog2SizeYMinus1), xRight - 1, yy, this->MinCbLog2SizeYMinus1);
-                    }
+                    this->snakeMerge.commit(this->snake.at(xx, cqt.y0 + nCbS - 1, this->MinCbLog2SizeYMinus1), xx, yBottom - 1, this->MinCbLog2SizeYMinus1);
+                }
+                for (int yy = y; yy < yBottom; yy += (1 << this->MinCbLog2SizeYMinus1))
+                {
+                    this->snakeMerge.commit(this->snake.at(cqt.x0 + nCbS - 1, yy, this->MinCbLog2SizeYMinus1), xRight - 1, yy, this->MinCbLog2SizeYMinus1);
                 }
             }
         }
+    }
 
-        template <class Rectangular>
-        void print(std::ostream &o, Rectangular const &rectangular)
-        {
-            o << "Neighbourhood at " << rectangular << "\n";
-            std::intptr_t diff = this->Snake<BlockData>::Cursor::p - this->snake.origin;
-            o << "cursor offset: " << diff << "\n";
-            o << "snake:\n";
-            this->snake.print(o, rectangular, this->MinCbLog2SizeYMinus1, 2, 2);
-            o << "snakeMerge:\n";
-            this->snakeMerge.print(o, rectangular, this->MinCbLog2SizeYMinus1, 2, 2);
-            o << "\n";
-        }
-    };
+    template <class Rectangular>
+    void print(std::ostream &o, Rectangular const &rectangular)
+    {
+        o << "Neighbourhood at " << rectangular << "\n";
+        std::intptr_t diff = this->Snake<BlockData>::Cursor::p - this->snake.origin;
+        o << "cursor offset: " << diff << "\n";
+        o << "snake:\n";
+        this->snake.print(o, rectangular, this->MinCbLog2SizeYMinus1, 2, 2);
+        o << "snakeMerge:\n";
+        this->snakeMerge.print(o, rectangular, this->MinCbLog2SizeYMinus1, 2, 2);
+        o << "\n";
+    }
+};
+
 
 template <typename Sample>
 struct NeighbourhoodEnc :
     Neighbourhood
-    {
-        typename Snake<Sample>::Pointer snakeIntraReferenceSamples[3];
-    };
+{
+    typename Snake<Sample>::Pointer snakeIntraReferenceSamples[3];
+};
 
 struct StateSpatial
 {

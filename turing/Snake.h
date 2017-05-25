@@ -52,36 +52,6 @@ struct Restore{};
 struct Check{};
 
 
-template <class T>
-struct ResetSpatialStruct
-{
-    static void reset(T &t)
-    {
-        new (&t) T();
-    }
-};
-
-
-template <class T>
-struct PrintSnakeEntry
-{
-    static void print(std::ostream &o, const T& t)
-    {
-        o << t;
-    }
-};
-
-
-template <>
-struct PrintSnakeEntry<uint8_t>
-{
-    static void print(std::ostream &o, const uint8_t& t)
-    {
-        o << (int)t;
-    }
-};
-
-
 // A snake describes state along a the advancing edge of a wavefront. Each entry in a snake array represents
 // one point along the wavefront. As the wavefront advances over the picture, entries  are overwritten by
 // data points to their bottom right. T is the stored entry type.
@@ -253,6 +223,11 @@ struct Snake
             return this->origin[(x >> log2Resolution) - (y >> log2Resolution) - 1];
         }
 
+        T &operator()(int x, int y)
+        {
+            return this->origin[x - y - 1];
+        }
+
         const T &operator()(int x, int y) const
         {
             return this->origin[x - y - 1];
@@ -287,8 +262,8 @@ struct Snake
 #endif
         }
 
-        template <class Rectangular>
-        void reset(const Rectangular &rectangular, int log2Resolution, int padX, int padY)
+        template <class Rectangular, class UnaryFunction>
+        void foreach(const Rectangular &rectangular, int log2Resolution, int padX, int padY, UnaryFunction f)
         {
             const auto x0 = xPositionOf(rectangular);
             const auto y0 = yPositionOf(rectangular);
@@ -309,13 +284,13 @@ struct Snake
             for (int x = -resolution; x < width + padX; x += resolution)
             {
                 T &entry = this->origin[((x0 + x) >> log2Resolution) - ((y0 - resolution) >> log2Resolution) - 1];
-                ResetSpatialStruct<T>::reset(entry);
+                f(entry);
             }
 
             for (int y = 0; y < height + padY; y += resolution)
             {
                 T &entry = this->origin[((x0 - resolution) >> log2Resolution) - ((y0 + y) >> log2Resolution) - 1];
-                ResetSpatialStruct<T>::reset(entry);
+                f(entry);
             }
         }
 
@@ -455,6 +430,26 @@ struct Snake
 #endif
             pointer.origin += (x0 - y0) >> log2Resolution;
             return pointer;
+        }
+
+        // direction = 'R' for right, 'D' for down
+        template <char direction>
+        void pad(int x0, int y0, int n, int log2Resolution = 0)
+        {
+            Pointer pointer = *this;
+            pointer.origin += (x0 - y0) >> log2Resolution;
+            n >>= log2Resolution;
+            auto const value = *pointer.origin;
+            if (direction == 'R')
+            {
+                while (n--)
+                    *(++pointer.origin) = value;
+            }
+            else
+            {
+                while (n--)
+                    *(--pointer.origin) = value;
+            }
         }
 
         // Copys new values from a 2-D array to the snake. The values are copied from the bottom and right
@@ -742,6 +737,7 @@ struct Snake
                 const int h = (height >> log2Resolution) + padY;
                 this->origin = &buffer[0];
                 this->origin += h + 1 + (y >> log2Resolution) - (x >> log2Resolution);
+                this->origin = reinterpret_cast<T *>((reinterpret_cast<intptr_t>(this->origin) + 31) & ~31); // alignment of origin
 
 #ifdef SNAKE_DEBUG
                 this->originPosition = &bufferPosition[0];
@@ -774,7 +770,7 @@ struct Snake
             }
 
         private:
-            std::array<T, padY + maxPositionsY + 1 + maxPositionsX + padX> buffer;
+            alignas(32) std::array<T, padY + maxPositionsY + 1 + maxPositionsX + padX + 31> buffer;
 #ifdef SNAKE_DEBUG
             std::array<int, padY + maxPositionsY + 1 + maxPositionsX + padX> bufferPosition;
 #endif

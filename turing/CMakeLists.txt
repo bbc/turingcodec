@@ -40,9 +40,9 @@ endif()
 set(LINK_LIBRARIES boost_program_options boost_filesystem boost_system boost_timer boost_chrono)
 
 if (CMAKE_COMPILER_IS_GNUCC)
-    set(GCC_COMPILE_FLAGS "-fno-operator-names -std=c++0x -pthread -O3 -std=c++1y -mlzcnt")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
-    set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
+    add_compile_options(-fno-operator-names -pthread -std=c++1y)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fno-strict-aliasing")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -DVALGRIND_FRIENDLY")
     set(LINK_LIBRARIES ${LINK_LIBRARIES} rt)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
@@ -94,6 +94,11 @@ set(SEI_HEADERS
 
 add_library(turing
     Cabac.cpp
+    ContextModel.cpp
+    EncodeResidual.cpp
+    EncodeResidualPopcnt.cpp
+    EncodeResidual.hpp
+    EncodeResidual.h
     encode.cpp
     psnr.cpp
     TaskEncodeInput.cpp
@@ -111,9 +116,11 @@ add_library(turing
     ScalingMatrices.cpp
     Picture.cpp
     Search.cpp
+    SearchLzcnt.cpp
     sao.cpp
     signature.cpp
     ProgressReporter.cpp
+    ScanOrder.cpp
     TaskDeblock.cpp
     testdecode.cpp
     TaskSao.cpp
@@ -170,6 +177,7 @@ add_library(turing
     ScanOrder.h
     SCDetection.h
     Search.h
+    Search.hpp
     Snake.h
     Speed.h
     StateCollocatedMotion.h
@@ -201,15 +209,23 @@ add_library(turing
     Write.h
     ${SEI_HEADERS})
 
+if (CMAKE_COMPILER_IS_GNUCC)
+    set_source_files_properties(EncodeResidualPopcnt.cpp PROPERTIES COMPILE_FLAGS "-mlzcnt -mpopcnt")
+    set_source_files_properties(SearchLzcnt.cpp PROPERTIES COMPILE_FLAGS "-mlzcnt -mpopcnt")
+endif (CMAKE_COMPILER_IS_GNUCC)
+
 source_group(SEI FILES ${SEI_HEADERS})
 
 target_link_libraries (turing LINK_PUBLIC havoc)
+
+unset(CMAKE_IMPORT_LIBRARY_SUFFIX)
 
 add_executable (turing-exe main.cpp)
 
 set_target_properties(turing-exe PROPERTIES OUTPUT_NAME turing)
 
 target_link_libraries (turing-exe LINK_PUBLIC turing ${LINK_LIBRARIES})
+
 if(UNIX)
 	include(FindPkgConfig QUIET)
 	if(PKG_CONFIG_FOUND)

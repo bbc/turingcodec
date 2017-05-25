@@ -99,7 +99,6 @@ namespace {
 
 }
 
-
 // returns 1 if MD5 different, -1 on failure
 int runEncode(std::string sourceFolder, std::string sourceFilename, std::string options, std::string &streamMd5, std::string &yuvMd5, std::ostream &cout, std::ostream &cerr)
 {
@@ -234,7 +233,7 @@ int signature(int argc, const char* const argv[], std::ostream &cout, std::ostre
         { "c0504280", "28a0a772", "caminandes2", "--speed fast --threads 1" },
         { "9db713c0", "28a0a772", "caminandes2", "--speed fast --atc-sei 14" },
         { "b503aaad", "8fe00cc7", "caminandes2", "--speed fast --field-coding" },
-        { "743e5b4d", "edd64864", "caminandes2", "--speed fast --bit-depth 8 --internal-bit-depth 10" },
+        { "743e5b4d", "edd64864", "caminandes2", "--speed fast --threads 1 --bit-depth 8 --internal-bit-depth 10" },
     };
 
     auto mismatchCount = 0;

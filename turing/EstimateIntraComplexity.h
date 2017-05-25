@@ -153,7 +153,7 @@ public:
     template<typename Sample>
     void preAnalysis(std::shared_ptr<PictureWrapper> picture)
     {
-        ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*picture);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*picture);
         int k = 0;
         for (int j = 0; j < m_picHeightInBlocks; ++j)
         {

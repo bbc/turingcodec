@@ -113,7 +113,7 @@ template <> struct Write<user_data_unregistered>
     template <class H> static void go(user_data_unregistered fun, H &h)
     {
         StateWriteUserDataUnregistered *stateWriteUserDataUnregistered = h;
-        fun.payloadSize = 16 + (stateWriteUserDataUnregistered->end - stateWriteUserDataUnregistered->p);
+        fun.payloadSize = 16 + static_cast<int>(stateWriteUserDataUnregistered->end - stateWriteUserDataUnregistered->p);
         Syntax<user_data_unregistered>::go(fun, h);
     }
 };

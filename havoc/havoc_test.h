@@ -27,6 +27,8 @@ For more information, contact us at info @ turingcodec.org.
 #include <inttypes.h>
 
 #ifdef __cplusplus
+#include <map>
+
 extern "C" {
 #endif
 
@@ -67,7 +69,145 @@ int havoc_test(
 
 #ifdef __cplusplus
 }
-#endif
 
+namespace havoc {
+
+template <class Bound>
+int runTest(
+    Bound b[2], 
+    double *first_result,
+    havoc_instruction_set set,
+    int iterations)
+{
+    bool const do_measure_speed = !!iterations;
+
+    havoc_timestamp sum = 0;
+    int warmup = 100;
+    int count = 0;
+
+    if (!do_measure_speed)
+        b[1].invoke(1); // not measuring time, just checking for mismatch
+    else 
+        while (count < iterations)
+        {
+            const havoc_timestamp start = havoc_get_timestamp();
+            b[1].invoke(4);
+            const havoc_timestamp duration = havoc_get_timestamp() - start;
+
+            if (warmup == 0)
+            {
+                if (8 * duration * count < 7 * 4 * sum)
+                {
+                    // duration lower than mean
+                    sum = 0;
+                    count = 0;
+                    warmup = 10;
+                }
+                else 	if (7 * duration * count <= 8 * 4 * sum)
+                {
+                    // duration close to mean
+                    count += 4;
+                    sum += duration;
+                }
+                else
+                {
+                    // duration higher than mean
+                    warmup = 10;
+                }
+            }
+            else
+            {
+                --warmup;
+            }
+        }
+
+    printf(" %s", havoc_instruction_set_as_text(set));
+
+    if (do_measure_speed)
+    {
+        const int average = (int)((sum + count / 2) / count);
+
+        printf(":%d", average);
+        if (*first_result != 0.0)
+            printf("(x%.2f)", *first_result / average);
+        else
+            *first_result = average;
+    }
+
+    b[0].invoke(1);
+    if (b[0].mismatch(b[1]))
+    {
+        printf("-MISMATCH");
+        return 1;
+    }
+
+    return 0;
+}
+
+template <class Table>
+struct Tester
+{
+    std::map<havoc_instruction_set, havoc_code> codes;
+    std::map<havoc_instruction_set, Table> tables;
+
+    Tester(havoc_instruction_set mask, int codeBytes = 1000000)
+    {
+#define X(I, S, D) \
+        this->codes[HAVOC_ ## S] = havoc_new_code(HAVOC_ ## S, codeBytes); \
+        this->tables[HAVOC_ ## S].populate(this->codes[HAVOC_ ## S]); \
+
+        HAVOC_INSTRUCTION_SET_XMACRO
+#undef X
+    }
+
+    ~Tester()
+    {
+#define X(I, S, D) \
+        havoc_delete_code(this->codes[HAVOC_ ## S]); \
+
+        HAVOC_INSTRUCTION_SET_XMACRO
+#undef X
+    }
+
+    template <class Bound>
+    int test(
+        Bound b[2],
+        havoc_instruction_set mask,
+        int iterations)
+    {
+        int error_count = 0;
+
+        if (b[0].get(this->tables[HAVOC_C_REF]))
+        {
+            b[0].print();
+
+            b[0].invoke(1);
+
+            double firstResult = 0.0;
+            havoc_instruction_set sets[] = {
+#define X(I, S, D) HAVOC_ ## S,
+                HAVOC_INSTRUCTION_SET_XMACRO
+#undef X
+            };
+
+            for (auto set : sets)
+                if (set & mask)
+                {
+                    if (b[1].get(this->tables[set]) && (firstResult == 0 || b[1] != b[0]))
+                        error_count += havoc::runTest(b, &firstResult, set, iterations);
+                }
+
+            printf("\n");
+        }
+
+        return error_count;
+    }
+};
+
+
+
+}
+
+#endif
 
 #endif

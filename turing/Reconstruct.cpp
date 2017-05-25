@@ -82,8 +82,8 @@ struct ReconstructInter<transform_tree>
         Candidate<Sample> *candidate = h;
         stateCodedData->transformTree.init(cqt->log2CbSize - tt.log2TrafoSize, tt.blkIdx);
         stateCodedData->transformTreeAncestry[tt.trafoDepth] = stateCodedData->transformTree;
-        stateCodedData->transformTree.word0().split_transform_flag = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : ((tt.trafoDepth < candidate->rqtdepth) && !candidate->noresidual);
         h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : ((tt.trafoDepth < candidate->rqtdepth) && !candidate->noresidual);
+        stateCodedData->transformTree.word0().split_transform_flag = h[split_transform_flag()];
 
         Syntax<transform_tree>::go(tt, h);
 
@@ -141,7 +141,9 @@ struct ReconstructIntraChroma<transform_tree>
     template <class H>
     static void go(const transform_tree &tt, H &h)
     {
-        if (tt.trafoDepth == h[IntraSplitFlag()])
+        bool const isIntraPartition = tt.trafoDepth == h[part_mode()];
+
+        if (isIntraPartition)
         {
             Neighbourhood *neighbourhood = h;
             Snake<BlockData>::Cursor *cursor = h;
@@ -149,7 +151,8 @@ struct ReconstructIntraChroma<transform_tree>
             cursor->value.intra.predModeY = static_cast<StateCodedData *>(h)->codedCu.IntraPredModeY(tt.blkIdx);
         }
 
-        h[split_transform_flag()] = infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h);
+        bool const split = (tt.trafoDepth == 0 && h[part_mode()]) || tt.log2TrafoSize > h[MaxTbLog2SizeY()];
+        h[split_transform_flag()] = split;
         Syntax<transform_tree>::go(tt, h);
     }
 };
@@ -158,7 +161,6 @@ struct ReconstructIntraChroma<transform_tree>
 int quantize_c(short *dst, const short *src, int quantiserScale, int quantiserShift, int quantiserOffset, int size)
 {
     int cbf = 0;
-
     for (int coeffIdx = 0; coeffIdx < size; coeffIdx++)
     {
         int sign = src[coeffIdx] < 0 ? -1 : 1;
@@ -172,12 +174,14 @@ int quantize_c(short *dst, const short *src, int quantiserScale, int quantiserSh
 }
 
 
+// review: has very similar code to PredictIntraLumaBlock
 struct ReconstructIntraBlock
 {
     template <class H> static void go(residual_coding const &rc, H h)
     {
         using Sample = typename SampleType<H>::Type;
 
+        StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
         StateCodedData *stateCodedData = h;
         NeighbourhoodEnc<Sample> *neighbourhood = h;
@@ -192,10 +196,10 @@ struct ReconstructIntraBlock
 
         int const nTbS = 1 << rc.log2TrafoSize;
 
-        const auto z = zPositionOf(rc) >> (rc.cIdx ? 2 : 0);
+        assert(candidate->zz[rc.cIdx] == (zPositionOf(rc) >> (rc.cIdx ? 2 : 0)));
+        const auto z = candidate->zz[rc.cIdx];
         typename ReconstructionCache<Sample>::Piece piece = stateReconstructionCache->components[rc.cIdx].allocateBlock(rc.log2TrafoSize, z);
 #ifdef DEBUG_PIECES
-        assert(candidate->StatePieces::z[rc.cIdx] == z);
         piece.rc = rc;
 #endif
         auto recSamples = stateReconstructionCache->components[rc.cIdx].get(piece);
@@ -219,25 +223,41 @@ struct ReconstructIntraBlock
 
         // intra prediction
         {
-            auto s = neighbourhood->snakeIntraReferenceSamples[rc.cIdx].offset(rc.x0, rc.y0, rc.cIdx ? 1 : 0);
-            predictBlockIntra(h, recSamples, s, rc);
+            int constexpr bitDepth = 2 * sizeof(Sample) + 6;
+
+            auto &unfiltered = stateEncodeSubstream->unfiltered[rc.cIdx];
+            auto &filtered = stateEncodeSubstream->filtered;
+            const int predModeIntra = rc.cIdx ? h[IntraPredModeC(rc.x0, rc.y0)] : h[IntraPredModeY(rc.x0, rc.y0)];
+            auto const ff = filterFlag(rc.cIdx, predModeIntra, nTbS);
+
+            if (tt->trafoDepth && !h[part_mode()])
+            {
+                auto samples = neighbourhood->snakeIntraReferenceSamples[rc.cIdx].offset(rc.x0, rc.y0, rc.cIdx ? 1 : 0);
+                unfiltered.substituteFast(h, samples, rc);
+
+                if (ff)
+                    filtered.filter(unfiltered, h[strong_intra_smoothing_enabled_flag()], bitDepth, nTbS);
+            }
+
+            auto const &pF = ff ? filtered : unfiltered;
+
+            havoc::intra::Table<Sample> *table = h;
+            havoc::intra::Function<Sample> *f = table->lookup(rc.cIdx, bitDepth, rc.log2TrafoSize, predModeIntra);
+            f(&predSamples(0, 0), predSamples.stride, &pF(0, -1), predModeIntra);
         }
 
         // input picture
-        ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
         auto sourceSamples = pictureInput(rc.x0, rc.y0, rc.cIdx);
 
         ALIGN(32, int16_t, resSamplesRawBuffer[32 * 32]);
-        Raster<int16_t> resSamplesRaw(resSamplesRawBuffer, 1ull << rc.log2TrafoSize);
+        Raster<int16_t> resSamplesRaw(resSamplesRawBuffer, nTbS);
 
         // subtract prediction from input
+        // review: SIMD optimisations, perhaps integrate into forward transform
         for (int y = 0; y < nTbS; ++y)
-        {
             for (int x = 0; x < nTbS; ++x)
-            {
                 resSamplesRaw(x, y) = sourceSamples(x, y) - predSamples(x, y);
-            }
-        }
 
         ALIGN(32, int16_t, coefficientsBuffer[32 * 32]);
         Raster<int16_t> coefficients(coefficientsBuffer, nTbS, 0, 0);
@@ -248,9 +268,9 @@ struct ReconstructIntraBlock
         {
             // forward transform
             int constexpr bitDepth = 2 * sizeof(Sample) + 6;
-            havoc_table_transform<bitDepth> *table = h;
-            havoc_transform *f = *havoc_get_transform<bitDepth>(table, trType, rc.log2TrafoSize);
-            f(coefficients.p, resSamplesRaw.p, resSamplesRaw.stride);
+            havoc::table_transform<bitDepth> *table = h;
+            auto *transform = *havoc::get_transform<bitDepth>(table, trType, rc.log2TrafoSize);
+            transform(coefficients.p, resSamplesRaw.p, resSamplesRaw.stride);
         }
 
         ALIGN(32, int16_t, quantizedCoefficientsBuffer[32 * 32]);
@@ -259,46 +279,45 @@ struct ReconstructIntraBlock
         bool cbf;
 
         {
+            // review: precompute most of this
             const int n = 1 << 2 * rc.log2TrafoSize;
-            const int qpScaled = static_cast<QpState *>(h)->getQp(rc.cIdx);
-            const int scaleQuantise = static_cast<QpState *>(h)->getQuantiseScale(rc.cIdx);
-            const int shiftQuantise = 29 - bitDepth + qpScaled / 6 - rc.log2TrafoSize;
-            const int offsetQuantise = (h[slice_type()] == I ? 171 : 85) << (shiftQuantise - 9);
-            const int scale = static_cast<QpState *>(h)->getScale(rc.cIdx);
-            const int shift = rc.log2TrafoSize - 1 + bitDepth - 8;
-
-            havoc_quantize *quantize = *havoc_get_quantize(static_cast<havoc_table_quantize *>(h));
+            QpState *qpState = h;
+            auto const &entry = qpState->lookup(rc.cIdx);
+            auto const shiftQuantise = entry.quantizeShift - rc.log2TrafoSize;
 
             // quantization
             if (stateEncode->rdoq)
             {
-                double lambda;
+                StateEncodePicture *stateEncodePicture = h;
+                double lambda = stateEncodePicture->lambda;
                 if(stateEncode->useRateControl)
                 {
-                    lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    StateEncodePicture *stateEncodePicture = h;
+                    int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                    stateEncode->rateControlParams->takeTokenOnRCLevel();
+                    lambda = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 }
-                else
-                {
-                    lambda = static_cast<StateEncodePicture *>(h)->lambda;
-                }
+
                 Contexts *contexts = h;
-                bool isSdhEnabled = !!h[sign_data_hiding_enabled_flag()];
-                Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, bitDepth);
-                cbf = !!rdoqEngine.runQuantisation(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise,
-                                                    n, rc, h[scanIdx()], true, isSdhEnabled);
+                Rdoq rdoqEngine(lambda, contexts, entry.quantiseScale, entry.scale, rc.log2TrafoSize, bitDepth);
+                cbf = !!rdoqEngine.runQuantisation(quantizedCoefficients.p, coefficients.p, entry.quantiseScale, shiftQuantise,
+                    n, rc, h[scanIdx()], true, !!h[sign_data_hiding_enabled_flag()]);
             }
             else
             {
-                //cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
-                cbf = !!quantize_c(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
+                havoc_quantize *quantize = *havoc_get_quantize(static_cast<havoc_table_quantize *>(h));
+                cbf = !!quantize(quantizedCoefficients.p, coefficients.p, entry.quantiseScale, shiftQuantise, entry.offsetQuantiseShifted, n);
             }
 
-            havoc_quantize_inverse *inverseQuantize = *havoc_get_quantize_inverse(static_cast<havoc_table_quantize_inverse *>(h), scale, shift);
-
             // inverse quantization
-            inverseQuantize(coefficients.p, quantizedCoefficients.p, scale, shift, n);
+            auto const  shift = rc.log2TrafoSize - 1 + bitDepth - 8;
+            havoc_quantize_inverse *inverseQuantize = *havoc_get_quantize_inverse(h, entry.scale, shift);
+            inverseQuantize(coefficients.p, quantizedCoefficients.p, entry.scale, shift, n);
         }
 
+        // review: would this be better as Sample instead of int16_t?
         ALIGN(32, int16_t, backupPredictionBuffer[32 * 32]);
         Raster<int16_t> backupPrediction(backupPredictionBuffer, 1 << rc.log2TrafoSize);
 
@@ -319,8 +338,8 @@ struct ReconstructIntraBlock
         }
 
         {
-            havoc_table_inverse_transform_add<Sample> *table = h;
-            auto inverseTransformAdd = *havoc_get_inverse_transform_add(table, trType, rc.log2TrafoSize);
+            havoc::table_inverse_transform_add<Sample> *table = h;
+            auto *inverseTransformAdd = *havoc::get_inverse_transform_add(table, trType, rc.log2TrafoSize);
 
             // inverse transform and add to predicted samples
             inverseTransformAdd(recSamples.p, recSamples.stride, predSamples.p, predSamples.stride, coefficients.p, bitDepth);
@@ -358,14 +377,13 @@ struct ReconstructIntraBlock
             assert(quantizedCoefficients.stride == nTbS);
             CodedData::storeResidual(stateCodedData->codedCu, stateCodedData->residual, quantizedCoefficients.p, rc.log2TrafoSize, h[scanIdx()], cbf, tu, rc.cIdx);
             if (rc.cIdx != 1)
-            {
                 tu.p = stateCodedData->residual.p;
-            }
             stateCodedData->codedDataAfter = stateCodedData->residual.p;
         }
 
         if (checkTSkip && cbf)
         {
+            // review: would this be better as Sample instead of int16_t?
             ALIGN(32, int16_t, recSamplesNoTSkipBuffer[32 * 32]);
             Raster<int16_t> recSamplesNoTSkip(recSamplesNoTSkipBuffer, 1 << rc.log2TrafoSize);
 
@@ -430,7 +448,12 @@ struct ReconstructIntraBlock
                         double lambda;
                         if(stateEncode->useRateControl)
                         {
-                            lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                            StateEncodePicture *stateEncodePicture = h;
+                            int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                            stateEncode->rateControlParams->takeTokenOnRCLevel();
+                            lambda = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                            stateEncode->rateControlParams->releaseTokenOnRCLevel();
                         }
                         else
                         {
@@ -444,9 +467,7 @@ struct ReconstructIntraBlock
                     }
                     else
                     {
-                        // review:
-                        //cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
-                        cbf = !!quantize_c(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
+                        cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise >> (shiftQuantise - 16), n);
                     }
 
                     auto *inverseQuantize = *havoc_get_quantize_inverse(h, scale, shift);
@@ -459,7 +480,7 @@ struct ReconstructIntraBlock
                     // load prediction from backup
                     for (int y = 0; y < nTbS; y++)
                         for (int x = 0; x < nTbS; x++)
-                            predSamples(x, y) = backupPrediction(x, y);
+                            predSamples(x, y) = static_cast<Sample>(backupPrediction(x, y));
 
                     // inverse transform skip and add to predicted samples
                     const int bdShift = 20 - bitDepth;
@@ -528,7 +549,12 @@ struct ReconstructIntraBlock
                 Lambda reciprocalLambda = getReciprocalLambda(h);
                 if(stateEncode->useRateControl)
                 {
-                    double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    StateEncodePicture *stateEncodePicture = h;
+                    int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                    stateEncode->rateControlParams->takeTokenOnRCLevel();
+                    double value = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    stateEncode->rateControlParams->releaseTokenOnRCLevel();
                     reciprocalLambda.set(value);
                 }
                 contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
@@ -541,7 +567,7 @@ struct ReconstructIntraBlock
                     {
                         for (int x = 0; x < nTbS; x++)
                         {
-                            recSamples(x, y) = recSamplesNoTSkip(x, y);
+                            recSamples(x, y) = static_cast<Sample>(recSamplesNoTSkip(x, y));
                             quantizedCoefficients(x, y) = backupQuantCoeffs(x, y);
                         }
                     }
@@ -606,11 +632,13 @@ struct PredictIntraLumaBlock
     template <class H> static void go(residual_coding const &rc, H h)
     {
         using Sample = typename SampleType<H>::Type;
+        int constexpr bitDepth = 2 * sizeof(Sample) + 6;
 
         StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
         StateEncodePicture *stateEncodePicture = h;
         NeighbourhoodEnc<Sample> *neighbourhood = h;
         coding_quadtree const *cqt = h;
+        transform_tree const *tt = h;
 
         assert(rc.cIdx == 0);
         assert(rc.log2TrafoSize >= 2);
@@ -625,14 +653,31 @@ struct PredictIntraLumaBlock
 
         // perform intra prediction
         {
-            auto s = neighbourhood->snakeIntraReferenceSamples[rc.cIdx].offset(rc.x0, rc.y0, log2Resolution);
-            predictBlockIntra(h, predSamples, s, rc);
+            auto &unfiltered = stateEncodeSubstream->unfiltered[rc.cIdx];
+            auto &filtered = stateEncodeSubstream->filtered;
+            const int predModeIntra = rc.cIdx ? h[IntraPredModeC(rc.x0, rc.y0)] : h[IntraPredModeY(rc.x0, rc.y0)];
+            auto const ff = filterFlag(rc.cIdx, predModeIntra, nTbS);
+
+            if (tt->trafoDepth && !h[part_mode()])
+            {
+                auto samples = neighbourhood->snakeIntraReferenceSamples[rc.cIdx].offset(rc.x0, rc.y0, rc.cIdx ? 1 : 0);
+                unfiltered.substituteFast(h, samples, rc);
+
+                if (ff)
+                    filtered.filter(unfiltered, h[strong_intra_smoothing_enabled_flag()], bitDepth, nTbS);
+            }
+
+            auto const &pF = ff ? filtered : unfiltered;
+
+            havoc::intra::Table<Sample> *table = h;
+            havoc::intra::Function<Sample> *f = table->lookup(rc.cIdx, bitDepth, rc.log2TrafoSize, predModeIntra);
+            f(&predSamples(0, 0), predSamples.stride, &pF(0, -1), predModeIntra);
         }
 
         using Sample = typename SampleType<H>::Type;
 
         // input picture
-        ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
         auto source = pictureInput(rc.x0, rc.y0, 0);
 
         // compute SATD
@@ -655,13 +700,14 @@ struct PredictIntraLumaBlock
             }
         }
 
-        // copy predicted samples to snake so that subsequent blocks can predict
-        // review: this only required for 32x32 blocks in 64x64 CUs?
-        // review: corresponding copy in calling code also not required if snake unmodified here
-        Raster<Sample> predPicture = predSamples.offset(-rc.x0 >> log2Resolution, -rc.y0 >> log2Resolution);
-        typename Snake<Sample>::Pointer &snake = neighbourhood->snakeIntraReferenceSamples[rc.cIdx];
-        int const size = 1 << (rc.log2TrafoSize + log2Resolution);
-        snake.copyFrom2D(Turing::Rectangle{ rc.x0, rc.y0, size, size }, predPicture, log2Resolution);
+        if (tt->trafoDepth && tt->blkIdx != 3)
+        {
+            // copy predicted samples to snake so that subsequent blocks in the transform tree can predict
+            Raster<Sample> predPicture = predSamples.offset(-rc.x0 >> log2Resolution, -rc.y0 >> log2Resolution);
+            typename Snake<Sample>::Pointer &snake = neighbourhood->snakeIntraReferenceSamples[rc.cIdx];
+            int const size = 1 << (rc.log2TrafoSize + log2Resolution);
+            snake.copyFrom2D(Turing::Rectangle{ rc.x0, rc.y0, size, size }, predPicture, log2Resolution);
+        }
     }
 };
 
@@ -671,6 +717,16 @@ template <typename F> struct PredictIntraLuma : ReconstructIntraLuma<F> { };
 template <> struct PredictIntraLuma<IfCbf<cbf_luma, residual_coding>> : PredictIntraLumaBlock {};
 template <> struct PredictIntraLuma<IfCbf<cbf_cb, residual_coding>> : Null<IfCbf<cbf_cb, residual_coding>> {};
 template <> struct PredictIntraLuma<IfCbf<cbf_cr, residual_coding>> : Null<IfCbf<cbf_cr, residual_coding>> { };
+
+template <>
+struct PredictIntraLuma<transform_tree>
+{
+    template <class H> static void go(const transform_tree &tt, H &h)
+    {
+        h[split_transform_flag()] = tt.log2TrafoSize > h[MaxTbLog2SizeY()];
+        Syntax<transform_tree>::go(tt, h);
+    }
+};
 
 template <class Cbf> struct ReconstructInterBlock
 {
@@ -691,7 +747,7 @@ template <class Cbf> struct ReconstructInterBlock
         assert(!h[cu_transquant_bypass_flag()]);
 
         // input picture
-        ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
         Raster<Sample> sourceSamples = pictureInput(rc.x0, rc.y0, rc.cIdx);
 
         Raster<int16_t> resSamplesRaw = stateEncodeSubstream->residual(rc.x0 - cqt->x0, rc.y0 - cqt->y0, rc.cIdx);//(resSamplesRawBuffer, 1 << rc.log2TrafoSize);
@@ -708,10 +764,9 @@ template <class Cbf> struct ReconstructInterBlock
         if (candidate->noresidual == 0)
         {
             int constexpr bitDepth = 2 * sizeof(Sample) + 6;
-            havoc_table_transform<bitDepth> *table = h;
-            auto *p = havoc_get_transform<bitDepth>(table, trType, rc.log2TrafoSize);
-            havoc_transform *f = *p;
-            f(coefficients.p, resSamplesRaw.p, resSamplesRaw.stride);
+            havoc::table_transform<bitDepth> *table = h;
+            auto *transform = *havoc::get_transform<bitDepth>(table, trType, rc.log2TrafoSize);
+            transform(coefficients.p, resSamplesRaw.p, resSamplesRaw.stride);
         }
 
         // quantise
@@ -731,7 +786,6 @@ template <class Cbf> struct ReconstructInterBlock
         int const scale = static_cast<QpState *>(h)->getScale(rc.cIdx);
         int const bitDepth = rc.cIdx ? h[BitDepthC()] : h[BitDepthY()];
         const int shift = rc.log2TrafoSize - 1 + bitDepth - 8;
-
         auto const quantize = *havoc_get_quantize(static_cast<havoc_table_quantize *>(h));
         bool cbf;
         if (candidate->noresidual == 0)
@@ -741,7 +795,12 @@ template <class Cbf> struct ReconstructInterBlock
                 double lambda;
                 if(stateEncode->useRateControl)
                 {
-                    lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    StateEncodePicture *stateEncodePicture = h;
+                    int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                    stateEncode->rateControlParams->takeTokenOnRCLevel();
+                    lambda = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 }
                 else
                 {
@@ -755,8 +814,7 @@ template <class Cbf> struct ReconstructInterBlock
             }
             else
             {
-                //cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
-                cbf = !!quantize_c(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
+                cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise >> (shiftQuantise - 16), n);
             }
 
             // inverse quantise
@@ -779,8 +837,8 @@ template <class Cbf> struct ReconstructInterBlock
         {
             // add to prediction
             {
-                havoc_table_inverse_transform_add<Sample> *table = h;
-                auto *inverseTransformAdd = *havoc_get_inverse_transform_add<Sample>(table, trType, rc.log2TrafoSize);
+                havoc::table_inverse_transform_add<Sample> *table = h;
+                auto *inverseTransformAdd = *havoc::get_inverse_transform_add<Sample>(table, trType, rc.log2TrafoSize);
                 inverseTransformAdd(recSamples.p, recSamples.stride, predSamples.p, predSamples.stride, coefficients.p, rc.cIdx ? h[BitDepthC()] : h[BitDepthY()]);
             }
         }
@@ -867,22 +925,26 @@ template <class Cbf> struct ReconstructInterBlock
                     double lambda;
                     if(stateEncode->useRateControl)
                     {
-                        lambda = stateEncode->rateControlEngine->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                        StateEncodePicture *stateEncodePicture = h;
+                        int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                        stateEncode->rateControlParams->takeTokenOnRCLevel();
+                        lambda = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                        stateEncode->rateControlParams->releaseTokenOnRCLevel();
                     }
                     else
                     {
                         lambda = static_cast<StateEncodePicture*>(h)->lambda;
                     }
                     Contexts *contexts = h;
-                    bool isSdhEnabled = h[sign_data_hiding_enabled_flag()];
+                    bool const isSdhEnabled = !!h[sign_data_hiding_enabled_flag()];
                     Rdoq rdoqEngine(lambda, contexts, scaleQuantise, scale, rc.log2TrafoSize, rc.cIdx ? h[BitDepthC()] : h[BitDepthY()]);
                     cbf = !!rdoqEngine.runQuantisation(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise,
                                                         n, rc, h[scanIdx()], false, isSdhEnabled);
                 }
                 else
                 {
-                    //cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
-                    cbf = !!quantize_c(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise, n);
+                cbf = !!quantize(quantizedCoefficients.p, coefficients.p, scaleQuantise, shiftQuantise, offsetQuantise >> (shiftQuantise - 16), n);
                 }
 
                 // inverse quantise
@@ -935,7 +997,12 @@ template <class Cbf> struct ReconstructInterBlock
             Lambda reciprocalLambda = getReciprocalLambda(h);
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                StateEncodePicture *stateEncodePicture = h;
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                double value = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 reciprocalLambda.set(value);
             }
             contextsCostNoTSkip.lambdaDistortion += backupSSDNoTSkip * reciprocalLambda;
@@ -948,7 +1015,7 @@ template <class Cbf> struct ReconstructInterBlock
                 {
                     for (int x = 0; x < nTbS; x++)
                     {
-                        recSamples(x, y) = recSamplesNoTSkip(x, y);
+                        recSamples(x, y) =static_cast<Sample>(recSamplesNoTSkip(x, y));
                         quantizedCoefficients(x, y) = backupQuantCoeffs(x, y);
                     }
                 }
@@ -1010,7 +1077,12 @@ template <class Cbf> struct ReconstructInterBlock
                 Lambda reciprocalLambda = getReciprocalLambda(h);
                 if(stateEncode->useRateControl)
                 {
-                    double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    StateEncodePicture *stateEncodePicture = h;
+                    int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                    stateEncode->rateControlParams->takeTokenOnRCLevel();
+                    double value = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                    stateEncode->rateControlParams->releaseTokenOnRCLevel();
                     reciprocalLambda.set(value);
                 }
                 contextsCostCbf1.lambdaDistortion += (stateEncodeSubstream->ssd[rc.cIdx]) * reciprocalLambda;
@@ -1067,6 +1139,9 @@ int32_t predictIntraLuma(transform_tree const &tt, H &h)
 
     StateEncodeSubstreamBase *stateEncodeSubstream = h;
     stateEncodeSubstream->satd = 0;
+    stateEncodeSubstream->ssd[0] = 0;
+    stateEncodeSubstream->ssd[1] = 0;
+    stateEncodeSubstream->ssd[2] = 0;
 
     {
         Neighbourhood *neighbourhood = h;
@@ -1075,9 +1150,6 @@ int32_t predictIntraLuma(transform_tree const &tt, H &h)
         cursor->value.intra.predModeY = static_cast<StateCodedData *>(h)->codedCu.IntraPredModeY(tt.blkIdx);
     }
 
-    stateEncodeSubstream->ssd[0] = 0;
-    stateEncodeSubstream->ssd[1] = 0;
-    stateEncodeSubstream->ssd[2] = 0;
     auto r = h.template change<PredictIntraLuma<void>>();
     r(tt);
 
@@ -1088,16 +1160,13 @@ int32_t predictIntraLuma(transform_tree const &tt, H &h)
 template <class H>
 int32_t reconstructIntraLuma(IntraPartition const &e, H &h)
 {
-    const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
-    const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
-
     const int IntraSplitFlag = h[::IntraSplitFlag()];
 
     assert(e.split == IntraSplitFlag);
 
     h[MaxTrafoDepth()] = h[max_transform_hierarchy_depth_intra()] + IntraSplitFlag;
 
-    transform_tree tt{ e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, IntraSplitFlag, e.blkIdx };
+    transform_tree tt{ xPositionOf(e), yPositionOf(e), e.x0, e.y0, e.log2CbSize - e.split, IntraSplitFlag, e.blkIdx };
 
     {
         Neighbourhood *neighbourhood = h;
@@ -1120,6 +1189,8 @@ int32_t reconstructIntraLuma(IntraPartition const &e, H &h)
         }
         stateCodedData->codedDataAfter = stateCodedData->transformTree.p;
     }
+
+    h[split_transform_flag(tt.x0, tt.y0)] = tt.log2TrafoSize > h[MaxTbLog2SizeY()];
 
     using Sample = typename SampleType<H>::Type;
     StateEncodeSubstream<Sample> *stateEncodeSubstream = h;
@@ -1179,11 +1250,10 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
         int const log2TrafoSize = tt.log2TrafoSize - (cIdx ? 1 : 0);
         int const nTbS = 1 << log2TrafoSize;
 
-        auto &pictureWrapper = *static_cast<StateEncodePicture *>(h)->docket->picture;
         using Sample = typename SampleType<H>::Type;
         
-        auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
-        auto sourceSamples = picture(tt.x0, tt.y0, cIdx);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+        auto sourceSamples = pictureInput(tt.x0, tt.y0, cIdx);
 
         Raster<Sample> predSamples = h[ReconstructedSamples{ tt.x0, tt.y0, cIdx }];
 
@@ -1280,7 +1350,12 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
             Lambda reciprocalLambda = getReciprocalLambda(h);
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                StateEncodePicture *stateEncodePicture = h;
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                double value = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 reciprocalLambda.set(value);
             }
             contextsAndCostOne.lambdaDistortion += (stateEncodeSubstream->ssd[0] + distscale * stateEncodeSubstream->ssd[1] + distscale * stateEncodeSubstream->ssd[2]) * reciprocalLambda;

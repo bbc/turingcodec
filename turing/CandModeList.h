@@ -36,26 +36,18 @@ struct CandModeList
         const int xNb = xPb - (std::is_same<Direction, A>::value ? 1 : 0);
         const int yNb = yPb - (std::is_same<Direction, B>::value ? 1 : 0);
 
-        if (!h[availableX(xPb, yPb, xNb, yNb)])
-        {
+    AvailabilityCtu *availabilityCtu = h;
+    
+    if (!availabilityCtu->available(xPb, yPb, xNb, yNb, h[CtbLog2SizeY()]))
             return INTRA_DC;
-        }
         else if (h[CuPredMode(xNb, yNb)] != MODE_INTRA || h[pcm_flag(xNb, yNb)] == 1)
-        {
             return INTRA_DC;
-        }
         else if (std::is_same<Direction, B>::value && yPb - 1 < ((yPb >> h[CtbLog2SizeY()]) << h[CtbLog2SizeY()]))
-        {
             return INTRA_DC;
-        }
         else if (std::is_same<Direction, Left>::value)
-        {
             return h[left(-1, 0, IntraPredModeY(xNb, yNb))];
-        }
         else
-        {
             return h[up(0, -1, IntraPredModeY(xNb, yNb))];
-        }
     }
 
     template <class H>

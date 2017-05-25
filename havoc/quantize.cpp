@@ -269,7 +269,7 @@ void havoc_test_quantize_inverse(int *error_count, havoc_instruction_set mask)
         {
             b[0].shift = b[0].log2TrafoSize - 1 + bitDepth - 8;
             b[1] = b[0];
-            *error_count += havoc_test(&b[0], &b[1], init_quantize_inverse, invoke_quantize_inverse, mismatch_quantize_inverse, mask, 100000);
+            *error_count += havoc_test(&b[0], &b[1], init_quantize_inverse, invoke_quantize_inverse, mismatch_quantize_inverse, mask, 10);
         }
     }
 }
@@ -430,11 +430,13 @@ static havoc_quantize * get_quantize(havoc_code code)
 
     havoc_quantize *f = 0;
 
-    if (buffer.isa & (HAVOC_C_REF | HAVOC_C_OPT)) f = havoc_quantize_c_ref;
+    if (buffer.isa & (HAVOC_C_REF | HAVOC_C_OPT)) 
+        f = havoc_quantize_c_ref;
 
     Quantise quantise(&buffer);
 
-    if (buffer.isa & HAVOC_SSE41) f = quantise;
+    if (buffer.isa & HAVOC_SSE41) 
+        f = quantise;
 
     return f;
 }
@@ -525,7 +527,7 @@ void havoc_test_quantize(int *error_count, havoc_instruction_set mask)
     for (b[0].log2TrafoSize = 2; b[0].log2TrafoSize <= 5; ++b[0].log2TrafoSize)
     {
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_quantize, invoke_quantize, mismatch_quantize, mask, 100000);
+        *error_count += havoc_test(&b[0], &b[1], init_quantize, invoke_quantize, mismatch_quantize, mask, 10);
     }
 }
 
@@ -771,6 +773,6 @@ void havoc_test_quantize_reconstruct(int *error_count, havoc_instruction_set mas
     for (b[0].log2TrafoSize = 2; b[0].log2TrafoSize <= 5; ++b[0].log2TrafoSize)
     {
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_quantize_reconstruct, invoke_quantize_reconstruct, mismatch_quantize_reconstruct, mask, 100000);
+        *error_count += havoc_test(&b[0], &b[1], init_quantize_reconstruct, invoke_quantize_reconstruct, mismatch_quantize_reconstruct, mask, 10);
     }
 }

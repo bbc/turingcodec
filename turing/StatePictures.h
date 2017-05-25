@@ -141,7 +141,7 @@ struct StatePicturesBase
 template <class Picture, class Enable = void>
 struct SetupStateReconstructedPicture
 {
-    template <class H> static void go(Picture &dp, H &h) 
+    template <class H> static void go(Picture &dp, H &h, bool saoslow) 
     { };
 };
 
@@ -150,19 +150,29 @@ struct SetupStateReconstructedPicture<Picture, typename std::enable_if<std::is_b
 {
     typedef typename Picture::Sample Sample;
 
-    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h)
+    template <class H> static void go(StateReconstructedPicture<Sample> &dp, H &h, bool saoslow)
     {
         const int pad = 96;// h[CtbSizeY()] + 16; // review: less padding will suffice
         ::Picture<Sample> *picture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
         dp.picture.reset(picture);
+        if(h[sample_adaptive_offset_enabled_flag()])
+        {
+            ::Picture<Sample> *saoPicture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
+            dp.saoPicture.reset(saoPicture);
+            if (saoslow)
+            {
+                ::Picture<Sample> *deblockPicture = new ::Picture<Sample>(h[pic_width_in_luma_samples()], h[pic_height_in_luma_samples()], h[chroma_format_idc()], pad, pad, 32);
+                dp.deblockPicture.reset(deblockPicture);
+            }
+        }
     }
 };
 
 template <class Picture, class H>
-void setupStateReconstructedPicture(Picture &dp, H &h)
+void setupStateReconstructedPicture(Picture &dp, H &h, bool saoslow = false)
 {
     auto &picture = h[Concrete<StatePicture>()];
-    SetupStateReconstructedPicture<Picture>::go(dp, h);
+    SetupStateReconstructedPicture<Picture>::go(dp, h, saoslow);
 };
 
 
@@ -717,9 +727,6 @@ struct StatePictures :
     void setupDecodedPicture(StatePicture *statePicture, H &h)
     {
         StatePictures *statePictures = h;
-
-        statePictures->dpb.push_back(statePicture->shared_from_this());
-
         statePicture->neededForOutput = true;
         statePicture->reference = SHORT_TERM;
         statePicture->TemporalId = h[TemporalId()];
@@ -743,6 +750,8 @@ struct StatePictures :
 
             assert(statePicture->notionalPositionInDpb < 32); // actually should be <16 in HEVC
         }
+
+        statePictures->dpb.push_back(statePicture->shared_from_this());
     }
 
     DecodedPictureBuffer dpb;
@@ -1055,7 +1064,8 @@ void preCtu(H &h)
         {
             // start of WPP row
             auto const y0 = ry << h[CtbLog2SizeY()];
-            auto const availableFlagT = h[availableX(0, y0, h[CtbSizeY()], y0 - h[CtbSizeY()])];
+            AvailabilityCtu *availabilityCtu = h;
+            auto const availableFlagT = availabilityCtu->available(0, y0, h[CtbSizeY()], y0 - h[CtbSizeY()], h[CtbLog2SizeY()]);
             if (availableFlagT)
                 h(ContextsRestore(tablesWpp));
             else
@@ -1081,13 +1091,13 @@ void preCtu(H &h)
         rectangle.width = h[PicWidthInCtbsY()];
         rectangle.height = h[PicHeightInCtbsY()];
 
-        stateSpatial->snakeSaoCtuData.reset(rectangle, 0, 0, 0);
+        stateSpatial->snakeSaoCtuData.foreach(rectangle, 0, 0, 0, [](SaoCtuData &data) { new (&data) SaoCtuData; });
 
         rectangle.width <<= h[CtbLog2SizeY()];
         rectangle.height <<= h[CtbLog2SizeY()];
 
-        neighbourhood->snakeMerge.reset(rectangle, h[MinCbLog2SizeY()] - 1, 1, 1);
-        neighbourhood->snake.reset(rectangle, h[MinCbLog2SizeY()] - 1, 1, 1);
+        neighbourhood->snakeMerge.foreach(rectangle, h[MinCbLog2SizeY()] - 1, 1, 1, [](BlockData &data) { data.reset(); });
+        neighbourhood->snake.foreach(rectangle, h[MinCbLog2SizeY()] - 1, 1, 1, [](BlockData &data) { data.reset(); });
     }
 
     SaoCtuData saoCtuData = SaoCtuData();

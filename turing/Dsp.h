@@ -31,288 +31,43 @@ For more information, contact us at info @ turingcodec.org.
 #include "havoc/pred_inter.h"
 #include <cstring>
 
-
 template <typename Sample>
-static void predictIntraDc(IntraReferenceSamples<Sample> const &p, Raster<Sample> predSamples, int k, int cIdx)
+static Sample p(const Sample *neighbours, const Sample corner, int dx, int dy)
 {
-    const int nTbS = 1 << k;
-
-    int dcVal = nTbS;
-    for (int x1=0; x1<nTbS; ++x1)
+    if (dx < 0 && dy < 0)
     {
-        dcVal += p(x1, -1);
     }
-    for (int y1=0; y1<nTbS; ++y1)
-    {
-        dcVal += p(-1,  y1);
-    }
-    dcVal >>= (k + 1);
-
-    int start = 0;
-
-    if (cIdx == 0 && k < 5)
-    {
-        start = 1;
-        predSamples(0, 0) = ( p(-1, 0) + 2 * dcVal + p(0, -1) + 2 )  >>  2;
-        for (int x = 1; x<nTbS; ++x)
+    else if (dy < 0)
         {
-            predSamples(x, 0) = ( p(x, -1) + 3 * dcVal + 2 )  >>  2;
+        assert(dy == -1);
+        return neighbours[64 + dx];
         }
-        for (int y = 1; y<nTbS; ++y)
+    else if (dx < 0)
         {
-            predSamples(0, y) = ( p(-1, y) + 3 * dcVal + 2 )  >>  2;
-        }
+        assert(dx == -1);
+        return neighbours[63 - dy];
     }
 
-    for (int y = start; y<nTbS; ++y)
-    {
-        for (int x = start; x < nTbS; ++x)
-        {
-            predSamples(x, y) = dcVal;
-        }
-    }
+    assert(dx == -1);
+    assert(dy == -1);
+    return corner;
 }
 
 
-template <typename Sample>
-struct ReferenceSampleArray
+static bool inline filterFlag(int cIdx, int predModeIntra, int nTbS)
 {
-    Sample& operator[](size_t i) { return this->buffer[32+i]; }
-    std::array<Sample, 97> buffer;
-};
-
-
-template <typename Sample>
-static void predictIntraPlanar(IntraReferenceSamples<Sample> const &p, Raster<Sample> predSamples, int k, int cIdx)
-{
-    const int nTbS = 1 << k;
-
-    for (int y=0; y<nTbS; ++y)
+    uint8_t const lookup[] =
     {
-        for (int x=0; x<nTbS; ++x)
-        {
-            predSamples(x, y) = (
-                    ( nTbS - 1 - x ) * p(-1, y) + ( x + 1 ) * p(nTbS , -1) +
-                    ( nTbS - 1 - y ) * p(x, -1) + ( y + 1 ) * p(-1, nTbS ) + nTbS )  >>  ( k + 1 );
-        }
-    }
-}
+        0b111000, 0b000000, 0b111000, 0b110000, 0b110000,
+        0b110000, 0b110000, 0b110000, 0b110000, 0b100000,
+        0b000000, 0b100000, 0b110000, 0b110000, 0b110000,
+        0b110000, 0b110000, 0b110000, 0b111000, 0b110000,
+        0b110000, 0b110000, 0b110000, 0b110000, 0b110000,
+        0b100000, 0b000000, 0b100000, 0b110000, 0b110000,
+        0b110000, 0b110000, 0b110000, 0b110000, 0b111000,
+    };
 
-// review: unnecessary
-template <class T>
-class Initializer
-{
-public:
-    Initializer(T t) : value(t) { };
-    operator T()
-            {
-        return this->value;
-            }
-protected:
-    const T value;
-};
-
-struct IntraPredAngle : Initializer<int>
-{
-    IntraPredAngle(int intraPredMode) : Initializer<int>(lookup(intraPredMode)) { }
-    static int lookup(int intraPredMode)
-    {
-        assert(intraPredMode >= 2);
-        assert(intraPredMode <= 34);
-        static const int table[35] = { 0, 0, 32, 26, 21, 17, 13, 9, 5, 2, 0, -2, -5, -9, -13, -17, -21, -26, -32, -26, -21, -17, -13, -9, -5, -2, 0, 2, 5, 9, 13, 17, 21, 26, 32};
-        return table[intraPredMode];
-    }
-};
-
-struct InvAngle : Initializer<int>
-{
-    InvAngle(int intraPredMode) : Initializer<int>(lookup(intraPredMode)) { }
-    static int lookup(int intraPredMode)
-    {
-        assert(intraPredMode >= 11);
-        assert(intraPredMode <= 25);
-        static const int table[26] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -4096, -1638, -910, -630, -482, -390, -315, -256, -315, -390, -482, -630, -910, -1638, -4096};
-        return table[intraPredMode];
-    }
-};
-
-
-template <typename Sample>
-static void predictIntraAngular(IntraReferenceSamples<Sample> const &p, Raster<Sample> predSamples, int k, int cIdx, int predModeIntra, int bitDepth)
-{
-    const int nTbS = 1 << k;
-
-    ReferenceSampleArray<Sample> ref;
-    if (predModeIntra >= 18)
-    {
-        for (int x = 0; x<=nTbS; ++x)
-        {
-            ref[x] = p(-1+x, -1);
-        }
-        IntraPredAngle intraPredAngle((predModeIntra));
-        if (intraPredAngle < 0)
-        {
-            InvAngle invAngle((predModeIntra));
-            if ( ( (nTbS * intraPredAngle)  >>  5) < -1 )
-            {
-                for (int x = -1 ; x >= ( (nTbS * intraPredAngle)  >>  5); --x)
-                {
-                    ref[x] = p(-1, -1 + ( (x * invAngle + 128)  >>  8 ));
-                }
-            }
-        }
-        else
-        {
-            for (int x = nTbS+1; x <= 2*nTbS; ++x)
-            {
-                ref[x] = p(-1+x, -1);
-            }
-        }
-        for (int y = 0; y < nTbS; ++y)
-        {
-            for (int x = 0; x < nTbS; ++x)
-            {
-                const int iIdx = ( ( y + 1 ) * intraPredAngle )  >>  5;
-                const int iFact = ( ( y + 1 ) * intraPredAngle ) & 31;
-
-                if (iFact != 0)
-                {
-                    predSamples(x, y) = ( ( 32 - iFact ) * ref[x + iIdx + 1] + iFact * ref[x + iIdx + 2] + 16 )  >>  5;
-                }
-                else
-                {
-                    predSamples(x, y) = ref[x + iIdx + 1];
-                }
-            }
-        }
-        if (predModeIntra == 26 /* vertical */ && cIdx == 0 && nTbS < 32)
-        {
-            const int x = 0;
-            for (int y=0; y<nTbS; ++y)
-            {
-                predSamples(x, y) = Clip1Y( p(x, -1) + ( ( p(-1, y) - p(-1, -1 ) )  >>  1 ), bitDepth );
-            }
-        }
-    }
-    else
-    {
-        for (int x = 0 ; x <= nTbS; ++x)
-        {
-            ref[x] = p(-1, -1+x);
-        }
-        IntraPredAngle intraPredAngle((predModeIntra));
-        if (intraPredAngle < 0)
-        {
-            InvAngle invAngle((predModeIntra));
-            if ( ( (nTbS * intraPredAngle)  >>  5) < -1 )
-            {
-                for (int x = -1 ; x >= ( (nTbS * intraPredAngle)  >>  5); --x)
-                {
-                    ref[x] = p(-1 + ( (x * invAngle + 128)  >>  8 ), -1);
-                }
-            }
-        }
-        else
-        {
-            for (int x = nTbS+1; x <= 2*nTbS; ++x)
-            {
-                ref[x] = p(-1, -1+x);
-            }
-        }
-        for (int y = 0; y < nTbS; ++y)
-        {
-            for (int x = 0; x < nTbS; ++x)
-            {
-                const int iIdx = ( ( x + 1 ) * intraPredAngle )  >>  5;
-                const int iFact = ( ( x + 1 ) * intraPredAngle ) & 31;
-
-                if (iFact != 0)
-                {
-                    predSamples(x, y) = ( ( 32 - iFact ) * ref[y + iIdx + 1] + iFact * ref[y + iIdx + 2] + 16 )  >>  5;
-                }
-                else
-                {
-                    predSamples(x, y) = ref[y + iIdx + 1];
-                }
-            }
-        }
-        if (predModeIntra == 10 /* horizontal */ && cIdx == 0 && nTbS < 32)
-        {
-            const int y = 0;
-            for (int x=0; x<nTbS; ++x)
-            {
-                predSamples(x, y) = Clip1Y( p(-1, y) + ( ( p(x, -1) - p(-1, -1 ) )  >>  1 ), bitDepth );
-            }
-        }
-    }
-}
-
-
-
-template <class H, class Predicted, class ReferenceSamples>
-static void predictBlockIntra(H &h, Predicted r, ReferenceSamples samples, residual_coding rc)
-{
-    typedef typename Predicted::Type Sample;
-
-    IntraReferenceSamples<Sample> unfiltered;
-    IntraReferenceSamples<Sample> filtered;
-
-    if (rc.cIdx == 1 && rc.y0 == 32 && rc.x0 == 0)
-    {
-        rc.cIdx = 1;
-    }
-
-    IntraReferenceAvailability const availability(h, rc);
-
-    auto const bitDepth = rc.cIdx ? h[BitDepthC()] : h[BitDepthY()];
-    unfiltered.substitute(availability, samples, rc, bitDepth);
-
-    const int predModeIntra = rc.cIdx ? h[IntraPredModeC(rc.x0, rc.y0)] : h[IntraPredModeY(rc.x0, rc.y0)];
-
-    const int k = rc.log2TrafoSize;
-    const int nTbS = 1 << k;
-
-    int filterFlag;
-
-    if (rc.cIdx != 0)
-    {
-        filterFlag = 0;
-    }
-    else if (predModeIntra == INTRA_DC || nTbS == 4)
-    {
-        filterFlag = 0;
-    }
-    else
-    {
-        const int minDistVerHor = std::min(abs(predModeIntra - 26), abs(predModeIntra - 10));
-        const int intraHorVerDistThres[] = { 0, 0, 0, 7, 1, 0 };
-        filterFlag = (minDistVerHor > intraHorVerDistThres[k]) ? 1 : 0;
-    }
-
-    if (filterFlag) filtered.filter(unfiltered, h[strong_intra_smoothing_enabled_flag()], h[BitDepthY()]);
-
-    auto const &pF = filterFlag ? filtered : unfiltered;
-
-    if (predModeIntra == INTRA_DC)
-    {
-#if 0
-        // review: havoc functions need output stride
-        havoc_table_pred_intra *table = h;
-        auto packed = havoc_pred_intra_pack(rc.cIdx, rc.log2TrafoSize);
-        auto f = *havoc_get_pred_intra(table, predModeIntra, packed);
-        (*f)(&r(0, 0), &pF(-1, 63), predModeIntra, packed);
-#else
-        predictIntraDc(pF, r, rc.log2TrafoSize, rc.cIdx);
-#endif
-    }
-    else if (predModeIntra == INTRA_PLANAR)
-    {
-        predictIntraPlanar(pF, r, rc.log2TrafoSize, rc.cIdx);
-    }
-    else
-    {
-        predictIntraAngular(pF, r, rc.log2TrafoSize, rc.cIdx, predModeIntra, bitDepth);
-    }
+    return cIdx == 0 && !!(lookup[predModeIntra] & nTbS);
 }
 
 

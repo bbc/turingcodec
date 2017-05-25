@@ -60,13 +60,14 @@ void addReference(InputQueue::Docket &docket, int ref)
 
 struct InputQueue::State
 {
-    State(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength)
+    State(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength, int baseQP)
         :
         maxGopN(maxGopN),
         maxGopM(maxGopM),
         fieldCoding(fieldCoding),
         shotChange(shotChange),
         segmentLength(segmentLength),
+        baseQP(baseQP),
         scd(new ShotChangeDetection())
     {
     }
@@ -76,6 +77,7 @@ struct InputQueue::State
     const bool fieldCoding;
     const bool shotChange;
     const int segmentLength;
+    const int baseQP;
 
     // list of pictures in preanalysis stage
     std::deque<Piece> entriesPreanalysis;
@@ -98,13 +100,16 @@ struct InputQueue::State
     size_t picturePreprocessCount = 0;
     int segmentFront = 0;
     int sequenceFront = 0;
+    int sequenceIFrame = 0;
     int sequenceIdr = 0;
     int sequenceSeg = 0;
     int hierarchyLevelFront = 0;
     bool finish = false;
     int gopSize;
     int currentIntraPoc = 0;
+    int previousIntraPoc = 0;
     int currentSegmentPoc = 0;
+    int previousSegmentPoc = 0;
     void process();
 
     void createDocket(int size, int i, int nut, int qpOffset, double qpFactor, int sopLevel, int hierarchyLevel, int numSameHierarchyLevel, int ref1 = 0, int ref2 = 0, int ref3 = 0, int ref4 = 0);
@@ -112,18 +117,19 @@ struct InputQueue::State
     bool isValidReference(int i, int delta) const
     {
         assert(i > 0);
-        if (delta < 0) return true;
-#ifdef FORCE_P_SLICES
-        return false;
-#endif
-        if (delta == 0) return false;
-        int offset =(sequenceIdr < segmentFront)? this->entries.size() : (sequenceIdr - segmentFront + 1);
-        int deltaLimit = (static_cast<int>(this->entries.size() > offset)) ? offset : static_cast<int>(this->entries.size());
-        if (i - 1 + delta >= deltaLimit) return false;
+
+        if (delta < 0) 
+            return true;
+        if (delta == 0) 
+            return false;
+        auto const  offset =(sequenceIFrame < segmentFront)? this->entries.size() : (sequenceIFrame - segmentFront + 1);
+        auto const  deltaLimit = (static_cast<int>(this->entries.size() > offset)) ? offset : static_cast<int>(this->entries.size());
+        if (i - 1 + delta >= static_cast<int>(deltaLimit)) 
+            return false;
         return !!this->entries.at(i - 1 + delta).docket;
     }
 
-    int computeNextIdr(int segmentFront, int sequenceFront, int currDefaultIdr, int intraPeriod)
+    int computeNextIdr(int segmentFront, int sequenceFront, int currDefaultIdr, int intraPeriod, bool& isShotChange)
     {
         int nextIdr = currDefaultIdr + intraPeriod;
         for (int i = segmentFront; i < (currDefaultIdr + intraPeriod); i++)
@@ -139,6 +145,7 @@ struct InputQueue::State
             if (this->scd->m_shotChangeList[index])
             {
                 nextIdr = i;
+                isShotChange = true;
                 break;
             }
         }
@@ -147,9 +154,9 @@ struct InputQueue::State
 };
 
 
-InputQueue::InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength)
+InputQueue::InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength, int baseQP)
     :
-    state(new State(maxGopN, maxGopM, fieldCoding, shotChange, segmentLength))
+    state(new State(maxGopN, maxGopM, fieldCoding, shotChange, segmentLength, baseQP))
 {
 }
 
@@ -171,26 +178,18 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
         docket->currentGopSize = gopSize;
         docket->sopLevel = sopLevel;
         docket->pocInSop = i;
-        docket->sopId = this->sequenceFront;
+        docket->sopId = this->segmentFront;
         docket->hierarchyLevel = this->hierarchyLevelFront + hierarchyLevel;
         docket->numSameHierarchyLevel = numSameHierarchyLevel;
-        docket->intraFramePoc  = this->currentIntraPoc;
+        docket->intraFramePoc  = (this->currentIntraPoc + (this->sequenceFront - this->segmentFront)) <= docket->absolutePoc? this->currentIntraPoc : this->previousIntraPoc;
 
-        if(shotChange)
+        if ((this->sequenceIdr == this->sequenceIFrame && docket->poc == this->sequenceIdr) || this->segmentFront == 0)
         {
-            assert(docket->absolutePoc < scd->m_shotChangeList.size());
-            docket->isShotChange = !!scd->m_shotChangeList[docket->absolutePoc];
-        }
-        else
-        {
-            docket->isShotChange = false;
-        }
-
-        if (docket->isShotChange || this->segmentFront == 0)
-        {
+            this->previousSegmentPoc = this->currentSegmentPoc;
             this->currentSegmentPoc = docket->absolutePoc;
         }
-        docket->segmentPoc = this->currentSegmentPoc;
+
+        docket->segmentPoc = this->currentSegmentPoc <= docket->absolutePoc ? this->currentSegmentPoc : this->previousSegmentPoc;
 
         if (this->isValidReference(i, ref1)) addReference(*docket, ref1);
         if (this->isValidReference(i, ref2)) addReference(*docket, ref2);
@@ -206,16 +205,25 @@ void InputQueue::State::createDocket(int max, int i, int nut, int qpOffset, doub
 void InputQueue::State::process()
 {
     if (this->entries.empty() ||  this->entries.front().docket) return;
-
+    bool insertIdr = false; 
     if (this->shotChange)
     {
-        if ((this->sequenceIdr - this->segmentFront) < 0)
-            this->sequenceIdr = computeNextIdr(this->segmentFront, this->sequenceFront, this->sequenceIdr, this->maxGopN);
+        if ((this->sequenceIFrame - this->segmentFront) < 0)
+        {
+            this->sequenceIFrame = computeNextIdr(this->segmentFront, this->sequenceFront, this->sequenceIFrame, this->maxGopN, insertIdr);
+            if (insertIdr)
+            {
+                this->sequenceIdr = this->sequenceIFrame;
+
+            }
+
+        }
+            
     }
     else
     {
-        if (this->sequenceIdr - this->segmentFront < 0)
-            this->sequenceIdr += this->maxGopN;
+        if (this->sequenceIFrame - this->segmentFront < 0)
+            this->sequenceIFrame += this->maxGopN;
     }
 
     if (this->segmentLength != -1) 
@@ -223,6 +231,7 @@ void InputQueue::State::process()
         if (this->sequenceSeg - this->segmentFront < 0)
             this->sequenceSeg += this->segmentLength;
     }
+
 
     gopSize = this->maxGopM;
 
@@ -236,11 +245,26 @@ void InputQueue::State::process()
         gopSize = int(entries.size());
     }
     
-    const int gopSizeIdr = this->sequenceIdr - this->segmentFront + 1;
-    if ((this->sequenceIdr - this->segmentFront)>=0 && gopSizeIdr <= gopSize)
+    const int gopSizeIdr = this->sequenceIFrame - this->segmentFront + 1;
+    if ((this->sequenceIFrame - this->segmentFront)>=0 && gopSizeIdr <= gopSize)
     {
         gopSize = gopSizeIdr;
-        lastPicture = 'I';
+        if (this->sequenceIFrame == this->sequenceIdr)
+        {
+            if (gopSize == 1)
+            {
+                lastPicture = 'R';
+            }
+            else
+            {
+                lastPicture = 'P';
+                gopSize = gopSize - 1;
+            }
+        }
+        else
+        {
+            lastPicture = 'I';
+        }
     }
 
     if (this->segmentLength != -1)
@@ -251,15 +275,17 @@ void InputQueue::State::process()
             gopSize = gopSizeSeg;
             if (gopSizeSeg == 1) 
             {
-                lastPicture = 'R'; //R for IDR;
+                lastPicture = 'R';
             }
             else 
             {
+                lastPicture = 'P';
                 gopSize = gopSize - 1;
             }
         }
     }
 
+  
     if (int(entries.size()) < gopSize) 
         return;
 
@@ -270,8 +296,8 @@ void InputQueue::State::process()
 
     if (lastPicture == 'I' || lastPicture == 'R')
     {
-      this->currentIntraPoc = this->sequenceFront + gopSize - 1;
-      this->hierarchyLevelFront = 0;
+        this->previousIntraPoc = this->currentIntraPoc;
+        this->currentIntraPoc = this->segmentFront + gopSize - 1;
     }
 
     if (lastPicture == 'I')
@@ -285,68 +311,71 @@ void InputQueue::State::process()
     else if (lastPicture == 'R') 
     {
         this->segmentFront = 0;
-        this->sequenceIdr = 0;
+        this->sequenceIFrame = 0;
+        this->hierarchyLevelFront = 0;
+        this->currentIntraPoc = 0;
+        this->previousIntraPoc = 0;
         int nut = IDR_N_LP;
         this->createDocket(gopSize, gopSize, nut, 0, 0.4420, 1, 0, 1, -gopSize);
         max = gopSize - 1;
         nutR = RASL_R;
+
         nutN = RASL_N;
     }
     else if (lastPicture == 'P')
     {
-        this->createDocket(gopSize, gopSize, TRAIL_R, 1, 0.4420, 1, 0, 1, -gopSize, -gopSize);
+        this->createDocket(gopSize, gopSize, TRAIL_R,( (this->baseQP + 1) > 51 ? (51 - this->baseQP) : 1), 0.4420, 1, 0, 1, -gopSize, -gopSize);
         max = gopSize - 1;
     }
 
-   
     if (gopSize == 2)
     {
-        this->createDocket(max, 1, nutR, 2, 0.6800, 2, 1, 1, -1, 1);
+        this->createDocket(max, 1, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.6800, 2, 1, 1, -1, 1);
     }
     else if (gopSize == 3)
     {
-        this->createDocket(max, 2, nutR, 2, 0.3536, 2, 1, 1, -2, 1);
-        this->createDocket(max, 1, nutN, 3, 0.6800, 3, 2, 1, -1, 2, 1);
+        this->createDocket(max, 2, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -2, 1);
+        this->createDocket(max, 1, nutN, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.6800, 3, 2, 1, -1, 2, 1);
     }
     else if (gopSize == 4)
     {
-        this->createDocket(max, 2, nutR, 2, 0.3536, 2, 1, 1, -2, 2);
-        this->createDocket(max, 1, nutN, 3, 0.6800, 3, 2, 1,-1, 3, 1);
-        this->createDocket(max, 3, nutN, 3, 0.6800, 3, 3, 1,-1, 1);
+        this->createDocket(max, 2, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -2, 2);
+        this->createDocket(max, 1, nutN, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.6800, 3, 2, 1,-1, 3, 1);
+        this->createDocket(max, 3, nutN, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.6800, 3, 3, 1,-1, 1);
     }
     else if (gopSize == 5)
     {
-        this->createDocket(max, 3, nutR, 2, 0.3536, 2, 1, 1, -3, 2);
-        this->createDocket(max, 1, nutR, 2, 0.3536, 2, 2, 1, -1, 4, 2);
-        this->createDocket(max, 2, nutN, 3, 0.6800, 3, 3, 1, -2, 3, -1, 1);
-        this->createDocket(max, 4, nutN, 3, 0.6800, 3, 4, 1, -4, 1, -1);
+        this->createDocket(max, 3, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -3, 2);
+        this->createDocket(max, 1, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 2, 1, -1, 4, 2);
+        this->createDocket(max, 2, nutN, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.6800, 3, 3, 1, -2, 3, -1, 1);
+        this->createDocket(max, 4, nutN, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.6800, 3, 4, 1, -4, 1, -1);
     }
     else if (gopSize == 6)
     {
-        this->createDocket(max, 3, nutR, 2, 0.3536, 2, 1, 1, -3, 3);
-        this->createDocket(max, 1, nutR, 3, 0.3536, 3, 2, 1, -1, 5, 2);
-        this->createDocket(max, 2, nutN, 4, 0.6800, 4, 3, 2, -2, 4, 1, -1);
-        this->createDocket(max, 5, nutR, 3, 0.3536, 3, 3, 2, -5, 1, -2);
-        this->createDocket(max, 4, nutN, 4, 0.6800, 4, 4, 1, -4, 2, -1, 1);
+        this->createDocket(max, 3, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -3, 3);
+        this->createDocket(max, 1, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 2, 1, -1, 5, 2);
+        this->createDocket(max, 2, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 3, 2, -2, 4, 1, -1);
+        this->createDocket(max, 5, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 3, 2, -5, 1, -2);
+        this->createDocket(max, 4, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 4, 1, -4, 2, -1, 1);
     }
     else if (gopSize == 7)
     {
-        this->createDocket(max, 4, nutR, 2, 0.3536, 2, 1, 1, -4, 3);
-        this->createDocket(max, 2, nutR, 3, 0.3536, 3, 2, 1, -2, 5, 2);
-        this->createDocket(max, 1, nutN, 4, 0.6800, 4, 3, 2, -1, 6, 3, 1);
-        this->createDocket(max, 3, nutN, 4, 0.6800, 4, 4, 2, -3, 4, 1, -1);
-        this->createDocket(max, 6, nutR, 3, 0.3536, 3, 3, 2, -2, 1);
-        this->createDocket(max, 5, nutN, 4, 0.6800, 4, 4, 2, -1, 2, 1);
+        this->createDocket(max, 4, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -4, 3);
+        this->createDocket(max, 2, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 2, 1, -2, 5, 2);
+        this->createDocket(max, 1, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 3, 1, -1, 6, 3, 1);
+        this->createDocket(max, 3, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 4, 2, -3, 4, 1, -1);
+        this->createDocket(max, 6, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 4, 2, -2, 1);
+        this->createDocket(max, 5, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 5, 1, -1, 2, 1);
     }
     else if (gopSize == 8)
     {
-        this->createDocket(max, 4, nutR, 2, 0.3536, 2, 1, 1, -4, 4);
-        this->createDocket(max, 2, nutR, 3, 0.3536, 3, 2, 1, -2, 2, 6);
-        this->createDocket(max, 1, nutN, 4, 0.6800, 4, 3, 2, -1, 1, 3, 7);
-        this->createDocket(max, 3, nutN, 4, 0.6800, 4, 4, 2, -1, 1, -3, 5);
-        this->createDocket(max, 6, nutR, 3, 0.3536, 3, 3, 2, -2, 2, -6);
-        this->createDocket(max, 5, nutN, 4, 0.6800, 4, 4, 2, -1, 1, 3, -5);
-        this->createDocket(max, 7, nutN, 4, 0.6800, 4, 5, 1, -1, 1, -7);
+        this->createDocket(max, 4, nutR, ((this->baseQP + 2) > 51 ? (51 - this->baseQP) : 2), 0.3536, 2, 1, 1, -4, 4);
+        this->createDocket(max, 2, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 2, 1, -2, 2, 6);
+        this->createDocket(max, 1, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 3, 1, -1, 1, 3, 7);
+        this->createDocket(max, 3, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 4, 2, -1, 1, -3, 5);
+        this->createDocket(max, 6, nutR, ((this->baseQP + 3) > 51 ? (51 - this->baseQP) : 3), 0.3536, 3, 4, 2, -2, 2, -6);
+        this->createDocket(max, 5, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 5, 2, -1, 1, 3, -5);
+        this->createDocket(max, 7, nutN, ((this->baseQP + 4) > 51 ? (51 - this->baseQP) : 4), 0.6800, 4, 5, 2, -1, 1, -7);
     }
 
     int sopSizeToMaxHierarchyLevel[8] = { 1, 2, 3, 4, 5, 5, 5, 6 };
@@ -386,7 +415,7 @@ void InputQueue::preanalyse()
     auto n = this->state->entriesPreanalysis.size();
     if (n == 0)
         return;
-    auto windowSize = this->state->shotChange ? 40 : this->state->maxGopM;
+    auto const windowSize = this->state->shotChange ? 40 : this->state->maxGopM;
 
     if (n >= windowSize ||  this->state->finish)
     {
@@ -394,9 +423,7 @@ void InputQueue::preanalyse()
             n = windowSize;
 
         if (this->state->shotChange)
-        {
-            this->state->scd->processSeq(this->state->entriesPreanalysis, n);
-        }
+            this->state->scd->processSeq(this->state->entriesPreanalysis, static_cast<int>(n));
 
         for (int i = 0; i < n; ++i)
         {

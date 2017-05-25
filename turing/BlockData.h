@@ -45,13 +45,13 @@ struct PuData
         int8_t pcm;
     };
 
-    struct // review: should be union?
+    struct // review: should (at least partly) be union?
     {
         Intra intra;
         Inter inter;
     };
 
-    int8_t refIdxPlus1[2];
+    int8_t refIdxPlus1[2]; // review: do we really need this and dpbIndexPlus1?
 
     // Semantics same as mvLX and MvLX
     MotionVector &mv(int refList)
@@ -72,7 +72,7 @@ struct PuData
 
     void reset()
     {
-        static_assert(sizeof(PuData)<=16, "PuData must be as small as possible");
+        static_assert(sizeof(PuData) <= 16, "PuData must be as small as possible");
         static_assert(std::is_pod<PuData>::value, "PuData must be POD");
         this->~PuData();
         new (this) PuData();
@@ -80,24 +80,24 @@ struct PuData
     }
 
     bool operator==(const PuData &other) const
-                    {
-        if (this->refIdxPlus1[0] != other.refIdxPlus1[0]) return false;
+    {
+        if (this->refIdxPlus1[0] != other.refIdxPlus1[0]) 
+            return false;
         if (this->refIdxPlus1[0])
-        {
-            if (this->inter.motionVector[0] != other.inter.motionVector[0]) return false;
-        }
-        if (this->refIdxPlus1[1] != other.refIdxPlus1[1]) return false;
+            if (this->inter.motionVector[0] != other.inter.motionVector[0]) 
+                return false;
+        if (this->refIdxPlus1[1] != other.refIdxPlus1[1]) 
+            return false;
         if (this->refIdxPlus1[1])
-        {
-            if (this->inter.motionVector[1] != other.inter.motionVector[1]) return false;
-        }
+            if (this->inter.motionVector[1] != other.inter.motionVector[1]) 
+                return false;
         return true;
-                    }
+    }
 
     bool operator!=(const PuData &other) const
-                    {
+    {
         return !this->operator==(other);
-                    }
+    }
 
     // actually, this really means "is available and is not intra"
     bool isAvailable() const
@@ -154,36 +154,49 @@ struct BlockData :
     PuData,
     CuData,
     AccessOperators<BlockData>
+{
+    int CuPredMode() const
     {
-        int CuPredMode() const
-        {
-            if (!this->predFlag(L0) && !this->predFlag(L1)) return MODE_INTRA;
-            return this->skip ? MODE_SKIP : MODE_INTER;
-        }
+        if (!this->predFlag(L0) && !this->predFlag(L1)) return MODE_INTRA;
+        return this->skip ? MODE_SKIP : MODE_INTER;
+    }
 
-        bool operator==(const BlockData &other) const
-        {
-            if (static_cast<const PuData &>(*this) != static_cast<const PuData &>(other)) return false;
-            if (this->CtDepth != other.CtDepth) return false;
-            if (this->skip != other.skip) return false;
-            return true;
-        }
+    bool operator==(const BlockData &other) const
+    {
+        if (static_cast<const PuData &>(*this) != static_cast<const PuData &>(other)) return false;
+        if (this->CtDepth != other.CtDepth) return false;
+        if (this->skip != other.skip) return false;
+        return true;
+    }
 
-        bool operator!=(const BlockData &other) const
-        {
-            return !this->operator==(other);
-        }
+    bool operator!=(const BlockData &other) const
+    {
+        return !this->operator==(other);
+    }
 
-        void setup(coding_quadtree const *cqt, int CuPredMode)
-        {
-            BlockData &blockData = *this;
-            blockData.reset();
-            blockData.intra.pcm = 0;
-            blockData.skip = (CuPredMode == MODE_SKIP);
-            blockData.refIdxPlus1[0] = (CuPredMode == MODE_INTRA ? 0 : 88);
-            blockData.CtDepth = cqt->cqtDepth;
-        }
-    };
+    void setup(coding_quadtree const *cqt, int CuPredMode)
+    {
+        BlockData &blockData = *this;
+        blockData.reset();
+        blockData.intra.pcm = 0;
+        blockData.skip = (CuPredMode == MODE_SKIP);
+        blockData.refIdxPlus1[0] = (CuPredMode == MODE_INTRA ? 0 : 88);
+        blockData.CtDepth = cqt->cqtDepth;
+    }
+
+    void reset()
+    {
+        this->markUnavailable();
+        this->CtDepth = -1;
+        this->skip = 0;
+        this->intra.predModeY = INTRA_DC;
+    }
+
+    bool isActuallyAvailable() const
+    {
+        return this->CtDepth >= 0;
+    }
+};
 
 
 static std::ostream &operator<<(std::ostream &o, const PuData &puData)
@@ -253,6 +266,8 @@ struct Access<IntraPredModeY, BlockData>
     static void set(IntraPredModeY, Type v, BlockData &s)
     {
         s.intra.predModeY = v;
+        assert(s.inter.dpbIndexPlus1[0] = 0);
+//		assert(s.inter.dpbIndexPlus1[1] = 1); // available
     }
 };
 
@@ -264,22 +279,6 @@ struct Access<CuPredMode, BlockData>
     static Type get(CuPredMode, BlockData &s)
     {
         return s.CuPredMode();
-    }
-};
-
-
-template <class T> struct ResetSpatialStruct;
-
-
-template <>
-struct ResetSpatialStruct<struct BlockData>
-{
-    static void reset(BlockData &blockData)
-    {
-        blockData.markUnavailable();
-        blockData.CtDepth = -1;
-        blockData.skip = 0;
-        blockData.intra.predModeY = INTRA_DC;
     }
 };
 

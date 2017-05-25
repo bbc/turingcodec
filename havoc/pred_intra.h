@@ -26,54 +26,37 @@ For more information, contact us at info @ turingcodec.org.
 
 #include "havoc.h"
 
+namespace havoc { namespace intra { 
+    
+template <typename Sample>
+using Function = void(Sample *dst, intptr_t dstStride, Sample const *neighbours, int predModeIntra);
 
-#ifdef __cplusplus
-extern "C"
+template <typename Sample>
+struct Table
 {
-#endif
+    Function<Sample> *entries[3 * sizeof(Sample) - 2 /* bitDepth */][4 /* log2TrafoSize - 2 */][38 /* intraPredMode */];
 
-    // HEVC intra prediction
-
-    typedef int havoc_pred_intra_packed;
-
-    // Function prototype compatible with that of f265
-    typedef void havoc_pred_intra(uint8_t *dst, const uint8_t *neighbours, int intraPredMode, havoc_pred_intra_packed packed);
-
-    // Packing compatible with f265
-    static __inline havoc_pred_intra_packed havoc_pred_intra_pack(int cIdx, int log2CbSize)
+    inline Function<Sample> *&lookup(int cIdx, int bitDepth, int log2TrafoSize, int predModeIntra)
     {
-        const int bit_depth = 8;
-        const int edge_flag = (cIdx == 0 && log2CbSize < 5) ? 1 : 0;
-        return (bit_depth << 8) | (log2CbSize << 1) | edge_flag;
+        auto const edge_flag = cIdx == 0 && log2TrafoSize < 5;
+        if (edge_flag)
+            if (predModeIntra == 1)
+                predModeIntra = 35;
+            else if (predModeIntra == 10)
+                predModeIntra = 36;
+            else if (predModeIntra == 26)
+                predModeIntra = 37;
+
+        auto const bd = sizeof(Sample) == 2 ? 10 - bitDepth : 0;
+        return this->entries[bd][log2TrafoSize - 2][predModeIntra];
     }
 
-    typedef struct
-    {
-        havoc_pred_intra *p[4 /* log2CbSize - 2 */][35 /* intraPredModeY */];
-        havoc_pred_intra *p_dc_filter[3 /* log2CbSize - 2 */];
-    }
-    havoc_table_pred_intra;
+    void populate(havoc_code code);
+};
 
-    static __inline havoc_pred_intra** havoc_get_pred_intra(havoc_table_pred_intra *table, int intraPredMode, havoc_pred_intra_packed packed)
-    {
-        const int edge_flag = packed & 0x1;
-        const int log2CbSize = (packed >> 1) & 0x7f;
-        if (intraPredMode == 1 && edge_flag)
-        {
-            return &table->p_dc_filter[log2CbSize - 2];
-        }
-        else
-        {
-            return &table->p[log2CbSize - 2][intraPredMode];
-        }
-    }
+template <typename Sample>
+havoc_test_function test;
 
-    void havoc_populate_pred_intra(havoc_table_pred_intra *table, havoc_code code);
-
-    havoc_test_function havoc_test_pred_intra;
-
-#ifdef __cplusplus
-}
-#endif
+}}
 
 #endif

@@ -35,13 +35,17 @@ struct BitWriter
     int shift;
 
     BitWriter(std::vector<uint8_t> *buffer = 0)
-    :
+        :
         shift(0),
         data(buffer ? buffer : &this->standby)
     {
     }
-
-    void writeBit(int bit)
+    inline void writeByte(int byte)
+    {
+        assert(this->shift == 0);
+        this->data->push_back(byte);
+    }
+    inline void writeBit(int bit)
     {
         if (!this->shift)
         {
@@ -51,7 +55,7 @@ struct BitWriter
         // For some reason, MSVC STL libraries don't like back() here.
         (*this->data)[this->data->size() - 1] |= (bit << --this->shift);
     }
-    void writeBits(int n, std::uint64_t value)
+    inline void writeBits(int n, std::uint64_t value)
     {
         std::uint64_t valueMask = 1;
         valueMask <<= n;
@@ -61,11 +65,11 @@ struct BitWriter
             writeBit((value & valueMask) ? 1 : 0);
         }
     }
-    size_t pos() const
+    inline size_t pos() const
     {
         return this->data->size();
     }
-    static void insertEp3Bytes(std::vector<uint8_t> &buffer, size_t pos)
+    static inline void insertEp3Bytes(std::vector<uint8_t> &buffer, size_t pos)
     {
         std::vector<uint8_t> data(buffer.begin() + pos, buffer.end());
         buffer.erase(buffer.begin() + pos, buffer.end());
@@ -95,89 +99,90 @@ struct NalWriter :
 
 struct CabacWriter :
     BitWriter
-    {
-        unsigned ivlLow;
-        unsigned ivlCurrRange;
-        int bitsLeft;
-        int numBufferedBytes;
-        unsigned bufferedByte;
+{
+    unsigned ivlLow;
+    unsigned ivlCurrRange;
+    int bitsLeft;
+    int numBufferedBytes;
+    unsigned bufferedByte;
 
-        CabacWriter(std::vector<uint8_t> &buffer)
+    CabacWriter(std::vector<uint8_t> &buffer)
         :
-            BitWriter(&buffer)
-        {
-        }
+        BitWriter(&buffer)
+    {
+    }
 
-        void restartCabac2()
-        {
-            this->ivlLow = 0;
-            this->ivlCurrRange = 510;
-            this->bitsLeft = 23;
-            this->numBufferedBytes = 0;
-            this->bufferedByte = 0xff;
-        }
-        void testAndWriteOut()
-        {
-            if (this->bitsLeft < 12) this->writeOut();
-        }
-        void writeOut()
-        {
-            unsigned leadByte = this->ivlLow >> (24 - this->bitsLeft);
-            this->bitsLeft += 8;
-            this->ivlLow &= 0xffffffffu >> this->bitsLeft;
+    void restartCabac2()
+    {
+        this->ivlLow = 0;
+        this->ivlCurrRange = 510;
+        this->bitsLeft = 23;
+        this->numBufferedBytes = 0;
+        this->bufferedByte = 0xff;
+    }
+    void testAndWriteOut()
+    {
+        if (this->bitsLeft < 12) 
+            this->writeOut();
+    }
+    void writeOut()
+    {
+        unsigned leadByte = this->ivlLow >> (24 - this->bitsLeft);
+        this->bitsLeft += 8;
+        this->ivlLow &= 0xffffffffu >> this->bitsLeft;
 
-            if (leadByte == 0xff)
-            {
-                ++this->numBufferedBytes;
-            }
-            else
-            {
-                if (this->numBufferedBytes > 0)
-                {
-                    unsigned carry = leadByte >> 8;
-                    unsigned byte = this->bufferedByte + carry;
-                    this->bufferedByte = leadByte & 0xff;
-                    this->writeBits(8, byte);
-                    byte = (0xff + carry) & 0xff;
-                    while (this->numBufferedBytes > 1)
-                    {
-                        this->writeBits(8, byte);
-                        --this->numBufferedBytes;
-                    }
-                }
-                else
-                {
-                    this->numBufferedBytes = 1;
-                    this->bufferedByte = leadByte;
-                }
-            }
-        }
-        void finishCabac()
+        if (leadByte == 0xff)
         {
-            if (this->ivlLow >> (32 - this->bitsLeft))
+            ++this->numBufferedBytes;
+        }
+        else
+        {
+            if (this->numBufferedBytes > 0)
             {
-                this->writeBits(8, this->bufferedByte + 1);
+                unsigned carry = leadByte >> 8;
+                unsigned byte = this->bufferedByte + carry;
+                this->bufferedByte = leadByte & 0xff;
+                this->writeByte(byte);
+                byte = (0xff + carry) & 0xff;
                 while (this->numBufferedBytes > 1)
                 {
-                    this->writeBits(8, 0x00);
+                    this->writeByte(byte);
                     --this->numBufferedBytes;
                 }
-                this->ivlLow -= 1 << (32 - this->bitsLeft);
             }
             else
             {
-                if (this->numBufferedBytes > 0)
-                {
-                    this->writeBits(8, this->bufferedByte);
-                }
-                while (this->numBufferedBytes > 1)
-                {
-                    this->writeBits(8, 0xff);
-                    this->numBufferedBytes--;
-                }
+                this->numBufferedBytes = 1;
+                this->bufferedByte = leadByte;
             }
-            this->writeBits(24 - this->bitsLeft, this->ivlLow >> 8);
         }
+    }
+    void finishCabac()
+    {
+        if (this->ivlLow >> (32 - this->bitsLeft))
+        {
+            this->writeByte(this->bufferedByte + 1);
+            while (this->numBufferedBytes > 1)
+            {
+                this->writeByte(0x00);
+                --this->numBufferedBytes;
+            }
+            this->ivlLow -= 1 << (32 - this->bitsLeft);
+        }
+        else
+        {
+            if (this->numBufferedBytes > 0)
+            {
+                this->writeByte(this->bufferedByte);
+            }
+            while (this->numBufferedBytes > 1)
+            {
+                this->writeByte(0xff);
+                this->numBufferedBytes--;
+            }
+        }
+        this->writeBits(24 - this->bitsLeft, this->ivlLow >> 8);
+    }
 };
 
 

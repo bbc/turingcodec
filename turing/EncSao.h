@@ -99,7 +99,7 @@ public :
             if (curr_cumul > max_cumul)
             {
                 max_cumul = curr_cumul;
-                hist_max = num_in_band_long[b];
+                hist_max = static_cast<int>(num_in_band_long[b]);
                 band_start = b;
             }
         }
@@ -139,7 +139,7 @@ public :
             if (curr_cumul > max_cumul)
             {
                 max_cumul = curr_cumul;
-                hist_max = num_in_band_long[b];
+                hist_max = static_cast<int>(num_in_band_long[b]);
                 band_start = b;
             }
         }
@@ -296,7 +296,7 @@ public :
         int width = xEnd - xCtb;
         int height = yEnd - yCtb;
 
-        auto &orgPicture = dynamic_cast<Picture<Sample> &>(orgPicWrapper);
+        auto &orgPicture = static_cast<PictureWrap<Sample> &>(orgPicWrapper);
         Raster<Sample> sourceSamples = orgPicture(xCtb, yCtb, 0);
 
         Raster<Sample> recSamples = ((ThreePlanes<Sample>)(*(recPic->picture)))(xCtb, yCtb, 0);
@@ -330,14 +330,14 @@ public :
         for (int cat = 1; cat<5; cat++)
         {
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) -1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat],sign*off_start,E[cat],shift);//((num_in_cat[cat] * off_start* off_start - 2 * sign*off_start * E[cat]) >> (2 * shift));
             temp_rate = (off_start + 1);
             deltaJ = deltaD + lambda*temp_rate;
             offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);// ((num_in_cat[cat] * off* off - 2 * sign*off * E[cat]) >> (2 * shift));
                 temp_rate = (off + 1);
@@ -366,14 +366,14 @@ public :
         for (int cat = 1; cat<5; cat++)
         {
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], static_cast<double>((abs(E[cat])) / num_in_cat[cat])))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD + lambda*temp_rate;
             offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -402,14 +402,14 @@ public :
         for (int cat = 1; cat<5; cat++)
         {
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD + lambda*temp_rate;
             offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -438,14 +438,14 @@ public :
         for (int cat = 1; cat<5; cat++)
         {
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthY()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD + lambda*temp_rate;
             offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -482,7 +482,7 @@ public :
             totDeltaJclass = 0.0;
             for (int band = 1; band < 5; band++)
             {
-                offset[band] = (num_in_band_long[band + bandPosition - 1] == 0 ? 0 : (int)roundSao(h[BitDepthY()], (abs(E_long[band + bandPosition - 1])) / num_in_band_long[band + bandPosition - 1]));
+                offset[band] = (num_in_band_long[band + bandPosition - 1] == 0 ? 0 : (int)roundSao(h[BitDepthY()], static_cast<double>(abs(E_long[band + bandPosition - 1])) / num_in_band_long[band + bandPosition - 1]));
                 sign = (E_long[band + bandPosition - 1] >= 0 ? 1 : -1);
                 offset[band] = sign* ((abs(offset[band]) < ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1)) ? abs(offset[band]) : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1));
                 deltaD = estSaoDist(num_in_band_long[band + bandPosition - 1], offset[band], E_long[band + bandPosition - 1],shift);
@@ -518,7 +518,7 @@ public :
 
             for (int cat = 1; cat<5; cat++)
             {
-                h[sao_offset_abs(0, rx, ry, cat - 1)] = abs(best_offset[cat]);
+                h[sao_offset_abs(0, rx, ry, cat - 1)] = static_cast<int>(abs(best_offset[cat]));
                 if (bestTypeIdx == 1)
                     h[sao_offset_sign(0, rx, ry, cat - 1)] = (best_offset[cat] < 0);
             }
@@ -538,7 +538,7 @@ public :
         int width = xEnd - xCtb;
         int height = yEnd - yCtb;
 
-        auto &orgPicture = dynamic_cast<Picture<Sample> &>(orgPicWrapper);
+        auto &orgPicture = static_cast<PictureWrap<Sample> &>(orgPicWrapper);
         Raster<Sample> sourceSamplesU = orgPicture(xCtb, yCtb, 1);
         Raster<Sample> sourceSamplesV = orgPicture(xCtb, yCtb, 2);
 
@@ -586,14 +586,14 @@ public :
             E[cat] = EU[cat] + EV[cat];
             num_in_cat[cat] = num_in_catU[cat] + num_in_catV[cat];
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD * distScale + lambda*temp_rate;
-            offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            offset[cat] = static_cast<int>(sign*off_start);
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -601,7 +601,7 @@ public :
                 if (curr_delta_J < deltaJ)
                 {
                     deltaJ = curr_delta_J;
-                    offset[cat] = (sign*off);
+                    offset[cat] = static_cast<int>(sign*off);
                 }
             }
             totDeltaJclass += deltaJ;
@@ -625,14 +625,14 @@ public :
             E[cat] = EU[cat] + EV[cat];
             num_in_cat[cat] = num_in_catU[cat] + num_in_catV[cat];
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD * distScale + lambda*temp_rate;
-            offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            offset[cat] = static_cast<int>(sign*off_start);
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -640,7 +640,7 @@ public :
                 if (curr_delta_J < deltaJ)
                 {
                     deltaJ = curr_delta_J;
-                    offset[cat] = (sign*off);
+                    offset[cat] = static_cast<int>(sign*off);
                 }
             }
             totDeltaJclass += deltaJ;
@@ -664,14 +664,14 @@ public :
             E[cat] = EU[cat] + EV[cat];
             num_in_cat[cat] = num_in_catU[cat] + num_in_catV[cat];
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD * distScale + lambda*temp_rate;
-            offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            offset[cat] = static_cast<int>(sign*off_start);
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -679,7 +679,7 @@ public :
                 if (curr_delta_J < deltaJ)
                 {
                     deltaJ = curr_delta_J;
-                    offset[cat] = (sign*off);
+                    offset[cat] = static_cast<int>(sign*off);
                 }
             }
             totDeltaJclass += deltaJ;
@@ -703,14 +703,14 @@ public :
             E[cat] = EU[cat] + EV[cat];
             num_in_cat[cat] = num_in_catU[cat] + num_in_catV[cat];
             sign = (cat <= 2 ? 1 : -1);
-            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], (abs(E[cat])) / num_in_cat[cat]))) + 1;
+            off_start = abs(num_in_cat[cat] == 0 ? 0 : ((int)roundSao(h[BitDepthC()], static_cast<double>(abs(E[cat])) / num_in_cat[cat]))) + 1;
             off_start = off_start < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1) ? off_start : ((1 << (std::min(h[BitDepthY()], 10) - 5)) - 1);
             off_end = std::min(0, abs((int)off_start - 2));
             deltaD = estSaoDist(num_in_cat[cat], sign*off_start, E[cat], shift);
             temp_rate = (off_start + 1);
             deltaJ = deltaD * distScale + lambda*temp_rate;
-            offset[cat] = (sign*off_start);
-            for (int off = off_start - 1; off >= off_end; off--)
+            offset[cat] = static_cast<int>(sign*off_start);
+            for (int64_t off = off_start - 1; off >= off_end; off--)
             {
                 deltaD = estSaoDist(num_in_cat[cat], sign*off, E[cat], shift);
                 temp_rate = (off + 1);
@@ -718,7 +718,7 @@ public :
                 if (curr_delta_J < deltaJ)
                 {
                     deltaJ = curr_delta_J;
-                    offset[cat] = (sign*off);
+                    offset[cat] = static_cast<int>(sign*off);
                 }
             }
             totDeltaJclass += deltaJ;
@@ -746,9 +746,9 @@ public :
             totDeltaJclass = 0.0;
             for (int band = 1; band < 5; band++)
             {
-                offset[band] = (num_in_band_long[band + bandPosition - 1] == 0 ? 0 : (int)roundSao(h[BitDepthC()], (abs(E_long[band + bandPosition - 1])) / num_in_band_long[band + bandPosition - 1]));
+                offset[band] = (num_in_band_long[band + bandPosition - 1] == 0 ? 0 : (int)roundSao(h[BitDepthC()], static_cast<double>(abs(E_long[band + bandPosition - 1])) / num_in_band_long[band + bandPosition - 1]));
                 sign = (E_long[band + bandPosition - 1] >= 0 ? 1 : -1);
-                offset[band] = sign* ((abs(offset[band]) < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1)) ? abs(offset[band]) : ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1));
+                offset[band] = static_cast<int>(sign* ((abs(offset[band]) < ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1)) ? abs(offset[band]) : ((1 << (std::min(h[BitDepthC()], 10) - 5)) - 1)));
                 deltaD = estSaoDist(num_in_band_long[band + bandPosition - 1], offset[band], E_long[band + bandPosition - 1], shift);
                 temp_rate = (abs(offset[band]) + 2);
                 totDeltaJclass += deltaD * distScale + lambda*temp_rate;
@@ -760,7 +760,7 @@ public :
                 bestBandPosition = bandPosition;
                 for (int cat = 1; cat<5; cat++)
                 {
-                    best_offset[cat] = offset[cat];
+                    best_offset[cat] = static_cast<int>(offset[cat]);
                 }
             }
 
@@ -827,7 +827,7 @@ public :
 
         int distortion = 0, bestTypeIdx;
 
-        auto &orgPicture = dynamic_cast<Picture<Sample> &>(orgPicWrapper);
+        auto &orgPicture = static_cast<PictureWrap<Sample> &>(orgPicWrapper);
         Raster<Sample> sourceSamplesY = orgPicture(xCtb, yCtb, 0);
         Raster<Sample> sourceSamplesCb = orgPicture(xCtb, yCtb, 1);
         Raster<Sample> sourceSamplesCr = orgPicture(xCtb, yCtb, 2);

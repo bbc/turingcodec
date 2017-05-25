@@ -20,7 +20,7 @@ For more information, contact us at info @ turingcodec.org.
 
 #include "pred_inter.h"
 #include "pred_intra.h"
-#include "residual_decode.h"
+#include "transform.h"
 #include "sad.h"
 #include "ssd.h"
 #include "diff.h"
@@ -93,10 +93,12 @@ havoc_instruction_set havoc_instruction_set_support()
     __cpuidex(cpuInfo, 1, 0);
 
     if (bit_is_set(cpuInfo[edx], 26)) mask |= HAVOC_SSE2;
+
     if (bit_is_set(cpuInfo[ecx], 1)) mask |= HAVOC_SSE3;
     if (bit_is_set(cpuInfo[ecx], 9)) mask |= HAVOC_SSSE3;
     if (bit_is_set(cpuInfo[ecx], 19)) mask |= HAVOC_SSE41;
     if (bit_is_set(cpuInfo[ecx], 20)) mask |= HAVOC_SSE42;
+    if (bit_is_set(cpuInfo[ecx], 23)) mask |= HAVOC_POPCNT;
 
     if (bit_is_set(cpuInfo[ecx], 28) && bit_is_set(cpuInfo[ecx], 27))
     {
@@ -190,16 +192,17 @@ int havoc_main(int argc, const char *argv[])
     havoc_test_sad_multiref(&error_count, mask);
     havoc_test_sad(&error_count, mask);
     havoc_test_ssd(&error_count, mask);
-    havoc_test_pred_intra(&error_count, mask);
+    havoc::intra::test<uint8_t>(&error_count, mask);
+    havoc::intra::test<uint16_t>(&error_count, mask);
     havoc_test_hadamard_satd(&error_count, mask);
     havoc_test_quantize_inverse(&error_count, mask);
     havoc_test_quantize(&error_count, mask);
     havoc_test_quantize_reconstruct(&error_count, mask);
     havoc_test_pred_uni(&error_count, mask);
     havoc_test_pred_bi(&error_count, mask);
-    havoc_test_inverse_transform_add<uint8_t>(&error_count, mask);
-    havoc_test_inverse_transform_add<uint16_t>(&error_count, mask);
-    havoc_test_transform(&error_count, mask);
+    havoc::test_inverse_transform_add<uint8_t>(&error_count, mask);
+    havoc::test_inverse_transform_add<uint16_t>(&error_count, mask);
+    havoc::test_transform(&error_count, mask);
 
     printf("\n");
     printf("havoc self test: %d errors\n", error_count);

@@ -45,8 +45,8 @@ struct NoAccess
 template <class V, class H, class Enable = void>
 struct Derive :
     NoAccess
-    {
-    };
+{
+};
 
 
 // Provides read (and optionally write) access to a value V contained in structure S.

@@ -115,5 +115,5 @@ void havoc_test_ssd_linear(int *error_count, havoc_instruction_set mask)
 
     b[1] = b[0];
 
-    *error_count += havoc_test(&b[0], &b[1], get_ssd_linear, invoke_ssd_linear, mismatch_ssd_linear, mask, 100000);
+    *error_count += havoc_test(&b[0], &b[1], get_ssd_linear, invoke_ssd_linear, mismatch_ssd_linear, mask, 10);
 }

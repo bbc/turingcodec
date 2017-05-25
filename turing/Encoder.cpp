@@ -72,7 +72,9 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
 
     this->stateEncode.scd = this->vm["shot-change"].as<bool>();
     this->stateEncode.fieldcoding = this->vm["field-coding"].as<bool>();
+    this->stateEncode.framedoubling = this->vm["frame-doubling"].as<bool>();
     this->stateEncode.amp = this->booleanSwitchSetting("amp", speed.useAmp());
+    this->stateEncode.sao = this->booleanSwitchSetting("sao", speed.useSao());
     this->stateEncode.smp = this->vm["smp"].as<bool>();    //this->booleanSwitchSetting("smp", speed.useSmp());
     this->stateEncode.nosmp = this->vm["no-smp"].as<bool>();
     this->stateEncode.fdm = this->booleanSwitchSetting("fdm", speed.useFdm());
@@ -90,7 +92,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
     this->stateEncode.saoslow = this->booleanSwitchSetting("sao-slow-mode", speed.useSaoSlow());
     this->stateEncode.verbosity = this->vm["verbosity"].as<int>();
     this->stateEncode.gopM = std::min(this->vm["max-gop-m"].as<int>(), this->vm["max-gop-n"].as<int>());
-    this->stateEncode.segmentLength = this->vm["segment"].as<int>();
+    this->stateEncode.baseQp = this->vm["qp"].as<int>();
     this->stateEncode.maxnummergecand = (this->vm["max-num-merge-cand"].defaulted()) ? (speed.setMaxNumMergeCand()) : this->vm["max-num-merge-cand"].as<int>();
     this->stateEncode.preferredTransferCharacteristics = this->vm["atc-sei"].as<int>();
 
@@ -195,7 +197,11 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         // review - is it necessary to set the conformance window accordingly?
         if (this->pictureHeight*2 != this->frameHeight)
             std::cout << "Warning: picture height will be padded to " << (this->pictureHeight * 2) << " samples to allow field-coding with minimum cu size of " << minCuSize << "\n" << std::endl;
+
+        this->confWinBottomOffset = (this->pictureHeight * 2 - this->frameHeight) / 2;
     }
+    else
+        this->confWinBottomOffset = 0;
 
     this->stateEncode.useRateControl = !!this->vm.count("bitrate");
     if (this->stateEncode.useRateControl)
@@ -203,8 +209,10 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
         int frames = static_cast<int>(this->vm["frames"].as<std::size_t>());
         if(this->vm["field-coding"].as<bool>())
             frames *= 2;
-        this->stateEncode.rateControlEngine.reset(new SequenceController(
+
+        this->stateEncode.rateControlParams.reset(new RateControlParameters(
                 (double)this->vm["bitrate"].as<int>(),
+
                 this->vm["frame-rate"].as<double>(),
                 this->vm["max-gop-n"].as<int>(),
                 this->vm["max-gop-m"].as<int>(),
@@ -213,7 +221,7 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
                 this->vm["ctu"].as<int>(),
                 this->vm["qp"].as<int>(),
                 this->stateEncode.wpp,
-                this->stateEncode.concurrentFrames));
+                static_cast<int>(this->stateEncode.concurrentFrames)));
     }
 
     this->stateEncode.repeatHeaders = this->vm["repeat-headers"].as<bool>();
@@ -317,7 +325,7 @@ void Encoder::printHeader(std::ostream &cout, std::string const &inputFile, std:
 
     cout << " smp=" << (!!this->stateEncode.smp ? "1" : (!!this->stateEncode.nosmp ? "0" : (!!static_cast<Speed &>(this->stateEncode).useSmp(6) ? "1" : "restricted")));
     cout << " deblock=" << !!(this->vm.at("deblock").as<bool>() && !this->vm.at("no-deblock").as<bool>());
-    cout << " sao=" << !!(this->vm.at("sao").as<bool>() && !this->vm.at("no-sao").as<bool>());
+    cout << " sao=" << this->stateEncode.sao;
     cout << " sao-slow-mode=" << this->stateEncode.saoslow;
     cout << " rcudepth=" << this->stateEncode.rcudepth;
     cout << " wpp=" << wpp;
@@ -427,7 +435,6 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
 
     {
         threadPool->lock();
-
         if (eos)
         {
             inputQueue->endOfInput();
@@ -445,7 +452,6 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
             }
             inputQueue->append(picture, aqInfo);
         }
-
         threadPool->nudge();
         threadPool->unlock();
     }
@@ -455,12 +461,10 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
 
         {
             std::unique_lock<std::mutex> lock(threadPool->mutex());
-
             while (stateEncode.responses.empty() || !stateEncode.responses.front().done)
             {
                 stateEncode.responsesAvailable.wait(lock);
             }
-
             response = stateEncode.responses.front();
             stateEncode.responses.pop_front();
 
@@ -500,13 +504,11 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
             metadata.keyframe = response.keyframe;
 
             //std::cout << "response keyframe/DTS/PTS " << metadata.keyframe << " " << metadata.dts << " " << metadata.pts << "\n";
-
             std::unique_lock<std::mutex> lock(threadPool->mutex());
             while (!response.picture->reconstructed)
             {
                 stateEncode.responsesAvailable.wait_for(lock, std::chrono::milliseconds(10));
             }
-
             stateEncode.decodedPicturesFlush((this->bitDepth > 8) ? 16 : 8, (this->externalBitDepth > 8) ? 16 : 8);
 
             if (this->stateEncode.verbosity == 2)
@@ -520,8 +522,10 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 std::ostringstream oss;
                 
                 const int currentPoc = h[PicOrderCntVal()];
+                StateEncodePicture* stateEncodePicture = &h;
+                const int absolutePoc = stateEncodePicture->docket->absolutePoc;
                 double psnrY, psnrU, psnrV;
-                stateEncode.psnrAnalysis->getPsnrFrameData(currentPoc, psnrY, psnrU, psnrV);
+                stateEncode.psnrAnalysis->getPsnrFrameData(absolutePoc, psnrY, psnrU, psnrV);
                 oss << "POC" << std::setw(5) << currentPoc << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
                 oss << std::setw(12) << 8 * bytes << " bits ";
                 oss << std::setprecision(4);
@@ -531,11 +535,11 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 oss << " V" << std::setw(8) << psnrV << " dB ]";
                 oss << std::setprecision(1);
                 oss << " [ ET " << frameEncoderTimeSec.count() << " ] ";
-                stateEncode.psnrAnalysis->removePsnrFrameData(currentPoc);
+                stateEncode.psnrAnalysis->removePsnrFrameData(absolutePoc);
 
                 if (this->stateEncode.decodedHashSei)
                 {
-                    StateEncode::FrameHash currentHash = stateEncode.getFrameHash(currentPoc);
+                    StateEncode::FrameHash currentHash = stateEncode.getFrameHash(absolutePoc);
                     std::string digestHashString;
                     switch (this->stateEncode.hashType)
                     {
@@ -550,7 +554,7 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                             break;
                     }
                     oss << digestHashString << " ";
-                    stateEncode.removeFrameHash(currentPoc);
+                    stateEncode.removeFrameHash(absolutePoc);
                 }
 
                 // Implemented print out of reference frames used
@@ -591,15 +595,12 @@ void Encoder::setupPtl(H &h)
 
     for (auto level : levels)
     {
-        if (level.parameters[Level::MaxLumaPs] >= h[PicSizeInSamplesY()]
-                                                    && level.parameters[Level::MaxLumaSr] >= h[PicSizeInSamplesY()] * this->frameRate)
+        if (level.parameters[Level::MaxLumaPs] >= h[PicSizeInSamplesY()] && level.parameters[Level::MaxLumaSr] >= h[PicSizeInSamplesY()] * this->frameRate)
         {
             h[general_level_idc()] = level.level_idc();
             this->bitstreamLevel = level;
             if(this->stateEncode.useRateControl)
-            {
-                this->stateEncode.rateControlEngine->initCpbInfo(level.parameters[Level::MaxCPB]*1000);
-            }
+                this->stateEncode.rateControlParams->initCpbInfo(static_cast<int>(level.parameters[Level::MaxCPB]) * 1000);
             break;
         }
     }
@@ -619,6 +620,8 @@ void Encoder::setupVps(H &hhh, ProfileTierLevel *ptl)
     h[vps_reserved_0xffff_16bits()] = 0xffff;
     h[vps_reserved_three_2bits()] = 3;
 
+
+    h[vps_sub_layer_ordering_info_present_flag()] = 1;
     h[vps_max_dec_pic_buffering_minus1(0)] = 4;
     h[vps_max_num_reorder_pics(0)] = 3;
     h[vps_temporal_id_nesting_flag()] = 1;
@@ -638,6 +641,16 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         h[chroma_format_idc()] = 1;
         h[pic_width_in_luma_samples()] = this->pictureWidth;
         h[pic_height_in_luma_samples()] = this->pictureHeight;
+
+        if (this->confWinBottomOffset)
+        {
+            h[conformance_window_flag()] = 1;
+            h[conf_win_left_offset()] = 0;
+            h[conf_win_right_offset()] = 0;
+            h[conf_win_top_offset()] = 0;
+            h[conf_win_bottom_offset()] = this->confWinBottomOffset / (h[SubHeightC()]);
+        }
+
         h[bit_depth_luma_minus8()] = this->bitDepth - 8;
         h[bit_depth_chroma_minus8()] = this->bitDepth - 8;
         h[sps_temporal_id_nesting_flag()] = 1;
@@ -674,7 +687,7 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         }
         h[strong_intra_smoothing_enabled_flag()] = this->booleanSwitchSetting("strong-intra-smoothing", true);
         h[amp_enabled_flag()] = this->stateEncode.amp;
-        h[sample_adaptive_offset_enabled_flag()] = !!(this->vm.at("sao").as<bool>() && !this->vm.at("no-sao").as<bool>());
+        h[sample_adaptive_offset_enabled_flag()] = this->stateEncode.sao;
         h[sps_temporal_mvp_enabled_flag()] = 1;
     }
 
@@ -738,6 +751,7 @@ bool Encoder::writeVui()
     if (this->vm.count("colour-matrix"))            return true;
     if (this->vm.count("chroma-loc"))               return true;
     if (this->vm["field-coding"].as<bool>())        return true;
+    if (this->vm["frame-doubling"].as<bool>())      return true;
     return false;
 }
 
@@ -864,6 +878,12 @@ void Encoder::setupVui(H &h)
     h[neutral_chroma_indication_flag()] = 0;
 
     if ((vm["field-coding"].as<bool>()))
+    {
+        h[vui_hrd_parameters_present_flag()] = 0;
+        h[field_seq_flag()] = 0;
+        h[frame_field_info_present_flag()] = 1;
+    }
+    else if ((vm["frame-doubling"].as<bool>()))
     {
         h[vui_hrd_parameters_present_flag()] = 0;
         h[field_seq_flag()] = 0;

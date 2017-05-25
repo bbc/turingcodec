@@ -41,6 +41,7 @@ For more information, contact us at info @ turingcodec.org.
 #pragma optimize ("", off)
 
 namespace po = boost::program_options;
+using std::string;
 
 
 // custom parsing for "--speed" command-line option
@@ -65,7 +66,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
     optionsInput.add_options()
                 ("input-res", po::value<std::string>()->required(), "video frame resolution <width>x<height>")
                 ("seek", po::value<size_t>(0), "number of initial frames to be omitted before encoding starts")
-                ("frames", po::value<size_t>()->required(), "number of frames to encode")
+                ("frames", po::value<size_t>()->required(), "number of frames to encode") // <review - would be better if this was not required so encoder can encode whole sequence
                 ("frame-rate", po::value<double>()->required(), "sequence frame rate") // <review - this needs to be a rational number for, e.g. 30000/1001 framerates
                 ("bit-depth", po::value<int>()->default_value(8), "video bit depth (of both input YUV and output stream)");
     options.add(optionsInput);
@@ -102,6 +103,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
     optionsStructure.add_options()
         ("shot-change", po::bool_switch()->default_value(false), "enable shot change detection")
         ("field-coding", po::bool_switch()->default_value(false), "enable field coding")
+        ("frame-doubling", po::bool_switch()->default_value(false), "enable frame doubling")
         ("max-gop-n", po::value<int>()->default_value(250), "maximum intra picture interval")
         ("max-gop-m", po::value<int>()->default_value(8), "maximum anchor picture interval (1 or 8)")
         ("segment", po::value<int>()->default_value(-1), "Enable IDR segmentation (-1 for Disabled)")
@@ -114,7 +116,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
     po::options_description optionsTools("Coding tool options");
     optionsTools.add_options()
                 ("deblock", po::bool_switch()->default_value(true), "enable deblocking filter")
-                ("sao", po::bool_switch()->default_value(false), "enable sample adaptive offset filter")
+                ("sao", po::bool_switch(), "enable sample adaptive offset filter")
                 ("strong-intra-smoothing", po::bool_switch(), "enable strong intra smoothing")
                 ("rqt", po::bool_switch(), "enable one level of rqt (inter coding only)")
                 ("amp", po::bool_switch(), "enable asymmetric motion partitions")
@@ -242,13 +244,16 @@ const char *gitDescribe()
     return (s[0] >= '0' && s[0] <= '9') ? s : "<unknown>";
 }
 
-int turing_check_binary_option(const char *option)
+bool turing_check_binary_option(const char *option)
 {
     map<string, bool> supportedBinaryOptions; // option name and default value
 
+    // review: duplication here, would be better to enumerate these options where they are originally defined
+    // review: default values are not used
     supportedBinaryOptions["aq"] = false;
     supportedBinaryOptions["shot-change"] = false;
     supportedBinaryOptions["field-coding"] = false;
+    supportedBinaryOptions["frame-doubling"] = false;
     supportedBinaryOptions["wpp"] = true;
     supportedBinaryOptions["repeat-headers"] = true;
     supportedBinaryOptions["deblock"] = true;
@@ -272,7 +277,7 @@ int turing_check_binary_option(const char *option)
     supportedBinaryOptions["no-parallel-processing"] = true;
 
     string currentOption(option);
-    int isBinaryOption = 0;
+    bool isBinaryOption = 0;
 
     if(currentOption == "no-parallel-processing")
     {
@@ -281,10 +286,10 @@ int turing_check_binary_option(const char *option)
     else
     {
         // Strip out any no- prefix for disabling-like options
-        const int idx = currentOption.find("no-", 0);
+        auto const idx = currentOption.find("no-", 0);
         if(idx != string::npos)
         {
-            const int length = currentOption.length() - 3;
+            auto const length = currentOption.length() - 3;
             currentOption = currentOption.substr(idx+3, length);
         }
 
@@ -614,7 +619,6 @@ int encode(int argc, const char* const argv[])
         {
             if (encoder->vm["verbosity"].as<int>())
                 encoder->encoder->printHeader(std::cout, encoder->inputFilename, encoder->outputFilename);
-            //ofs << *turing_encode_headers(encoder);
 
             for (int i = 0; i < nFrames; ++i)
             {

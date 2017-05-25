@@ -104,7 +104,7 @@ struct StatePieces
     StateReconstructionCache<Sample> *stateReconstructionCache; // review - better as function parameter than stored here?
 
     template <class Rectangular>
-    void copyBefore(Rectangular const &rectangular,		 StatePieces &other, int mask = 0x7)
+    void copyBefore(Rectangular const &rectangular, StatePieces &other, int mask = 0x7)
     {
         this->stateReconstructionCache = other.stateReconstructionCache;
 
@@ -112,10 +112,10 @@ struct StatePieces
         this->parentPieces[0] = other.pieces[0][after];
         this->parentPieces[1] = other.pieces[1][after];
         this->parentPieces[2] = other.pieces[2][after];
+        this->zz[0] = other.zz[0];
+        this->zz[1] = other.zz[1];
+        this->zz[2] = other.zz[2];
 #ifdef DEBUG_PIECES
-        this->z[0] = other.z[0];
-        this->z[1] = other.z[1];
-        this->z[2] = other.z[2];
         for (int cIdx = 0; cIdx < 3; ++cIdx)
         {
             typename ReconstructionCache<Sample>::Piece *p = this->pieces[cIdx][before];
@@ -125,33 +125,31 @@ struct StatePieces
 #endif
     }
 
-// Review - the [before] entries may be duplication of CandidateStash<Sample> buffer pointer??
-template <class Rectangular>
-void copyAfter(Rectangular const &rectangular, const StatePieces &other, int mask = 0x7)
-{
-    other.keep = true;
-    for (int cIdx = 0; cIdx < 3; ++cIdx)
+    // Review - the [before] entries may be duplication of CandidateStash<Sample> buffer pointer??
+    template <class Rectangular>
+    void copyAfter(Rectangular const &rectangular, const StatePieces &other, int mask = 0x7)
     {
-        if (!(mask & (1 << cIdx))) continue;
-
-        assert(other.parentPieces[cIdx] >= this->pieces[cIdx][before]);
-        assert(other.parentPieces[cIdx] <= this->pieces[cIdx][after]);
-
-        while (this->pieces[cIdx][after] != other.parentPieces[cIdx])
+        other.keep = true;
+        for (int cIdx = 0; cIdx < 3; ++cIdx)
         {
-            --this->pieces[cIdx][after];
-#ifdef DEBUG_PIECES
-            this->StatePieces<Sample>::z[cIdx] -= 1 << (2 * this->pieces[cIdx][after]->log2Size);
-#endif
-            this->stateReconstructionCache->components[cIdx].freeBlock(*this->pieces[cIdx][after]);
-        }
+            if (!(mask & (1 << cIdx))) continue;
 
-        typename ReconstructionCache<Sample>::Piece const *src = other.pieces[cIdx][before];
-        typename ReconstructionCache<Sample>::Piece const *srcEnd = other.pieces[cIdx][after];
+            assert(other.parentPieces[cIdx] >= this->pieces[cIdx][before]);
+            assert(other.parentPieces[cIdx] <= this->pieces[cIdx][after]);
 
-        while (src != srcEnd)
-        {
-            this->appendPiece(
+            while (this->pieces[cIdx][after] != other.parentPieces[cIdx])
+            {
+                --this->pieces[cIdx][after];
+                this->StatePieces<Sample>::zz[cIdx] -= 1 << (2 * this->pieces[cIdx][after]->log2Size);
+                this->stateReconstructionCache->components[cIdx].freeBlock(*this->pieces[cIdx][after]);
+            }
+
+            typename ReconstructionCache<Sample>::Piece const *src = other.pieces[cIdx][before];
+            typename ReconstructionCache<Sample>::Piece const *srcEnd = other.pieces[cIdx][after];
+
+            while (src != srcEnd)
+            {
+                this->appendPiece(
                     cIdx,
 #ifdef DEBUG_PIECES
                     src->rc,
@@ -161,148 +159,143 @@ void copyAfter(Rectangular const &rectangular, const StatePieces &other, int mas
                     src->log2Size,
                     src->i);
 
-            ++src;
+                ++src;
+            }
         }
     }
-}
 
-// Check that there are the expected topology of pieces in the respective buffer.
-template <class Rectangular>
-void checkPieces(int cIdx, When when, const Rectangular &rectangular)
-{
-#ifdef DEBUG_PIECES
-    int z0 = cartesianToZ(xPositionOf(rectangular), yPositionOf(rectangular));
-    if (when == before)
+    // Check that there are the expected topology of pieces in the respective buffer.
+    template <class Rectangular>
+    void checkPieces(int cIdx, When when, const Rectangular &rectangular)
     {
-        if (this->pieces[cIdx][before] != this->pieces[cIdx][after])
+#ifdef DEBUG_PIECES
+        int z0 = cartesianToZ(xPositionOf(rectangular), yPositionOf(rectangular));
+        if (when == before)
         {
+            if (this->pieces[cIdx][before] != this->pieces[cIdx][after])
+            {
+                auto previous = this->pieces[cIdx][after][-1];
+                int z = cartesianToZ(previous.rc.x0, previous.rc.y0);
+                const int size = 1 << (previous.rc.log2TrafoSize + (cIdx ? 1 : 0));
+                z += size * size;
+                if (z != z0)
+                {
+                    std::cout << "expected position before " << rectangular << " actually at (" << previous.rc.x0 + size << ", " << previous.rc.y0 + size << ")\n";
+                    ASSERT(0);
+                }
+            }
+        }
+        else
+        {
+            ASSERT(this->pieces[cIdx][before] != this->pieces[cIdx][after]);
+            z0 += widthOf(rectangular) * heightOf(rectangular);
             auto previous = this->pieces[cIdx][after][-1];
             int z = cartesianToZ(previous.rc.x0, previous.rc.y0);
             const int size = 1 << (previous.rc.log2TrafoSize + (cIdx ? 1 : 0));
             z += size * size;
             if (z != z0)
             {
-                std::cout << "expected position before " << rectangular << " actually at (" << previous.rc.x0 + size << ", " << previous.rc.y0 + size << ")\n";
+                std::cout << "expected position after " << rectangular << " actually at (" << previous.rc.x0 + size << ", " << previous.rc.y0 + size << ")\n";
                 ASSERT(0);
             }
         }
+        assert(this->zz[cIdx] == (z0 >> (cIdx ? 2 : 0)));
+#endif
     }
-    else
+
+    void appendPiece(int cIdx, const residual_coding &rc, int log2Size, int16_t i)
     {
-        ASSERT(this->pieces[cIdx][before] != this->pieces[cIdx][after]);
-        z0 += widthOf(rectangular) * heightOf(rectangular);
-        auto previous = this->pieces[cIdx][after][-1];
-        int z = cartesianToZ(previous.rc.x0, previous.rc.y0);
-        const int size = 1 << (previous.rc.log2TrafoSize + (cIdx ? 1 : 0));
-        z += size * size;
-        if (z != z0)
+#ifdef DEBUG_PIECES
+        int z = zPositionOf(rc);
+        ASSERT(z == (this->zz[cIdx] << (cIdx ? 2 : 0)));
+        if (this->pieces[cIdx][after] != this->pieces[cIdx][before])
         {
-            std::cout << "expected position after " << rectangular << " actually at (" << previous.rc.x0 + size << ", " << previous.rc.y0 + size << ")\n";
-            ASSERT(0);
+            auto &previous = this->pieces[cIdx][after][-1];
+            int zPrev = cartesianToZ(previous.rc.x0, previous.rc.y0);
+            ASSERT(z == zPrev + (1 << (2 * previous.rc.log2TrafoSize + (previous.rc.cIdx ? 2 : 0))));
+        }
+        this->pieces[cIdx][after]->rc = rc;
+#endif
+        this->zz[cIdx] += 1 << (2 * log2Size);
+        this->pieces[cIdx][after]->log2Size = log2Size;
+        this->pieces[cIdx][after]->i = i;
+        ++this->pieces[cIdx][after];
+    }
+
+    // Copy from list of cached reconstructed pieces to reconstructed picture buffer
+    void commit(ThreePlanes<Sample> &picture, coding_quadtree cqt)
+    {
+        {
+            auto p = this->pieces[0][before];
+#ifdef DEBUG_PIECES
+            ASSERT(p->rc.x0 == cqt.x0);
+            ASSERT(p->rc.y0 == cqt.y0);
+#endif
+            this->stateReconstructionCache->components[0].commit(picture[0].offset(cqt.x0, cqt.y0), cqt.log2CbSize, p);
+            ASSERT(p == this->pieces[0][after]);
+        }
+
+        {
+            auto p = this->pieces[1][before];
+#ifdef DEBUG_PIECES
+            ASSERT(p->rc.x0 == cqt.x0);
+            ASSERT(p->rc.y0 == cqt.y0);
+#endif
+            this->stateReconstructionCache->components[1].commit(picture[1].offset(cqt.x0 / 2, cqt.y0 / 2), cqt.log2CbSize - 1, p);
+            ASSERT(p == this->pieces[1][after]);
+        }
+
+        {
+            auto p = this->pieces[2][before];
+#ifdef DEBUG_PIECES
+            ASSERT(p->rc.x0 == cqt.x0);
+            ASSERT(p->rc.y0 == cqt.y0);
+#endif
+            this->stateReconstructionCache->components[2].commit(picture[2].offset(cqt.x0 / 2, cqt.y0 / 2), cqt.log2CbSize - 1, p);
+            ASSERT(p == this->pieces[2][after]);
         }
     }
-    assert(this->z[cIdx] == (z0 >> (cIdx ? 2 : 0)));
-#endif
-}
 
-void appendPiece(int cIdx, const residual_coding &rc, int log2Size, int16_t i)
-{
-#ifdef DEBUG_PIECES
-    int z = zPositionOf(rc);
-    ASSERT(z == (this->z[cIdx] << (cIdx ? 2 : 0)));
-    if (this->pieces[cIdx][after] != this->pieces[cIdx][before])
+    void resetPieces()
     {
-        auto &previous = this->pieces[cIdx][after][-1];
-        int zPrev = cartesianToZ(previous.rc.x0, previous.rc.y0);
-        ASSERT(z == zPrev + (1 << (2 * previous.rc.log2TrafoSize + (previous.rc.cIdx ? 2 : 0))));
-    }
-    this->pieces[cIdx][after]->rc = rc;
-    this->z[cIdx] += 1 << (2 * log2Size);
-#endif
-    this->pieces[cIdx][after]->log2Size = log2Size;
-    this->pieces[cIdx][after]->i = i;
-    ++this->pieces[cIdx][after];
-}
-
-// Copy from list of cached reconstructed pieces to reconstructed picture buffer
-void commit(ThreePlanes<Sample> &picture, coding_quadtree cqt)
-{
-    {
-        auto p = this->pieces[0][before];
-#ifdef DEBUG_PIECES
-        ASSERT(p->rc.x0 == cqt.x0);
-        ASSERT(p->rc.y0 == cqt.y0);
-#endif
-        this->stateReconstructionCache->components[0].commit(picture[0].offset(cqt.x0, cqt.y0), cqt.log2CbSize, p);
-        ASSERT(p == this->pieces[0][after]);
+        this->pieces[0][before] = this->pieces[0][after] = 0;
+        this->pieces[1][before] = this->pieces[1][after] = 0;
+        this->pieces[2][before] = this->pieces[2][after] = 0;
     }
 
+    // Returns a pointer to the first entry in the specified color component's array of entries
+    typename ReconstructionCache<Sample>::Piece *firstPiece(int cIdx, int x, int y)
     {
-        auto p = this->pieces[1][before];
 #ifdef DEBUG_PIECES
-        ASSERT(p->rc.x0 == cqt.x0);
-        ASSERT(p->rc.y0 == cqt.y0);
+        ASSERT(x == this->pieces[cIdx][before]->rc.x0);
+        ASSERT(y == this->pieces[cIdx][before]->rc.y0);
 #endif
-        this->stateReconstructionCache->components[1].commit(picture[1].offset(cqt.x0 / 2, cqt.y0 / 2), cqt.log2CbSize - 1, p);
-        ASSERT(p == this->pieces[1][after]);
+        return this->pieces[cIdx][before];
     }
 
+    // review: why mutable? So that keep can be modified on a const instance?
+    bool mutable keep;
+
+    StatePieces() : keep(false) { }
+
+    ~StatePieces()
     {
-        auto p = this->pieces[2][before];
-#ifdef DEBUG_PIECES
-        ASSERT(p->rc.x0 == cqt.x0);
-        ASSERT(p->rc.y0 == cqt.y0);
-#endif
-        this->stateReconstructionCache->components[2].commit(picture[2].offset(cqt.x0 / 2, cqt.y0 / 2), cqt.log2CbSize - 1, p);
-        ASSERT(p == this->pieces[2][after]);
-    }
-}
-
-void resetPieces()
-{
-    this->pieces[0][before] = this->pieces[0][after] = 0;
-    this->pieces[1][before] = this->pieces[1][after] = 0;
-    this->pieces[2][before] = this->pieces[2][after] = 0;
-}
-
-// Returns a pointer to the first entry in the specified color component's array of entries
-typename ReconstructionCache<Sample>::Piece *firstPiece(int cIdx, int x, int y)
-{
-#ifdef DEBUG_PIECES
-    ASSERT(x == this->pieces[cIdx][before]->rc.x0);
-    ASSERT(y == this->pieces[cIdx][before]->rc.y0);
-#endif
-    return this->pieces[cIdx][before];
-}
-
-bool mutable keep;
-
-StatePieces() : keep(false) { }
-
-~StatePieces()
-{
-    if (!this->keep)
-    {
-        for (int cIdx = 0; cIdx < 3; ++cIdx)
-        {
-            typename ReconstructionCache<Sample>::Piece *p = this->pieces[cIdx][before];
-            intptr_t d = this->pieces[cIdx][after] - p;
-            ASSERT(d >= 0 && d <= 256);
-            while (p != this->pieces[cIdx][after])
+        if (!this->keep)
+            for (int cIdx = 0; cIdx < 3; ++cIdx)
             {
-                this->stateReconstructionCache->components[cIdx].freeBlock(*p++);
+                typename ReconstructionCache<Sample>::Piece *p = this->pieces[cIdx][before];
+                intptr_t d = this->pieces[cIdx][after] - p;
+                ASSERT(d >= 0 && d <= 256);
+                while (p != this->pieces[cIdx][after])
+                    this->stateReconstructionCache->components[cIdx].freeBlock(*p++);
             }
-        }
     }
-}
 
-typename ReconstructionCache<Sample>::Piece *pieces[3/* cIdx */][2 /* after */];
-typename ReconstructionCache<Sample>::Piece *parentPieces[3/* cIdx */];
+    typename ReconstructionCache<Sample>::Piece *pieces[3/* cIdx */][2 /* after */];
+    typename ReconstructionCache<Sample>::Piece *parentPieces[3/* cIdx */];
 
-#ifdef DEBUG_PIECES
-                    // current Z-order address (for debugging)
-                    int z[3/* cIdx */];
-#endif
+    // current Z-order address
+    int zz[3/* cIdx */];
 };
 
 // Review: Candidate<Sample> deserves its own header file
@@ -340,14 +333,14 @@ struct Candidate :
         template <class Rectangular>
         void copyIntraReferenceSamplesLuma(const Candidate<Sample> &other, When when, Rectangular const &rectangular)
         {
-            int intraReferencePadding = std::min(widthOf(rectangular), 32);
+            int intraReferencePadding = std::min(widthOf(rectangular), 32); // review: check
             this->snakeIntraReferenceSamples[0].copyBlockFrom(other.snakeIntraReferenceSamples[0], when, rectangular, 0, intraReferencePadding, intraReferencePadding);
         }
 
         template <class Rectangular>
         void copyIntraReferenceSamplesChroma(const Candidate<Sample> &other, When when, Rectangular const &rectangular)
         {
-            int intraReferencePadding = std::min(widthOf(rectangular), 32) >> 1;
+            int intraReferencePadding = std::min(widthOf(rectangular) >> 1, 32); // review: check
             this->snakeIntraReferenceSamples[1].copyBlockFrom(other.snakeIntraReferenceSamples[1], when, rectangular, 1, intraReferencePadding, intraReferencePadding);
             this->snakeIntraReferenceSamples[2].copyBlockFrom(other.snakeIntraReferenceSamples[2], when, rectangular, 1, intraReferencePadding, intraReferencePadding);
         }
@@ -431,7 +424,7 @@ struct CandidateStash :
         typename Snake<BlockData>::Array<16, 16, 1, 1> snakeVectorMerge;
         typename Snake<Sample>::template Array<64, 64, 32, 32> snakeVectorIntraReferenceSamples[3];
         typename ReconstructionCache<Sample>::Piece entryArray[3][256];
-        CodedData::Type codedDataArray[3 * (8*8*8 + 64*64) / 2];
+        CodedData::Type codedDataArray[(16*8*8 + 64*64) * 3 / 2];
     };
 
 
@@ -439,48 +432,45 @@ struct StateEncodeSubstreamBase :
     StateSubstream,
     CabacWriter,
     ValueConst<constrained_intra_pred_flag, 0>,
+    ValueConst<cross_component_prediction_enabled_flag, 0>,
     ValueConst<ChromaArrayType, 1>,
     ValueCache<MaxTbLog2SizeY>,
     ValueCache<MinTbLog2SizeY>
+{
+    template <class H>
+    StateEncodeSubstreamBase(H &h, std::vector<uint8_t> &buffer) :
+        CabacWriter(buffer),
+        StateSubstream(h),
+        ValueConst<constrained_intra_pred_flag, 0>(h),
+        ValueConst<cross_component_prediction_enabled_flag, 0>(h),
+        ValueConst<::ChromaArrayType, 1>(h),
+        ValueCache<MaxTbLog2SizeY>(h),
+        ValueCache<MinTbLog2SizeY>(h),
+        residual(64, 64, 1, 0, 0, 32)
     {
-        template <class H>
-        StateEncodeSubstreamBase(H &h, std::vector<uint8_t> &buffer) :
-            CabacWriter(buffer),
-            StateSubstream(h),
-            ValueConst<constrained_intra_pred_flag, 0>(h),
-            ValueConst<::ChromaArrayType, 1>(h),
-            ValueCache<MaxTbLog2SizeY>(h),
-            ValueCache<MinTbLog2SizeY>(h),
-            residual(64, 64, 1, 0, 0, 32)
-            {
-                this->mvPreviousInteger2Nx2N[0] = { 0, 0 };
-                this->mvPreviousInteger2Nx2N[1] = { 0, 0 };
-            }
+        this->mvPreviousInteger2Nx2N[0] = { 0, 0 };
+        this->mvPreviousInteger2Nx2N[1] = { 0, 0 };
+    }
 
-        Picture<int16_t> residual;
+    Picture<int16_t> residual;
 
-        coding_quadtree cqt;
+    //coding_quadtree cqt;
 
-        int ctxSet;
-        int greater1Ctx;
-        int cLastAbsLevel;
-        int cLastRiceParam;
-        int baseLevel;
+    int ctxSet;
+    int cRiceParam;
 
-        uint32_t satd;
+    // sum of square differences for each colour component
+    // review: perhaps just need luma and chroma here
+    // review: rename to "distortion" so this can also be used for SATD?
+    int32_t ssd[3 /* cidx */];
+    int32_t ssdPrediction[3 /* cIdx */];
+    uint32_t satd;
 
-        // sum of square differences for each colour component
-        // review: perhaps just need luma and chroma here
-        // review: rename to "distortion" so this can also be used for SATD?
-        int32_t ssd[3 /* cidx */];
+    // best vector from most recent integer motion esarch
+    MotionVector mvPreviousInteger2Nx2N[2 /* refList */];
 
-        int32_t ssdPrediction[3 /* cIdx */];
-
-        // best vector from most recent integer motion esarch
-        MotionVector mvPreviousInteger2Nx2N[2 /* refList */];
-
-        Cost costMvdZero[2 /* refList */][2 /* mvp_lX_flag */];
-    };
+    Cost costMvdZero[2 /* refList */][2 /* mvp_lX_flag */];
+};
 
 
 template <typename Sample>
@@ -502,7 +492,7 @@ struct StateEncodeSubstream :
 
         typename ReconstructionCache<Sample>::Piece interPieces[3/* cIdx */][3 /* cbf */];
 
-        IntraReferenceSamples<Sample> filtered[3];
+        IntraReferenceSamples<Sample> filtered;
         IntraReferenceSamples<Sample> unfiltered[3];
     };
 
@@ -757,7 +747,8 @@ struct StateEncode :
             InputQueue(vm["max-gop-n"].as<int>(), vm["max-gop-m"].as<int>(),
                        vm["field-coding"].as<bool>(),
                        vm["shot-change"].as<bool>(),
-                       vm["segment"].as<int>()),
+                       vm["segment"].as<int>(),
+                       vm["qp"].as<int>()),
             ThreadPool((vm["no-parallel-processing"].as<bool>())? 1 : vm["threads"].as<int>()),
             StateFunctionTables(true,
 #ifdef VALGRIND_FRIENDLY
@@ -776,12 +767,12 @@ struct StateEncode :
         {
             if (bpp == 8)
             {
-                StateReconstructedPicture<uint8_t> &dp = dynamic_cast<StateReconstructedPicture<uint8_t> &>(statePicture);
+                StateReconstructedPicture<uint8_t> &dp = static_cast<StateEncodePicture2<uint8_t> &>(statePicture);
                 o << *dp.picture;
             }
             else if (bpp == 16)
             {
-                StateReconstructedPicture<uint16_t> &dp = dynamic_cast<StateReconstructedPicture<uint16_t> &>(statePicture);
+                StateReconstructedPicture<uint16_t> &dp = static_cast<StateEncodePicture2<uint16_t> &>(statePicture);
                 o << *dp.picture;
             }
             else
@@ -810,22 +801,35 @@ struct StateEncode :
             {
                 if (!this->decodedPictures.empty() && (this->decodedPictures.size() % 2 == 0))
                 {
+                    auto hstate = *this->decodedPictures.front();
                     int size = static_cast<int>(this->decodedPictures.size());
                     if (internalSampleSize == 8 && externalSampleSize == 8)
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            StateReconstructedPicture<uint8_t> &dptop = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[0]);
-                            StateReconstructedPicture<uint8_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint8_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint8_t> &dptop = static_cast<StateEncodePicture2<uint8_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint8_t> &dpbottom = static_cast<StateEncodePicture2<uint8_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {
 
                                 if (this->fileOutYuvFrames)
                                 {
-                                    auto &top = *dptop.picture;
-                                    auto &bottom = *dpbottom.picture;
-                    writeFields(this->fileOutYuvFrames, top, bottom);
+                                    ThreePlanes<uint8_t> conformanceWindowTop = { *dptop.picture,
+                                        hstate[SubWidthC()] * hstate[conf_win_left_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_top_offset()],
+                                        hstate[SubWidthC()] * hstate[conf_win_right_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_bottom_offset()] };
+                                    ThreePlanes<uint8_t> conformanceWindowBottom = { *dpbottom.picture,
+                                        hstate[SubWidthC()] * hstate[conf_win_left_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_top_offset()],
+                                        hstate[SubWidthC()] * hstate[conf_win_right_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_bottom_offset()] };
+
+                                    auto &top = conformanceWindowTop;
+                                    auto &bottom = conformanceWindowBottom;
+
+                                    writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
                                 if (this->fileOutYuvPictures)
@@ -844,16 +848,27 @@ struct StateEncode :
                     {
                         for (int i = 0; i < size; i += 2)
                         {
-                            StateReconstructedPicture<uint16_t> &dptop = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[0]);
-                            StateReconstructedPicture<uint16_t> &dpbottom = dynamic_cast<StateReconstructedPicture<uint16_t> &>(*this->decodedPictures[1]);
+                            StateReconstructedPicture<uint16_t> &dptop = static_cast<StateEncodePicture2<uint16_t> &>(*this->decodedPictures[0]);
+                            StateReconstructedPicture<uint16_t> &dpbottom = static_cast<StateEncodePicture2<uint16_t> &>(*this->decodedPictures[1]);
 
                             if (this->decodedPictures[0]->reconstructed && this->decodedPictures[1]->reconstructed)
                             {
 
                                 if (this->fileOutYuvFrames)
                                 {
-                                    auto &top = *dptop.picture;
-                                    auto &bottom = *dpbottom.picture;
+                                    ThreePlanes<uint16_t> conformanceWindowTop = { *dptop.picture,
+                                        hstate[SubWidthC()] * hstate[conf_win_left_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_top_offset()],
+                                        hstate[SubWidthC()] * hstate[conf_win_right_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_bottom_offset()] };
+                                    ThreePlanes<uint16_t> conformanceWindowBottom = { *dpbottom.picture,
+                                        hstate[SubWidthC()] * hstate[conf_win_left_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_top_offset()],
+                                        hstate[SubWidthC()] * hstate[conf_win_right_offset()],
+                                        hstate[SubHeightC()] * hstate[conf_win_bottom_offset()] };
+
+                                    auto &top = conformanceWindowTop;
+                                    auto &bottom = conformanceWindowBottom;
                                     writeFields(this->fileOutYuvFrames, top, bottom);
                                 }
 
@@ -874,6 +889,8 @@ struct StateEncode :
         }
         bool scd;
         bool fieldcoding;
+        bool sao;
+        bool framedoubling;
         bool saoslow;
         bool amp;
         bool smp;
@@ -894,7 +911,7 @@ struct StateEncode :
         bool decodedHashSei;
         int verbosity;
         int gopM;
-        int segmentLength;
+        int baseQp;
         int maxnummergecand;
         size_t concurrentFrames;
         int internalbitdepth;
@@ -912,7 +929,9 @@ struct StateEncode :
         std::ofstream fileOutYuvPictures;
         std::ofstream fileOutYuvFrames;
 
-        std::unique_ptr<SequenceController> rateControlEngine;
+        //std::unique_ptr<SequenceController> rateControlEngine;
+        std::shared_ptr<RateControlParameters> rateControlParams;
+        map<int, SequenceController*> rateControlMap;
         std::unique_ptr<PsnrAnalysis> psnrAnalysis;
         bool enableProfiler;
 

@@ -1122,7 +1122,7 @@ void testSad(int *error_count, havoc_instruction_set mask)
         b[0].width = partitions[i][0];
         b[0].height = partitions[i][1];
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_sad, invoke_sad, mismatch_sad, mask, 100000);
+        *error_count += havoc_test(&b[0], &b[1], init_sad, invoke_sad, mismatch_sad, mask, 10);
     }
 }
 
@@ -1248,7 +1248,7 @@ void testSadMultiref(int *error_count, havoc_instruction_set mask)
         b[0].width = partitions[i][0];
         b[0].height = partitions[i][1];
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_sad_multiref, invoke_sad_multiref, mismatch_sad_multiref, mask, 1000);
+        *error_count += havoc_test(&b[0], &b[1], init_sad_multiref, invoke_sad_multiref, mismatch_sad_multiref, mask, 10);
     }
 }
 

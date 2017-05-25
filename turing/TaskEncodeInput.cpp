@@ -148,7 +148,8 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
     // DPB state update - may bump pictures...
     statePictures->sliceHeaderDone(h);
     auto &picture = h[Concrete<StatePicture>()];
-    setupStateReconstructedPicture(picture, h);
+    StateEncode* stateEncode = h;
+    setupStateReconstructedPicture(picture, h, stateEncode->saoslow);
 
     // Further DPB state update - may also bump pictures
 
@@ -164,10 +165,11 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
     // Allocate various picture memories
     response.picture->resize<Sample>(h);
     
-    StateEncode* stateEncode = h;
+    
 
     if (stateEncode->useRateControl)
     {
+        stateEncode->rateControlParams->takeTokenOnRCLevel();
         bool isShotChange = response.picture->docket->isShotChange;
         int currentPictureLevel = response.picture->docket->sopLevel;
         int currentPoc = response.picture->docket->poc;
@@ -178,35 +180,40 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
 
         if (h[slice_type()] == I)
         {
-            stateEncode->rateControlEngine->initNewIntraPeriod(response.picture->docket);
-            stateEncode->rateControlEngine->pictureRateAllocationIntra(response.picture->docket);
-            stateEncode->rateControlEngine->initNewSop(response.picture->docket);
+            if (docket->absolutePoc == docket->segmentPoc)
+            {
+                
+                assert(stateEncode->rateControlMap.find(docket->segmentPoc) == stateEncode->rateControlMap.end());
+                SequenceController *currentSequenceController = new SequenceController(stateEncode->rateControlParams);
+                stateEncode->rateControlMap[docket->segmentPoc] = currentSequenceController;
+            }
+
+            stateEncode->rateControlMap.find(segmentPoc)->second->initNewIntraPeriod(response.picture->docket);
+            stateEncode->rateControlMap.find(segmentPoc)->second->pictureRateAllocationIntra(response.picture->docket,stateEncode->rateControlParams->cpbInfo);
+            stateEncode->rateControlMap.find(segmentPoc)->second->initNewSop(response.picture->docket);
         }
         else
         {
-            if (currentPictureLevel == 1)
+            //if (currentPictureLevel == 1)
+            if(stateEncode->rateControlMap.find(segmentPoc)->second->bInitNewSop(response.picture->docket))
             {
                 // New SOP starts, set the rate budget for GOP and this current picture
-                stateEncode->rateControlEngine->initNewSop(response.picture->docket);
+                stateEncode->rateControlMap.find(segmentPoc)->second->initNewSop(response.picture->docket);
             }
-            stateEncode->rateControlEngine->pictureRateAllocation(response.picture->docket);
+            stateEncode->rateControlMap.find(segmentPoc)->second->pictureRateAllocation(response.picture->docket,stateEncode->rateControlParams->cpbInfo);
         }
 
         // Compute lambda
-        response.picture->lambda = stateEncode->rateControlEngine->estimatePictureLambda(currentPoc);
+        response.picture->lambda = stateEncode->rateControlMap.find(segmentPoc)->second->estimatePictureLambda(currentPoc);
 
         // Derive QP from lambda
-        int currentQP = stateEncode->rateControlEngine->deriveQpFromLambda(response.picture->lambda, h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
+        int currentQP = stateEncode->rateControlMap.find(segmentPoc)->second->deriveQpFromLambda(response.picture->lambda, h[slice_type()] == I, currentPictureLevel, h[PicOrderCntVal()]);
 
         response.picture->qpFactor = response.picture->docket->qpFactor;
-        h[slice_qp_delta()] = currentQP - stateEncode->rateControlEngine->getBaseQp();
+        h[slice_qp_delta()] = currentQP - stateEncode->rateControlMap.find(segmentPoc)->second->getBaseQp();
         response.picture->reciprocalLambda.set(1.0 / response.picture->lambda);
         response.picture->reciprocalSqrtLambda = sqrt(1.0 / response.picture->lambda);
-#if WRITE_RC_LOG
-        char data[100];
-        sprintf(data, "| %06d | %10d | %9.2f | %4d |", response.picture->docket->poc, stateEncode->rateControlEngine->getPictureTargetBits(h[PicOrderCntVal()]), response.picture->lambda, currentQP);
-        stateEncode->rateControlEngine->writetoLogFile(data);
-#endif
+        stateEncode->rateControlParams->releaseTokenOnRCLevel();
     }
     else
     {
@@ -228,7 +235,10 @@ void TaskEncodeInput<H>::startPictureEncode(StateEncode::Response &response, std
         stateEncode->responses.push_back(response);
         if (stateEncode->useRateControl)
         {
-            stateEncode->rateControlEngine->decreaseNumLeftSameHierarchyLevel(response.picture->docket);
+            int segmentPoc = response.picture->docket->segmentPoc;
+            stateEncode->rateControlParams->takeTokenOnRCLevel();
+            stateEncode->rateControlMap.find(segmentPoc)->second->decreaseNumLeftSameHierarchyLevel(response.picture->docket);
+            stateEncode->rateControlParams->releaseTokenOnRCLevel();
         }
         stateEncode->responsesAvailable.notify_all();
     }
@@ -256,15 +266,14 @@ bool TaskEncodeInput<H>::run()
         StateEncode *stateEncode = this->h;
         InputQueue *inputQueue = this->h;
 
-        inputQueue->preanalyse();
         threadPool->lock();
+        inputQueue->preanalyse();
         if (this->blocked())
         {
             threadPool->unlock();
             return true;
         }
 
-        //inputQueue->preanalyse();
         auto docket = inputQueue->getDocket();
         const bool eos = inputQueue->eos();
         threadPool->unlock();
@@ -327,7 +336,6 @@ bool TaskEncodeInput<H>::run()
             {
                 response.hungry = true;
                 response.done = true;
-
 
                 std::unique_lock<std::mutex> lock(threadPool->mutex());
                 stateEncode->responses.push_front(response);

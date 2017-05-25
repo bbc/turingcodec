@@ -113,8 +113,9 @@ extern "C" {
     X(5, SSE41, "SSE4.1") \
     X(6, SSE42, "SSE4.2") \
     X(7, LZCNT, "lzcnt support") \
-    X(8, AVX, "AVX") \
-    X(9, AVX2, "AVX2")
+    X(8, POPCNT, "popcnt support") \
+    X(9, AVX, "AVX") \
+    X(10, AVX2, "AVX2")
 
 
     /* bitmask type for describing instruction sets */

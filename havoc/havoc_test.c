@@ -43,7 +43,7 @@ int havoc_test_run(
     else while (count < iterations)
     {
         const havoc_timestamp start = havoc_get_timestamp();
-        f(boundTest, 4);
+        f(boundTest, 40);
         const havoc_timestamp duration = havoc_get_timestamp() - start;
 
         if (warmup == 0)
@@ -58,7 +58,7 @@ int havoc_test_run(
             else 	if (7 * duration * count <= 8 * 4 * sum)
             {
                 // duration close to mean
-                count += 4;
+                count += 40;
                 sum += duration;
             }
             else

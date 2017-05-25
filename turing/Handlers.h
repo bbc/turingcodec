@@ -80,7 +80,7 @@ struct Element
 template <class F, class H, class Enable = void>
 struct CopyValueToState
 {
-    CopyValueToState(H &h, F &f)
+    CopyValueToState(H &, F const &)
     {
     }
 };
@@ -156,7 +156,7 @@ PointerTuple<States...>
 // Specialisation for tuple size > 1.
 template <template <typename> class Verb, class Specialisation, class State, class ...States>
 struct Handler<Verb<Specialisation>, State, States...> :
-PointerTuple<State, States...>
+    PointerTuple<State, States...>
 {
     // Creates a new handler containing all of our state pointers plus one more.
     template <class StateExtra>
@@ -192,6 +192,7 @@ PointerTuple<State, States...>
     typedef Verb<void> Tag;
     typedef Specialisation Mode;
 };
+
 
 
 // Construct allowing Verb to force values to constants
@@ -237,24 +238,32 @@ Access<V, PointerTuple<States...>>
 };
 
 
-                                // Helper macros to aid definition of defined values.
+// Helper macros to aid definition of defined values.
 #define DEFINE_DERIVED_LONG(V) \
-template <class H> \
-struct Derive<V, H> \
-: \
-NoAccess \
-{ \
-typedef ValueType<V>::Type Type; \
-static Type get(V v, H &h)
+    template <class H> \
+    struct Derive<V, H> \
+        : \
+        NoAccess \
+    { \
+        typedef ValueType<V>::Type Type; \
+        static inline Type get(V v, H &h)
 
 
 #define DEFINE_DERIVED(V, F) \
-struct V { }; \
-DEFINE_DERIVED_LONG(V) \
-{ \
-    return F; \
-} \
-}; \
+    struct V { }; \
+    DEFINE_DERIVED_LONG(V) \
+        { \
+            return F; \
+        } \
+    }; \
+
+
+// Convenience function
+template <class V, class H>
+static inline typename ValueType<V>::Type derive(V v, H &h)
+{
+    return Derive<V, H>::get(v, h);
+}
 
 
 // A metafunction to return the expected value of elements whose value
@@ -266,14 +275,14 @@ template <class V> struct Fixed;
 template <class V, class H>
 struct Derive <V, H, typename std::enable_if<Fixed<V>::value == Fixed<V>::value>::type> :
     NoAccess
-    {
-        typedef typename ValueType<V>::Type Type;
+{
+    typedef typename ValueType<V>::Type Type;
 
-        static void set(V, Type x, H &h)
-        {
-            assert(x == Fixed<V>::value);
-        }
-    };
+    static void set(V, Type x, H &h)
+    {
+        assert(x == Fixed<V>::value);
+    }
+};
 
 
 // If value is found in State, access it there
@@ -317,7 +326,7 @@ template <> struct IsRecursive<struct transform_tree> : std::true_type {};
 template <class F, class H>
 struct CopyValueToState<F, H, typename std::enable_if<Accessible<Struct<F>, H>::value && !IsRecursive<F>::value>::type>
 {
-    CopyValueToState(H &h, F &f)
+    CopyValueToState(H &h, F const &f)
     {
         h[Struct<F>()] = f;
     }
@@ -328,8 +337,8 @@ struct CopyValueToState<F, H, typename std::enable_if<Accessible<Struct<F>, H>::
 template <class F, class H>
 struct CopyValueToState<F, H, typename std::enable_if<Accessible<Struct<F>, H>::value && IsRecursive<F>::value>::type >
 {
-    CopyValueToState(H &h, F &f) :
-    copy(h[Struct<F>()])
+    CopyValueToState(H &h, F const &f) :
+        copy(h[Struct<F>()])
     {
         this->previous = this->copy;
         h[Struct<F>()] = f;

@@ -45,6 +45,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "LoopFilter.h"
 #include "havoc/ssd.h"
 #include "SyntaxSei.h"
+#include "EncodeResidual.h"
 #include <cassert>
 #include <iostream>
 #include <cstdlib>
@@ -77,27 +78,23 @@ template <class F> struct EstimateAndSet : EstimateRate<F> { };
 template <> struct EstimateAndSet<void> { };
 
 template <>
-struct EstimateAndSet<Element<cu_qp_delta_abs, ae>>
-{
-    template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
-    {
-        h[IsCuQpDeltaCoded()] = 1;
-        int qpY = static_cast<QpState*>(h)->getQp(0) - h[QpBdOffsetY()];
-        qpY = Clip3(0, 51, qpY);
-        static_cast<QpState*>(h)->setCodedQp(qpY);
-    }
-};
-
-template <>
 struct SetParameters<Element<cu_qp_delta_abs, ae>>
 {
     template <class H> static void go(Element<cu_qp_delta_abs, ae> fun, H &h)
     {
+        QpState *qpState = h;
         h[IsCuQpDeltaCoded()] = 1;
-        int qpY = static_cast<QpState*>(h)->getQp(0) - h[QpBdOffsetY()];
+        int qpY = qpState->getQp(0) - h[QpBdOffsetY()];
+
         qpY = Clip3(0, 51, qpY);
-        static_cast<QpState*>(h)->setCodedQp(qpY);
+        qpState->setCodedQp(qpY);
     }
+};
+
+template <>
+struct EstimateAndSet<Element<cu_qp_delta_abs, ae>> :
+    SetParameters<Element<cu_qp_delta_abs, ae>>
+{
 };
 
 template <> struct Write<video_parameter_set_rbsp>
@@ -436,16 +433,59 @@ struct EntropyEstimate
     }
 };
 
+static EntropyEstimate<Cost> entropyEstimate;
 
-static Cost measureEncodeDecision(ContextModel &contextModel, int binVal)
+struct TableEntropyState
 {
-    static const EntropyEstimate<Cost> entropyEstimate;
-    Cost const rate = entropyEstimate.table[contextModel.state ^ binVal];
+    uint32_t table[128];
+    TableEntropyState()
+    {
+        static const uint32_t nextStateMps[128] =
+        {
+            2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+            18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+            34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+            50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+            66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+            82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
+            98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
+            114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 124, 125, 126, 127
+        };
+        static const uint32_t nextStateLps[128] =
+        {
+            1, 0, 0, 1, 2, 3, 4, 5, 4, 5, 8, 9, 8, 9, 10, 11,
+            12, 13, 14, 15, 16, 17, 18, 19, 18, 19, 22, 23, 22, 23, 24, 25,
+            26, 27, 26, 27, 30, 31, 30, 31, 32, 33, 32, 33, 36, 37, 36, 37,
+            38, 39, 38, 39, 42, 43, 42, 43, 44, 45, 44, 45, 46, 47, 48, 49,
+            48, 49, 50, 51, 52, 53, 52, 53, 54, 55, 54, 55, 56, 57, 58, 59,
+            58, 59, 60, 61, 60, 61, 60, 61, 62, 63, 64, 65, 64, 65, 66, 67,
+            66, 67, 66, 67, 68, 69, 68, 69, 70, 71, 70, 71, 70, 71, 72, 73,
+            72, 73, 72, 73, 74, 75, 74, 75, 74, 75, 76, 77, 76, 77, 126, 127
+        };
 
-    if (binVal != contextModel.getMps())
-        contextModel.updateLps();
-    else
-        contextModel.updateMps();
+        for (int i = 0; i < 128; ++i)
+        {
+            table[i] = entropyBitsHm[i] | (((i % 2) ? nextStateLps : nextStateMps)[i] << 24);
+            table[i] &= ~0x1000000;
+        }
+    }
+};
+
+static TableEntropyState tableEntropyState;
+
+static inline Cost measureEncodeDecision(ContextModel &contextModel, int binVal)
+{
+    auto const i = contextModel.state ^ binVal;
+    auto entry = tableEntropyState.table[i];
+
+    auto mps = contextModel.state & 1;
+    if (i == 1)
+        mps = binVal;
+
+    contextModel.state = (entry >> 24) | mps;
+
+    Cost rate;	
+    rate.set(entry & 0x1ffffff, 15);
 
     return rate;
 }
@@ -591,6 +631,7 @@ struct Encode<sao>
 };
 
 template <class E> struct SetParameters<Element<E, ae>> : Null<Element<E, ae>> {};
+template <> struct SetParameters<residual_coding> : Null<residual_coding> {};
 
 
 template <>
@@ -600,52 +641,14 @@ struct Encode<coding_tree_unit>
     {
         using Sample = typename SampleType<H>::Type;
 
-        //#ifdef SNAKE_DEBUG
-        coding_quadtree cqt(
-            (h[CtbAddrInRs()] % h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
-            (h[CtbAddrInRs()] / h[PicWidthInCtbsY()]) << h[CtbLog2SizeY()],
-            h[CtbLog2SizeY()],
-            0);
-        //#endif
-
         preCtu(h);
 
         Syntax<coding_tree_unit>::go(ctu, h);
 
         postCtu(h);
+
         StatePicture *statePicture = h;
         statePicture->loopFilterPicture->processCtu(h, ctu);
-
-#ifdef SNAKE_DEBUG
-        bool lastCtuInRow = cqt.x0 + (1 << cqt.log2CbSize) >= h[pic_width_in_luma_samples()];
-
-        if (lastCtuInRow)
-        {
-            cqt.x0 += h[CtbSizeY()];
-            --cqt.log2CbSize;
-
-            StateReconstructedPicture<Sample> *stateReconstructedPicture = h;
-            Picture<Sample> &reconstructed = *stateReconstructedPicture->picture;
-
-            for (int cIdx = 0; cIdx < 3; ++cIdx)
-            {
-                Raster<Sample> recSamples = reconstructed(-(1 << cqt.log2CbSize), 0, cIdx);
-
-                NeighbourhoodEnc<Sample> *neighbourhood = h;
-                neighbourhood->snakeIntraReferenceSamples[cIdx].copyFrom2D(cqt, recSamples, cIdx ? 1 : 0);
-            }
-
-            cqt.y0 += 1 << cqt.log2CbSize;
-
-            for (int cIdx = 0; cIdx < 3; ++cIdx)
-            {
-                Raster<Sample> recSamples = reconstructed(-(1 << cqt.log2CbSize), 0, cIdx);
-
-                NeighbourhoodEnc<Sample> *neighbourhood = h;
-                neighbourhood->snakeIntraReferenceSamples[cIdx].copyFrom2D(cqt, recSamples, cIdx ? 1 : 0);
-    }
-}
-#endif
     }
 };
 
@@ -723,11 +726,10 @@ struct Encode<coding_quadtree>
             candidateCheck.ContextsAndCost::copy(*originalCandidate);
         }
 
-#ifdef DEBUG_PIECES
-        candidate.StatePieces<Sample>::z[0] = zPositionOf(cqt);
-        candidate.StatePieces<Sample>::z[1] = zPositionOf(cqt) >> 2;
-        candidate.StatePieces<Sample>::z[2] = zPositionOf(cqt) >> 2;
-#endif
+        // review: zz could reset to zero at every CTU
+        candidate.StatePieces<Sample>::zz[0] = zPositionOf(cqt);
+        candidate.StatePieces<Sample>::zz[1] = zPositionOf(cqt) >> 2;
+        candidate.StatePieces<Sample>::zz[2] = zPositionOf(cqt) >> 2;
 
         *currentCandidate = &candidate;
 
@@ -744,15 +746,18 @@ struct Encode<coding_quadtree>
                 if (stateEncode->useRateControl)
                 {
                     StateEncodePicture *stateEncodePicture = h;
-                    stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    stateEncode->rateControlParams->takeTokenOnRCLevel();
+                    int segmentPoc = stateEncodePicture->docket->segmentPoc;
+                    stateEncode->rateControlMap.find(segmentPoc)->second->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    //stateEncode->rateControlEngine->setValidityFlag(false, h[CtbAddrInRs()], h[PicOrderCntVal()]);
 
                     // Step 1: Allocate the bit budget for the current CTU
-                    stateEncode->rateControlEngine->computeCtbTargetBits(h, h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                    stateEncode->rateControlMap.find(segmentPoc)->second->computeCtbTargetBits(h, h[slice_type()] == I, h[CtbAddrInRs()], h[PicOrderCntVal()], stateEncode->rateControlParams->cpbInfo);
 
                     // Step 2: Estimate the lambda and QP from the model and the allocated bits
-                    int qp = stateEncode->rateControlEngine->estimateCtbLambdaAndQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
-
+                    int qp = stateEncode->rateControlMap.find(segmentPoc)->second->estimateCtbLambdaAndQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, qp, 0);
+                    stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 }
                 else
                     static_cast<QpState *>(h)->setQpInternal(0, 0, 64, h[SliceQpY()], 0);
@@ -833,7 +838,7 @@ struct Encode<coding_quadtree>
             // Measure distortion again, check that it is same as that measured during search
 
             // input picture
-            ThreePlanes<Sample> &pictureInput = dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+            auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
             ThreePlanes<Sample> &pictureReconstructed = *stateReconstructedPicture->picture;
 
             int32_t ssd = 0;
@@ -858,7 +863,12 @@ struct Encode<coding_quadtree>
             StateEncode *stateEncode = h;
             if(stateEncode->useRateControl)
             {
-                double value = stateEncode->rateControlEngine->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                
+                StateEncodePicture *stateEncodePicture = h;
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                double value = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbReciprocalLambda(h[PicOrderCntVal()], h[CtbAddrInRs()]);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
                 reciprocalLambda.set(value);
             }
             Cost lambdaDistortion = reciprocalLambda * ssd;
@@ -926,9 +936,12 @@ struct Encode<coding_quadtree>
                 int codingBits = ((int)bytesAfterWriting - (int)bytesBeforeWriting) << 3;
                 StateEncodePicture *stateEncodePicture = h;
                 int currentPictureLevel = stateEncodePicture->docket->sopLevel;
-
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+                
                 // Update the rate controller engine
-                stateEncode->rateControlEngine->storeCtbParameters(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()]);
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                stateEncode->rateControlMap.find(segmentPoc)->second->storeCtbParameters(codingBits, h[slice_type()] == I, h[CtbAddrInRs()], currentPictureLevel, h[PicOrderCntVal()],stateEncode->rateControlParams->cpbInfo);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
             }
 
             // review: test should pass even if this flag set
@@ -936,10 +949,27 @@ struct Encode<coding_quadtree>
                 candidate->checkSameAs(contextsAfterSearch);
         }
 
+        bool const lastInRow = !((h[CtbAddrInRs()] + 1) % h[PicWidthInCtbsY()]);
+        if (lastInRow)
+            // pad intra reference data - this makes intra availabilty logic simpler as top-right is always available
+            for (int cIdx = 0; cIdx < 3; ++cIdx)
+            {
+                int const log2Resolution = cIdx ? 1 : 0;
+                auto &snake = candidate.snakeIntraReferenceSamples[cIdx];
+
+                auto const x = h[PicWidthInCtbsY()] << (h[CtbLog2SizeY()] - log2Resolution);
+                auto const y = ((h[CtbAddrInRs()] / h[PicWidthInCtbsY()] + 1) << (h[CtbLog2SizeY()] - log2Resolution)) - 1;
+
+                auto *p = &snake(x, y);
+
+                for (int i = 0; i < 32; ++i)
+                    p[i] = p[-1];
+            }
+
         // review: unnecessary copy
-        originalCandidate->snakeIntraReferenceSamples[0].copyBlockFrom(candidate.snakeIntraReferenceSamples[0], after, cqt, 0);
-        originalCandidate->snakeIntraReferenceSamples[1].copyBlockFrom(candidate.snakeIntraReferenceSamples[1], after, cqt, 1);
-        originalCandidate->snakeIntraReferenceSamples[2].copyBlockFrom(candidate.snakeIntraReferenceSamples[2], after, cqt, 1);
+        originalCandidate->snakeIntraReferenceSamples[0].copyBlockFrom(candidate.snakeIntraReferenceSamples[0], after, cqt, 0, 32, 0);
+        originalCandidate->snakeIntraReferenceSamples[1].copyBlockFrom(candidate.snakeIntraReferenceSamples[1], after, cqt, 1, 32, 0);
+        originalCandidate->snakeIntraReferenceSamples[2].copyBlockFrom(candidate.snakeIntraReferenceSamples[2], after, cqt, 1, 32, 0);
 
         neighbourhood->snake.checkPosition(after, cqt);
         }
@@ -969,13 +999,12 @@ struct Write<coding_unit>
         coding_quadtree const *cqt = h;
         Neighbourhood *neighbourhood = h;
         Snake<BlockData>::Cursor *cursor = h;
-
+        QpState *qpState = h;
 
         cursor->relocate(neighbourhood->snake, cu, neighbourhood->MinCbLog2SizeYMinus1);
 
-        static_cast<QpState *>(h)->preCu(cu, h);
+        qpState->preCu(cu, h);
 
-        stateEncodeSubstreamBase->cqt = *cqt;
         stateEncodeSubstreamBase->partIdx = 0;
         stateCodedData->partIdx = 0;
 
@@ -987,12 +1016,11 @@ struct Write<coding_unit>
 
         cursor->relocate(neighbourhood->snake, cu, h[MinCbLog2SizeY()] - 1); // < review: remove?
 
-        if (CuPredMode != MODE_INTRA) stateCodedData->firstPu();
-
+        if (CuPredMode != MODE_INTRA) 
+            stateCodedData->firstPu();
 
         if (h[cu_qp_delta_enabled_flag()] && static_cast<QpState *>(h)->getCanWrite())
         {
-
             // Set up cu_qp_delta_abs and sign flag
             int rowQgModulo = (cu.y0 & (h[CtbSizeY()] - 1)) >> 3;
             int colQgModulo = (cu.x0 & (h[CtbSizeY()] - 1)) >> 3;
@@ -1000,30 +1028,35 @@ struct Write<coding_unit>
             StateEncode *stateEncode = h;
             int QpY;
             if(stateEncode->useRateControl)
-                QpY = stateEncode->rateControlEngine->getCtbStoredQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
+            {
+                StateEncodePicture *stateEncodePicture = h;
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                QpY = stateEncode->rateControlMap.find(segmentPoc)->second->getCtbStoredQp(h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
+            }
             else
                 QpY = h[SliceQpY()];
 
             if (stateEncode->useAq)
             {
-                AdaptiveQuantisation &aqInfo = dynamic_cast<AdaptiveQuantisation&>(*static_cast<StateEncodePicture *>(h)->docket->aqInfo);
+                AdaptiveQuantisation &aqInfo = *static_cast<StateEncodePicture *>(h)->docket->aqInfo;
                 int qpOffset = aqInfo.getAqOffset(cu.y0, cu.x0, cqt->cqtDepth);
                 QpY = Clip3(0, 51, QpY + qpOffset);
             }
 
             int qpForPrediction;
             if (h[IsCuQpDeltaCoded()])
-                qpForPrediction = static_cast<QpState *>(h)->getCodedQp();
+                qpForPrediction = qpState->getCodedQp();
             else
-                qpForPrediction = static_cast<QpState *>(h)->getQpYPred(cu, h);
+                qpForPrediction = qpState->getQpYPred(cu, h);
             int valueToWrite = QpY - qpForPrediction;
             valueToWrite = (valueToWrite + 78 + h[QpBdOffsetY()] + (h[QpBdOffsetY()] / 2)) % (52 + h[QpBdOffsetY()]) - 26 - (h[QpBdOffsetY()] / 2);
-            static_cast<QpState *>(h)->setQpValue(QpY);
+            qpState->setQpValue(QpY);
 
             // Set the internal QP for this CU to the predictor one (default one)
             int size = std::max<int>(1, 1 << ((cu.log2CbSize - 3) << 1));
-            static_cast<QpState *>(h)->setQpInternal(rowQgModulo, colQgModulo, size, qpForPrediction);
-
+            qpState->setQpInternal(rowQgModulo, colQgModulo, size, qpForPrediction);
             int signFlagToWrite = valueToWrite > 0 ? 0 : 1;
             h[cu_qp_delta_abs()] = abs(valueToWrite);
             h[cu_qp_delta_sign_flag()] = signFlagToWrite;
@@ -1053,7 +1086,11 @@ struct Write<coding_unit>
             StateEncode *stateEncode = h;
             if (stateEncode->useRateControl && h[slice_type()] != I)
             {
-                stateEncode->rateControlEngine->updateValidityFlag(!(h[current(cu_skip_flag(cu.x0, cu.y0))]), h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                StateEncodePicture *stateEncodePicture = h;
+                int segmentPoc = stateEncodePicture->docket->segmentPoc;
+                stateEncode->rateControlParams->takeTokenOnRCLevel();
+                stateEncode->rateControlMap.find(segmentPoc)->second->updateValidityFlag(!(h[current(cu_skip_flag(cu.x0, cu.y0))]), h[CtbAddrInRs()], h[PicOrderCntVal()]);
+                stateEncode->rateControlParams->releaseTokenOnRCLevel();
             }
         }
 
@@ -1078,7 +1115,7 @@ template <> struct Write<pcm_sample>
 
         // Input picture
         using Sample = typename SampleType<H>::Type;
-        ThreePlanes<Sample> *picture = &dynamic_cast<ThreePlanes<Sample>&>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+        auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
 
         assert(!"this function writes PCM to bitstream but does not reconstruct - intra and inter prediction from here may fail");
 
@@ -1090,7 +1127,7 @@ template <> struct Write<pcm_sample>
             for (int i = 0; i < nCbS; ++i)
             {
                 // pcm_sample_luma
-                cabacWriter->writeBits(8, (*picture)[0](cqt->x0 + i, cqt->y0 + j));
+                cabacWriter->writeBits(8, pictureInput[0](cqt->x0 + i, cqt->y0 + j));
             }
         }
 
@@ -1099,7 +1136,7 @@ template <> struct Write<pcm_sample>
             for (int i = 0; i < nCbS / 2; ++i)
             {
                 // pcm_sample_chroma
-                cabacWriter->writeBits(8, (*picture)[1](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
+                cabacWriter->writeBits(8, pictureInput[1](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
             }
         }
 
@@ -1108,7 +1145,7 @@ template <> struct Write<pcm_sample>
             for (int i = 0; i < nCbS / 2; ++i)
             {
                 // pcm_sample_chroma
-                cabacWriter->writeBits(8, (*picture)[2](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
+                cabacWriter->writeBits(8, pictureInput[2](cqt->x0 / 2 + i, cqt->y0 / 2 + j));
             }
         }
 
@@ -1122,10 +1159,10 @@ template <> struct Write<pcm_sample>
     }
 };
 
-template <class> struct MeasureLuma;
-template <class> struct MeasureChroma;
+
 template <class> struct EstimateRateLuma;
 template <class> struct EstimateRateChroma;
+
 
 template <>
 struct Write<transform_tree>
@@ -1202,25 +1239,14 @@ struct Write<transform_tree>
             tt.log2TrafoSize <= h[MaxTbLog2SizeY()] &&
             tt.log2TrafoSize > h[MinTbLog2SizeY()] &&
             tt.trafoDepth < h[MaxTrafoDepth()] && !(h[IntraSplitFlag()] && (tt.trafoDepth == 0)));
-        int split = stateCodedData->transformTree.word0().split_transform_flag;
+        
+        auto const split = stateCodedData->transformTree.word0().split_transform_flag || stateCodedData->transformTree.word0().trafoDepth > tt.trafoDepth;
 
-        h[split_transform_flag()] = inferTransformDepth ? infer(split_transform_flag(tt.x0, tt.y0, tt.trafoDepth), h) : split;
+        h[split_transform_flag()] = split;
 
-        //auto p = stateCodedData->transformTree.p;
         Syntax<transform_tree>::go(tt, h);
 
-        //std::cout << "Write " << tt;
-        //for (; p != stateCodedData->transformTree.p; ++p)
-        //{
-        //	std::cout << " " << std::hex << std::setw(4) << std::setfill('0') << *p;
-        //}
-        //std::cout << "\n";
-
-        typedef std::is_same<typename H::Tag, MeasureLuma<void>> MeasuringLuma;
-        typedef std::is_same<typename H::Tag, MeasureChroma<void>> MeasuringChroma;
-
-        if (intraPartition &&
-            !MeasuringLuma::value && !std::is_same<typename H::Tag, EstimateRateLuma<void>>::value)
+        if (intraPartition && !std::is_same<typename H::Tag, EstimateRateLuma<void>>::value)
         {
             cursor->value.intra.predModeY = static_cast<StateCodedData *>(h)->codedCu.IntraPredModeY(tt.blkIdx);
             cursor->commit(tt, neighbourhood->MinCbLog2SizeYMinus1, true);
@@ -1262,353 +1288,118 @@ void setLastSignificantCoeff(H &h, residual_coding e, int n)
     h[Suffix()] = n - minInGroup[groupIdx[n]];
 }
 
-template <int log2TrafoSize, class H>
-int ctxIncSigCoeffFlag(H &h, int cIdx, int xC, int yC, int codedSubBlockFlagRight, int codedSubBlockFlagBelow)
+// todo: explicit specialisations
+template <bool is4x4>
+struct CtxIncSigCoeffFlagCalculator;
+
+template <>
+struct CtxIncSigCoeffFlagCalculator<true>
 {
-    int sigCtx;
-    if (log2TrafoSize == 2)
+    uint8_t const *ctxIdxMap;
+
+    inline CtxIncSigCoeffFlagCalculator(int scanIdx, bool firstSubBlock, int cIdx, uint16_t codedSubBlockFlags, int log2TrafoSize)
     {
-        const int ctxIdxMap[16] =
+        assert(log2TrafoSize == 2);
+        static uint8_t const ctxIdxMap[16] =
         {
             0, 1, 4, 5,
             2, 3, 4, 5,
             6, 6, 8, 8,
-            7, 7, 8, 8
+            7, 7, 8, 8,
         };
-        sigCtx = ctxIdxMap[(yC << 2) + xC];
-    }
-    else if (xC + yC == 0)
-    {
-        sigCtx = 0;
-    }
-    else
-    {
-        const int xS = xC >> 2;
-        const int yS = yC >> 2;
-        int prevCsbf = 0;
-
-        if (xS < (1 << (log2TrafoSize - 2)) - 1)
-        {
-            prevCsbf |= codedSubBlockFlagRight ? 1 : 0;
-        }
-        if (yS < (1 << (log2TrafoSize - 2)) - 1)
-        {
-            prevCsbf |= codedSubBlockFlagBelow ? 2 : 0;
-        }
-
-        const int xP = xC & 3;
-        const int yP = yC & 3;
-
-        if (prevCsbf == 0)
-        {
-            sigCtx = (xP + yP == 0) ? 2 : (xP + yP < 3) ? 1 : 0;
-        }
-        else if (prevCsbf == 1)
-        {
-            sigCtx = (yP == 0) ? 2 : (yP == 1) ? 1 : 0;
-        }
-        else if (prevCsbf == 2)
-        {
-            sigCtx = (xP == 0) ? 2 : (xP == 1) ? 1 : 0;
-        }
-        else
-        {
-            assert(prevCsbf == 3);
-            sigCtx = 2;
-        }
-
-        if (cIdx == 0)
-        {
-            if (xS + yS > 0)
-            {
-                sigCtx += 3;
-            }
-
-            if (log2TrafoSize == 3)
-            {
-                sigCtx += (h[scanIdx()] == 0) ? 9 : 15;
-            }
-            else
-            {
-                sigCtx += 21;
-            }
-        }
-        else
-        {
-            if (log2TrafoSize == 3)
-            {
-                sigCtx += 9;
-            }
-            else
-            {
-                sigCtx += 12;
-            }
-        }
+        this->ctxIdxMap = ctxIdxMap;
+        this->offset = cIdx ? 27 : 0;
     }
 
-    assert(sigCtx >= 0);
-    assert(sigCtx < 54);
+    int offset;
 
-    if (cIdx == 0)
+    inline int ctxInc(int subBlockRasterPos) const
     {
-        return sigCtx;
-    }
-    else
-    {
-        return 27 + sigCtx;
-    }
-}
-
-template <int log2TrafoSize>
-struct OptimizedResidualCodingEncode
-{
-    template <class H> static void go(const residual_coding &rc, H &hParent)
-    {
-        using Sample = typename SampleType<H>::Type;
-
-        StateEncodeSubstreamBase *stateEncodeSubstreamBase = hParent;
-        StateResidualCoding residualCodingState(hParent);
-        auto h = hParent.extend(&residualCodingState);
-        bool sdhEnabledFlag = !!h[sign_data_hiding_enabled_flag()];
-        bool signHidden;
-
-        StateReconstructionCache<Sample> *stateReconstructionCache = h;
-        StateCodedData *stateCodedData = h;
-        Candidate<Sample> *candidate = h;
-        coding_quadtree const *cqt = h;
-
-        CodedData::Residual &residual = stateCodedData->residual;
-        CodedData::SubBlock subBlock = stateCodedData->residual.initialSubBlock(log2TrafoSize);
-
-        // Find last subblock and last significant coefficient in that block
-        int const lastScanPos = CodedData::Residual::firstSetBit(*subBlock.p);
-        int const lastSubBlock = residual.lastSubBlock(rc.log2TrafoSize);
-        {
-            const int xS = ScanOrder(log2TrafoSize - 2, h[scanIdx()], lastSubBlock, 0);
-            const int yS = ScanOrder(log2TrafoSize - 2, h[scanIdx()], lastSubBlock, 1);
-            const int xC = (xS << 2) + ScanOrder(2, h[scanIdx()], lastScanPos, 0);
-            const int yC = (yS << 2) + ScanOrder(2, h[scanIdx()], lastScanPos, 1);
-            setLastSignificantCoeff<last_sig_coeff_x_prefix, last_sig_coeff_x_suffix>(h, rc, (h[scanIdx()] == 2) ? yC : xC);
-            setLastSignificantCoeff<last_sig_coeff_y_prefix, last_sig_coeff_y_suffix>(h, rc, (h[scanIdx()] == 2) ? xC : yC);
-        }
-
-        //Encode transform_skip_flag
-        if (h[transform_skip_enabled_flag()] && !h[cu_transquant_bypass_flag()] && (log2TrafoSize <= h[Log2MaxTransformSkipSize()]))
-            h(transform_skip_flag(rc.x0, rc.y0, rc.cIdx), ae(v));
-
-        h(last_sig_coeff_x_prefix(), ae(v));
-        h(last_sig_coeff_y_prefix(), ae(v));
-        if (h[last_sig_coeff_x_prefix()] > 3)
-            h(last_sig_coeff_x_suffix(), ae(v));
-        if (h[last_sig_coeff_y_prefix()] > 3)
-            h(last_sig_coeff_y_suffix(), ae(v));
-
-        int &greater1Ctx = stateEncodeSubstreamBase->greater1Ctx;
-        int lastGreater1Flag = 1;
-        int lastGreater1Ctx = -1;
-        int previousGreater1Flag;
-
-        // review: consider bitmask instead of array here
-        uint8_t codedSubBlockFlagSnake[17] = { 0 };
-
-        bool codedSubBlock0 = true;
-
-        for (int i = lastSubBlock; i >= 0; --i)
-        {
-            int const xS = ScanOrder(log2TrafoSize - 2, h[scanIdx()], i, 0);
-            int const yS = ScanOrder(log2TrafoSize - 2, h[scanIdx()], i, 1);
-
-            bool codedSubBlockFlag = !!residual.codedSubBlockFlag(i);
-
-            if (i == 0 && !codedSubBlockFlag)
-            {
-                codedSubBlock0 = false;
-                codedSubBlockFlag = true;
-                residual.p = subBlock.p;
-                static CodedData::Type zero = 0;
-                subBlock.p = &zero;
-            }
-
-            codedSubBlockFlagSnake[8 + xS - yS] = codedSubBlockFlag;
-
-            int inferSbDcSigCoeffFlag = 0;
-            if ((i < lastSubBlock) && (i > 0))
-            {
-                int const csbfCtx =
-                    codedSubBlockFlagSnake[8 + (xS + 1) - yS] +
-                    codedSubBlockFlagSnake[8 + xS - (yS + 1)];
-
-                int const ctxInc = (rc.cIdx ? 2 : 0) + std::min(csbfCtx, 1);
-
-                h(EncodeDecision<coded_sub_block_flag>(codedSubBlockFlag, ctxInc));
-
-                inferSbDcSigCoeffFlag = 1;
-            }
-
-            if (codedSubBlockFlag)
-            {
-                uint8_t greater1[16] = { 0 };
-                uint8_t greater2[16] = { 0 };
-
-                // Sublock loop for sig_coeff_flag
-                for (int n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--)
-                {
-                    if (n > 0 || !inferSbDcSigCoeffFlag)
-                    {
-                        auto const xC = (xS << 2) + ScanOrder(2, h[scanIdx()], n, 0);
-                        auto const yC = (yS << 2) + ScanOrder(2, h[scanIdx()], n, 1);
-
-                        auto const codedSubBlockFlagRight = codedSubBlockFlagSnake[8 + (xS + 1) - yS];
-                        auto const codedSubBlockFlagBelow = codedSubBlockFlagSnake[8 + xS - (yS + 1)];
-                        auto const ctxInc = ctxIncSigCoeffFlag<log2TrafoSize>(h, rc.cIdx, xC, yC, codedSubBlockFlagRight, codedSubBlockFlagBelow);
-
-                        h(EncodeDecision<sig_coeff_flag>(subBlock.sigCoeffFlag(n), ctxInc));
-
-                        if (subBlock.sigCoeffFlag(n))
-                        {
-                            inferSbDcSigCoeffFlag = 0;
-                        }
-                    }
-                }
-
-                // Sublock loop for coeff_abs_level_greater1_flag
-                // Also derive coeff_abs_level_greater2_flag(n)
-                int firstSigScanPos = 16;
-                int lastSigScanPos = -1;
-                int numGreater1Flag = 0;
-                int lastGreater1ScanPos = -1;
-
-                int& ctxSet = stateEncodeSubstreamBase->ctxSet;
-
-                CodedData::Type *pAbsCoeff = subBlock.p + 3;
-
-                for (int n = 15; n >= 0; n--)
-                {
-                    h[coeff_abs_level_greater2_flag(n)] = 0;
-
-                    if (subBlock.sigCoeffFlag(n))
-                    {
-                        auto const xC = (xS << 2) + ScanOrder(2, h[scanIdx()], n, 0);
-                        auto const yC = (yS << 2) + ScanOrder(2, h[scanIdx()], n, 1);
-
-                        if (numGreater1Flag < 8)
-                        {
-                            greater1[n] = subBlock.coeffGreater1Flag(n);
-
-                            if (numGreater1Flag == 0)
-                            {
-                                ctxSet = (i == 0 || rc.cIdx > 0) ? 0 : 2;
-                                if (lastGreater1Ctx < 0)
-                                {
-                                    lastGreater1Ctx = 1;
-                                }
-                                else
-                                {
-                                    lastGreater1Ctx = greater1Ctx;
-                                    if (lastGreater1Ctx > 0)
-                                    {
-                                        lastGreater1Flag = previousGreater1Flag;
-                                        lastGreater1Ctx = lastGreater1Flag ? 0 : lastGreater1Ctx + 1;
-                                    }
-                                }
-                                if (lastGreater1Ctx == 0)
-                                {
-                                    ctxSet = ctxSet + 1;
-                                    assert(ctxSet < 4);
-                                }
-                                greater1Ctx = 1;
-                            }
-                            else
-                            {
-                                if (greater1Ctx > 0)
-                                {
-                                    lastGreater1Flag = previousGreater1Flag;
-                                }
-                                greater1Ctx = lastGreater1Flag ? 0 : greater1Ctx + 1;
-                            }
-
-                            h(EncodeDecision<coeff_abs_level_greater1_flag>(greater1[n], Write<Element<coeff_abs_level_greater1_flag, ae>>::ctxInc(h)));
-
-                            previousGreater1Flag = greater1[n];
-                            numGreater1Flag++;
-                            if (greater1[n] && lastGreater1ScanPos == -1)
-                            {
-                                lastGreater1ScanPos = n;
-                                greater2[lastGreater1ScanPos] = *pAbsCoeff > 2 ? 1 : 0;
-                            }
-                        }
-
-                        if (lastSigScanPos == -1)
-                            lastSigScanPos = n;
-
-                        firstSigScanPos = n;
-
-                        if (subBlock.coeffGreater1Flag(n))
-                            ++pAbsCoeff;
-                    }
-                }
-
-                if (lastGreater1ScanPos != -1)
-                {
-                    h(EncodeDecision<coeff_abs_level_greater2_flag>(greater2[lastGreater1ScanPos], Write<Element<coeff_abs_level_greater2_flag, ae>>::ctxInc(h)));
-                }
-
-                if (h[cu_transquant_bypass_flag()])
-                    signHidden = false;
-                else
-                    signHidden = lastSigScanPos - firstSigScanPos > 3;
-
-                // review - unnecessary copy
-                for (int n = 15; n >= 0; n--)
-                {
-                    bool sdhCondition = ((n != firstSigScanPos) || !sdhEnabledFlag || !signHidden);
-                    if (subBlock.sigCoeffFlag(n) && sdhCondition)
-                    {
-                        h[coeff_sign_flag(n)] = subBlock.coeffSignFlag(n);
-                        h(coeff_sign_flag(n), ae(v));
-                    }
-                }
-
-                // Sublock loop for coeff_abs_level_remaining
-                pAbsCoeff = subBlock.p + 3;
-                int numSigCoeff = 0;
-                stateEncodeSubstreamBase->cLastAbsLevel = 0;
-                stateEncodeSubstreamBase->cLastRiceParam = 0;
-                for (int n = 15; n >= 0; n--)
-                {
-                    const int xC = (xS << 2) + ScanOrder(2, h[scanIdx()], n, 0);
-                    const int yC = (yS << 2) + ScanOrder(2, h[scanIdx()], n, 1);
-                    if (subBlock.sigCoeffFlag(n))
-                    {
-                        int16_t absCoeff = 1;
-                        if (subBlock.coeffGreater1Flag(n))
-                        {
-                            absCoeff = *pAbsCoeff++;
-                        }
-
-                        int& baseLevel = stateEncodeSubstreamBase->baseLevel;
-                        baseLevel = 1 + greater1[n] + greater2[n];
-                        if (baseLevel == ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
-                        {
-                            Write<Element<coeff_abs_level_remaining, ae>>::write(absCoeff - baseLevel, h);
-                        }
-                        numSigCoeff++;
-                    }
-                }
-
-                if (subBlock.significant())
-                {
-                    subBlock.p = pAbsCoeff;
-                }
-            }
-        }
-
-        if (codedSubBlock0)
-        {
-            residual.p = subBlock.p;
-        }
+        auto sigCtx = this->ctxIdxMap[subBlockRasterPos];
+        return sigCtx + this->offset;
     }
 };
+
+template <>
+struct CtxIncSigCoeffFlagCalculator<false>
+{
+    inline CtxIncSigCoeffFlagCalculator(int scanIdx, bool firstSubBlock, int cIdx, uint16_t codedSubBlockFlags, int log2TrafoSize)
+        :
+        firstSubBlock(firstSubBlock)
+    {
+        assert(log2TrafoSize != 2);
+        static int8_t const ctxIdxMap[4][16] = {
+            {
+                2, 1, 1, 0,
+                1, 1, 0, 0,
+                1, 0, 0, 0,
+                0, 0, 0, 0,
+            },
+            {
+                2, 2, 2, 2,
+                1, 1, 1, 1,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+            },
+            {
+                2, 1, 0, 0,
+                2, 1, 0, 0,
+                2, 1, 0, 0,
+                2, 1, 0, 0,
+            },
+            {
+                2, 2, 2, 2,
+                2, 2, 2, 2,
+                2, 2, 2, 2,
+                2, 2, 2, 2,
+            } };
+        this->ctxIdxMap = ctxIdxMap[codedSubBlockFlags];
+        this->sigCtx = 0;
+        if (cIdx == 0)
+        {
+            if (!firstSubBlock)
+                this->sigCtx += 3;
+
+            if (log2TrafoSize == 3)
+                this->sigCtx += (scanIdx == 0) ? 9 : 15;
+            else
+                this->sigCtx += 21;
+        }
+        else
+        {
+            if (log2TrafoSize == 3)
+                this->sigCtx += 9;
+            else
+                this->sigCtx += 12;
+        }
+        this->offset = cIdx ? 27 : 0;
+    }
+
+    int8_t const *ctxIdxMap;
+    int sigCtx;
+    int offset;
+    bool firstSubBlock;
+
+    inline int ctxInc(int subBlockRasterPos) const
+    {
+        auto sigCtx = this->sigCtx + this->ctxIdxMap[subBlockRasterPos];
+
+        if (firstSubBlock && subBlockRasterPos == 0)
+            sigCtx = 0;
+
+        return sigCtx + this->offset;
+    }
+};
+
+
+static int popCount(uint16_t value)
+{
+    int count = 0;
+    for (uint16_t bit = 1; bit; bit <<= 1)
+        if (bit & value)
+            ++count;
+    return count;
+}
 
 
 template <class V>
@@ -1622,38 +1413,21 @@ struct Write<IfCbf<V, residual_coding>>
         StateCodedData *stateCodedData = h;
 
         if (rc.cIdx == 0)
-        {
             stateCodedData->residual = stateCodedData->transformTree.firstResidual();
-        }
         else if (rc.cIdx == 1 && h[current(CuPredMode(cqt->x0, cqt->y0))] == MODE_INTRA)
-        {
             stateCodedData->residual = stateCodedData->transformTreeChroma.firstResidual();
-        }
 
         if (h[e.cbf])
         {
             CopyValueToState<residual_coding, H> copy{ h, rc };
+
             if ((std::is_same<typename H::Tag, SetParameters<void>>::value) ||
                 (std::is_same<typename H::Tag, EstimateAndSet<void>>::value))
             {
                 static_cast<StatePicture *>(h)->loopFilterPicture->processRc(h, rc);
             }
 
-            switch (rc.log2TrafoSize)
-            {
-            case 2:
-                OptimizedResidualCodingEncode<2>::go(rc, h);
-                break;
-            case 3:
-                OptimizedResidualCodingEncode<3>::go(rc, h);
-                break;
-            case 4:
-                OptimizedResidualCodingEncode<4>::go(rc, h);
-                break;
-            case 5:
-                OptimizedResidualCodingEncode<5>::go(rc, h);
-                break;
-            }
+            EncodeResidual::encode(h);
         }
 
         if (rc.cIdx == 0)
@@ -1827,16 +1601,6 @@ struct Measure :
     Write<F>
 {
 };
-
-template <class F> struct MeasureLuma : Measure<F> { };
-template <> struct MeasureLuma<Element<cbf_cb, ae>> : Null<Element<cbf_cb, ae>> {};
-template <> struct MeasureLuma<Element<cbf_cr, ae>> : Null<Element<cbf_cr, ae>> {};
-template <> struct MeasureLuma<Element<intra_chroma_pred_mode, ae>> : Null<Element<intra_chroma_pred_mode, ae>> {};
-
-
-template <class F> struct MeasureChroma : Measure<F> { };
-template <> struct MeasureChroma<Element<cbf_luma, ae>> : Null<Element<cbf_luma, ae>> {};
-template <> struct MeasureChroma<Element<split_transform_flag, ae>> : Null<Element<split_transform_flag, ae>> {};
 
 
 template <class H>

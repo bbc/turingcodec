@@ -37,8 +37,6 @@ For more information, contact us at info @ turingcodec.org.
 template <typename Sample>
 struct ReconstructionCache
 {
-    int step;
-
     void allocateBuffer(int log2SizeMin, int log2SizeMax, int n)
     {
         this->log2SizeMin = log2SizeMin;
@@ -221,6 +219,8 @@ struct ReconstructionCache
         }
     }
 
+    int step;
+
     int log2SizeMin;
     Sample *buffer;
     uint64_t *busyMask;
@@ -229,13 +229,13 @@ struct ReconstructionCache
     std::vector<Piece> pieces;
     Piece *piece;
 
-    Raster<Sample> get(Piece piece)
-            {
+    inline Raster<Sample> get(Piece piece)
+    {
         return Raster<Sample>(&this->buffer[piece.i << 4], 1ll << piece.log2Size);
-            }
+    }
 
     // recursively copy blocks of reconstructed samples from pieces' list to the reconstructed picture buffer.
-    void commit(Raster<Sample> dst, int log2Size, Piece *&piece)
+    inline void commit(Raster<Sample> dst, int log2Size, Piece *&piece)
     {
         assert(piece->log2Size <= 6);
         assert(piece->log2Size >= 2);
@@ -261,7 +261,6 @@ struct ReconstructionCache
             this->commit(dst.offset(nCbS, nCbS), log2Size, piece);
         }
     }
-
 };
 
 

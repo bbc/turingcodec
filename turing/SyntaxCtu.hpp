@@ -124,13 +124,15 @@ void Syntax<coding_quadtree>::go(const coding_quadtree &e, H &h)
         if (y1 < h[pic_height_in_luma_samples()])
             h(coding_quadtree(e.x0, y1, e.log2CbSize - 1, e.cqtDepth + 1));
         else
-            h(Deleted<coding_quadtree, DownRight>(e.x0, y1, e.log2CbSize - 1, e.cqtDepth + 1));
+            h(Deleted<coding_quadtree, Right>(e.x0, y1, e.log2CbSize - 1, e.cqtDepth + 1));
 
         if (x1 < h[pic_width_in_luma_samples()] && y1 < h[pic_height_in_luma_samples()])
             h(coding_quadtree(x1, y1, e.log2CbSize - 1, e.cqtDepth + 1));
         else
-            h(Deleted<coding_quadtree, Down>(x1, y1, e.log2CbSize - 1, e.cqtDepth + 1));
-
+            if (x1 < h[pic_width_in_luma_samples()])
+                h(Deleted<coding_quadtree, Down>(x1, y1, e.log2CbSize - 1, e.cqtDepth + 1));
+            else
+                h(Deleted<coding_quadtree, Right>(x1, y1, e.log2CbSize - 1, e.cqtDepth + 1));
     }
     else
         h(coding_unit(e.x0, e.y0, e.log2CbSize));

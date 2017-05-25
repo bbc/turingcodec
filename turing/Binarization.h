@@ -46,8 +46,8 @@ DEFINE_STRUCT_ARITY_1(EncodeBypass, binVal);
 struct FinishCabac;
 
 
-template <class F>
-struct Write;
+template <class F> struct Write;
+
 
 template <class V>
 struct Write<Element<V, ae>>
@@ -388,7 +388,7 @@ struct Write<Element<pcm_flag, ae>>
     }
 };
 
-template <class F> struct MeasureLuma;
+
 template <class F> struct EstimateRateLuma;
 
 
@@ -407,9 +407,7 @@ struct Write<Element<prev_intra_luma_pred_flag, ae>>
         if (fun.v.y0 != cqt->y0) partIdx += 2;
         auto const value = stateCodedData->codedCu.IntraPredModeY(partIdx);
 
-        typedef std::is_same<typename H::Tag, MeasureLuma<void>> SearchingIntraPartitionLuma;
-        typedef std::is_same<typename H::Tag, EstimateRateLuma<void>> SearchingIntraPartitionLuma2;
-        if (!SearchingIntraPartitionLuma::value && !SearchingIntraPartitionLuma2::value)
+        if (!std::is_same<typename H::Tag, EstimateRateLuma<void>>::value)
         {
             Neighbourhood *neighbourhood = h;
 
@@ -624,8 +622,10 @@ struct Write<Element<split_transform_flag, ae>>
         transform_tree &tt = *static_cast<transform_tree *>(h);
         const auto ctxInc = 5 - tt.log2TrafoSize;
 
+        StateCodedData *stateCodedData = h;
+
         // review: have handler read h[split_transform_flag()] direct from coded data during write
-        h[fun.v] = static_cast<StateCodedData *>(h)->transformTree.word0().split_transform_flag;
+        h[fun.v] = stateCodedData->transformTree.word0().split_transform_flag;
 
         const int synVal = h[fun.v];
 
@@ -944,24 +944,9 @@ WriteLastSigSuffix<last_sig_coeff_y_suffix, last_sig_coeff_y_prefix>
 {
 };
 
-template <>
-struct Write<Element<coeff_abs_level_greater1_flag, ae>>
-{
-    template <class H> static inline void go(Element<coeff_abs_level_greater1_flag, ae> fun, H &h)
-    {
-        // FL cMax=1
-        const int synVal = h[fun.v];
-        h(EncodeDecision<coeff_abs_level_greater1_flag>(synVal, ctxInc(h)));
-    }
-
-    template <class H> static inline int ctxInc(H& h)
-    {
-        StateEncodeSubstreamBase const *stateEncodeSubstreamBase = h;
-        residual_coding const *rc = h;
-
-        return (stateEncodeSubstreamBase->ctxSet * 4 ) + std::min( 3, stateEncodeSubstreamBase->greater1Ctx ) + (rc->cIdx ? 16 : 0);
-    }
-};
+// These two integrated into EncodeResidual
+template <> struct Write<Element<coeff_abs_level_greater1_flag, ae>>;
+template <> struct Write<Element<coeff_abs_level_greater2_flag, ae>>;
 
 template <>
 struct Write<Element<coeff_sign_flag, ae>>
@@ -1094,25 +1079,6 @@ struct Write<Element<sig_coeff_flag, ae>>
 };
 
 
-template <>
-struct Write<Element<coeff_abs_level_greater2_flag, ae>>
-{
-    template <class H> static inline void go(Element<coeff_abs_level_greater2_flag, ae> fun, H &h)
-    {
-        // FL cMax=1
-        const int synVal = h[fun.v];
-        h(EncodeDecision<coeff_abs_level_greater2_flag>(synVal, ctxInc(h)));
-    }
-
-    template <class H> static inline int ctxInc(H& h)
-    {
-        // review: smaller struct for ctxSet, shared with parser?
-        StateEncodeSubstreamBase const *stateEncodeSubstreamBase = h;
-        residual_coding const *rc = h;
-
-        return stateEncodeSubstreamBase->ctxSet + (rc->cIdx ? 4 : 0);
-    }
-};
 
 template <>
 struct Write<Element<coded_sub_block_flag, ae>>
@@ -1145,22 +1111,10 @@ struct Write<Element<coded_sub_block_flag, ae>>
 template <>
 struct Write<Element<coeff_abs_level_remaining, ae>>
 {
-    template <class H> static void go(Element<coeff_abs_level_remaining, ae> fun, H &h)
+    template <class H> static void go(Element<coeff_abs_level_remaining, ae> fun, H &h);
+
+    template <class H> static void write(int synVal, int cAbsLevel, int &cRiceParam, H &h)
     {
-        write(h[fun.v], h);
-    }
-
-    template <class H> static void write(int synVal, H &h)
-    {
-        StateEncode& stateEncode = *static_cast<StateEncode *>(h);
-        // review: smaller state for baseLevel, cLastRiceParam et al?
-        StateEncodeSubstreamBase *stateEncodeSubstreamBase = h;
-        const int cAbsLevel = stateEncodeSubstreamBase->baseLevel + synVal;
-
-        const int cRiceParam = std::min(stateEncodeSubstreamBase->cLastRiceParam + (stateEncodeSubstreamBase->cLastAbsLevel > (3 * (1 << stateEncodeSubstreamBase->cLastRiceParam)) ? 1 : 0), 4);
-
-        // 	   if (logstream && nn(false)<10000000) *logstream << cRiceParam << "\n";
-
         const int cMax = 4 << cRiceParam;
 
         // coeff_abs_level_remaining prefix
@@ -1234,10 +1188,52 @@ struct Write<Element<coeff_abs_level_remaining, ae>>
             } while (!stopLoop);
         }
 
-        // 	   if (logstream && nn(false)<10000000) *logstream << "abs=" << cAbsLevel << " base=" << stateEncodeSubstreamBase->baseLevel << " rice=" << cRiceParam << "\n";
+        cRiceParam = std::min(cRiceParam + (cAbsLevel > (3 * (1 << cRiceParam)) ? 1 : 0), 4);
+    }
+};
 
-        stateEncodeSubstreamBase->cLastAbsLevel = cAbsLevel;
-        stateEncodeSubstreamBase->cLastRiceParam = cRiceParam;
+
+template <class F> struct EstimateRate;
+
+
+template <>
+struct EstimateRate<Element<coeff_abs_level_remaining, ae>>
+{
+    // this function no longer used -  nowinlined into residual encoding
+    template <class H> static void go(Element<coeff_abs_level_remaining, ae> fun, H &h);
+
+    template <class H> static inline void write(int synVal, int cAbsLevel, int &cRiceParam, H &h)
+    {
+        StateEstimateRate *stateEstimateRate = h;
+        
+        int bits = cRiceParam + 1 + 3;
+        auto const a = (synVal >> cRiceParam) - 3;
+
+        // TR prefix
+        if (a < 0)
+        {
+            bits += a;
+        }
+        else
+        {
+            unsigned long index;
+#ifdef WIN32
+            _BitScanReverse(&index, a + 1);
+#elif __GNUC__
+            index = __builtin_clz(a + 1) ^ 31;
+#else
+            index = 15;
+            while (!((a + 1) & (1 << index)))
+                --index;
+#endif
+
+            bits += 2 * index;
+        }
+
+
+        cRiceParam = std::min(cRiceParam + (cAbsLevel > (3 * (1 << cRiceParam)) ? 1 : 0), 4);
+
+        stateEstimateRate->rate += Cost::make(bits, 0);
     }
 };
 

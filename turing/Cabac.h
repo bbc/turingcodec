@@ -18,8 +18,8 @@ the Turing codec are also available under a proprietary license.
 For more information, contact us at info @ turingcodec.org.
  */
 
-// Context models' state.
-// Review: consider renaming to "StateContextModels"
+ // Context models' state.
+ // Review: consider renaming to "StateContextModels"
 
 #ifndef INCLUDED_Cabac_h
 #define INCLUDED_Cabac_h
@@ -215,10 +215,9 @@ struct ContextsBase2
 
     ContextsBase2(int qp, int initType)
     {
-        for (int ctxIdx = ContextOffset<Tag>::get(initType); ctxIdx < ContextOffset<Tag>::get(initType+1); ++ctxIdx)
+        for (int ctxIdx = ContextOffset<Tag>::get(initType); ctxIdx < ContextOffset<Tag>::get(initType + 1); ++ctxIdx)
         {
-            const int ctxInc = ctxIdx - ContextOffset<Tag>::get(initType);
-
+            int const ctxInc = ctxIdx - ContextOffset<Tag>::get(initType);
             this->cm[ctxInc] = ContextModel(qp, ContextInit<Tag>::initValue[ctxIdx]);
         }
     }
@@ -243,11 +242,12 @@ struct ContextsBase2
     std::array<ContextModel, size> cm;
     static const int n = size;
 
-    void checkSameAs(const ContextsBase2 &other) const
+    void checkSameAs(const ContextsBase2 &other, int initType) const
     {
-        for (int i = 0; i < n; ++i)
+        for (int ctxIdx = ContextOffset<Tag>::get(initType); ctxIdx < ContextOffset<Tag>::get(initType + 1); ++ctxIdx)
         {
-            ASSERT(this->cm[i] == other.cm[i]);
+            int const ctxInc = ctxIdx - ContextOffset<Tag>::get(initType);
+            ASSERT(this->cm[ctxInc] == other.cm[ctxInc]);
         }
     }
 };
@@ -267,18 +267,18 @@ struct ContextsBase2<Tag, 0>
 template <class Tag>
 struct ContextsBase :
     ContextsBase2<Tag, ContextMaxSize<Tag>::value>
-    {
-        typedef Tag Type;
-        typedef ContextOffset<Tag> Offset;
+{
+    typedef Tag Type;
+    typedef ContextOffset<Tag> Offset;
 
-        ContextsBase()
-        {
-        }
-        ContextsBase(int qp, int initType) :
-            ContextsBase2<Tag, ContextMaxSize<Tag>::value>(qp, initType)
-            {
-            }
-    };
+    ContextsBase()
+    {
+    }
+    ContextsBase(int qp, int initType) :
+        ContextsBase2<Tag, ContextMaxSize<Tag>::value>(qp, initType)
+    {
+    }
+};
 
 
 template <template <class> class BaseTemplate>
@@ -299,28 +299,28 @@ struct HevcContextsResidual :
     BaseTemplate<coeff_abs_level_greater2_flag>,
     BaseTemplate<log2_res_scale_abs_plus1>,
     BaseTemplate<res_scale_sign_flag>
+{
+    template <class Visitor>
+    void accept(Visitor &v)
     {
-        template <class Visitor>
-        void accept(Visitor &v)
-        {
-            v.visitContextsBase(static_cast<BaseTemplate<rqt_root_cbf>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<split_transform_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cbf_luma>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cbf_cX>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<transform_skip_flag_Y>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<transform_skip_flag_C>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<explicit_rdpcm_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<explicit_rdpcm_dir_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<last_sig_coeff_x_prefix>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<last_sig_coeff_y_prefix>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<coded_sub_block_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<sig_coeff_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<coeff_abs_level_greater1_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<coeff_abs_level_greater2_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<log2_res_scale_abs_plus1>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<res_scale_sign_flag>*>(this));
-        }
-    };
+        v.visitContextsBase(static_cast<BaseTemplate<rqt_root_cbf>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<split_transform_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cbf_luma>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cbf_cX>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<transform_skip_flag_Y>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<transform_skip_flag_C>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<explicit_rdpcm_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<explicit_rdpcm_dir_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<last_sig_coeff_x_prefix>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<last_sig_coeff_y_prefix>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<coded_sub_block_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<sig_coeff_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<coeff_abs_level_greater1_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<coeff_abs_level_greater2_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<log2_res_scale_abs_plus1>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<res_scale_sign_flag>*>(this));
+    }
+};
 
 
 template <template <class> class BaseTemplate>
@@ -345,32 +345,32 @@ struct HevcContexts :
     BaseTemplate<abs_mvd_greater1_flag>,
     BaseTemplate<mvp_lX_flag>,
     HevcContextsResidual<BaseTemplate>
+{
+    template <class Visitor>
+    void accept(Visitor &v)
     {
-        template <class Visitor>
-        void accept(Visitor &v)
-        {
-            v.visitContextsBase(static_cast<BaseTemplate<sao_merge_X_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<sao_type_idx_X>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<split_cu_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cu_transquant_bypass_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cu_skip_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cu_qp_delta_abs>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cu_chroma_qp_offset_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<cu_chroma_qp_offset_idx>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<pred_mode_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<part_mode>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<prev_intra_luma_pred_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<intra_chroma_pred_mode>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<merge_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<merge_idx>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<inter_pred_idc>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<ref_idx_lX>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<abs_mvd_greater0_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<abs_mvd_greater1_flag>*>(this));
-            v.visitContextsBase(static_cast<BaseTemplate<mvp_lX_flag>*>(this));
-            this->HevcContextsResidual<BaseTemplate>::accept(v);
-        }
-    };
+        v.visitContextsBase(static_cast<BaseTemplate<sao_merge_X_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<sao_type_idx_X>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<split_cu_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cu_transquant_bypass_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cu_skip_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cu_qp_delta_abs>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cu_chroma_qp_offset_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<cu_chroma_qp_offset_idx>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<pred_mode_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<part_mode>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<prev_intra_luma_pred_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<intra_chroma_pred_mode>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<merge_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<merge_idx>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<inter_pred_idc>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<ref_idx_lX>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<abs_mvd_greater0_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<abs_mvd_greater1_flag>*>(this));
+        v.visitContextsBase(static_cast<BaseTemplate<mvp_lX_flag>*>(this));
+        this->HevcContextsResidual<BaseTemplate>::accept(v);
+    }
+};
 
 
 struct Initialize
@@ -389,49 +389,51 @@ struct Initialize
 template <class C>
 struct CheckSame
 {
-    CheckSame(const C &other) :
-        other(other)
+    CheckSame(C const &other, int initType) :
+        other(other),
+        initType(initType)
     {
     }
 
     template <class T>
     void visitContextsBase(T *t)
     {
-        const T &other = this->other;
+        T const &other = this->other;
 
-        t->checkSameAs(other);
+        t->checkSameAs(other, this->initType);
     }
 
-    const C &other;
+    C const &other;
+    int initType;
 };
 
 
 struct Contexts :
     HevcContexts<ContextsBase>,
     ValueHolder<StatCoeff>
+{
+    void initialize(int qp, int initType)
     {
-        void initialize(int qp, int initType)
-        {
-            Initialize initialize(qp, initType);
-            this->accept<Initialize>(initialize);
-            this->initType = initType;
-        }
+        Initialize initialize(qp, initType);
+        this->accept<Initialize>(initialize);
+        this->initType = initType;
+    }
 
-        template <class Tag>
-        ContextModel &get(int ctxInc)
-        {
-            auto size = this->ContextsBase<Tag>::cm.size();
-            return this->ContextsBase<Tag>::cm[ctxInc];
-        }
+    template <class Tag>
+    ContextModel &get(int ctxInc)
+    {
+        auto size = this->ContextsBase<Tag>::cm.size();
+        return this->ContextsBase<Tag>::cm[ctxInc];
+    }
 
-        int initType; // review: this increases size of contexts' copy - remove?
+    int initType; // review: this increases size of contexts' copy - remove?
 
-        void checkSameAs(const Contexts &other)
-        {
-            CheckSame<Contexts> checkSame(other);
-            this->accept(checkSame);
-        }
-    };
+    void checkSameAs(const Contexts &other)
+    {
+        CheckSame<Contexts> checkSame(other, this->initType);
+        this->accept(checkSame);
+    }
+};
 
 
 struct ContextPrinter
@@ -458,70 +460,70 @@ static std::ostream& operator<<(std::ostream& o, Contexts& contexts)
 static inline uint8_t rangeTabLPS(int pStateIdx, int qRangeIdx)
 {
     static std::array<std::array<const uint8_t, 4>, 64> table = { {
-            { 128, 176, 208, 240 },
-            { 128, 167, 197, 227 },
-            { 128, 158, 187, 216 },
-            { 123, 150, 178, 205 },
-            { 116, 142, 169, 195 },
-            { 111, 135, 160, 185 },
-            { 105, 128, 152, 175 },
-            { 100, 122, 144, 166 },
-            { 95, 116, 137, 158 },
-            { 90, 110, 130, 150 },
-            { 85, 104, 123, 142 },
-            { 81, 99, 117, 135 },
-            { 77, 94, 111, 128 },
-            { 73, 89, 105, 122 },
-            { 69, 85, 100, 116 },
-            { 66, 80, 95, 110 },
-            { 62, 76, 90, 104 },
-            { 59, 72, 86, 99 },
-            { 56, 69, 81, 94 },
-            { 53, 65, 77, 89 },
-            { 51, 62, 73, 85 },
-            { 48, 59, 69, 80 },
-            { 46, 56, 66, 76 },
-            { 43, 53, 63, 72 },
-            { 41, 50, 59, 69 },
-            { 39, 48, 56, 65 },
-            { 37, 45, 54, 62 },
-            { 35, 43, 51, 59 },
-            { 33, 41, 48, 56 },
-            { 32, 39, 46, 53 },
-            { 30, 37, 43, 50 },
-            { 29, 35, 41, 48 },
-            { 27, 33, 39, 45 },
-            { 26, 31, 37, 43 },
-            { 24, 30, 35, 41 },
-            { 23, 28, 33, 39 },
-            { 22, 27, 32, 37 },
-            { 21, 26, 30, 35 },
-            { 20, 24, 29, 33 },
-            { 19, 23, 27, 31 },
-            { 18, 22, 26, 30 },
-            { 17, 21, 25, 28 },
-            { 16, 20, 23, 27 },
-            { 15, 19, 22, 25 },
-            { 14, 18, 21, 24 },
-            { 14, 17, 20, 23 },
-            { 13, 16, 19, 22 },
-            { 12, 15, 18, 21 },
-            { 12, 14, 17, 20 },
-            { 11, 14, 16, 19 },
-            { 11, 13, 15, 18 },
-            { 10, 12, 15, 17 },
-            { 10, 12, 14, 16 },
-            { 9, 11, 13, 15 },
-            { 9, 11, 12, 14 },
-            { 8, 10, 12, 14 },
-            { 8, 9, 11, 13 },
-            { 7, 9, 11, 12 },
-            { 7, 9, 10, 12 },
-            { 7, 8, 10, 11 },
-            { 6, 8, 9, 11 },
-            { 6, 7, 9, 10 },
-            { 6, 7, 8, 9 },
-            { 2, 2, 2, 2 } } };
+        { 128, 176, 208, 240 },
+        { 128, 167, 197, 227 },
+        { 128, 158, 187, 216 },
+        { 123, 150, 178, 205 },
+        { 116, 142, 169, 195 },
+        { 111, 135, 160, 185 },
+        { 105, 128, 152, 175 },
+        { 100, 122, 144, 166 },
+        { 95, 116, 137, 158 },
+        { 90, 110, 130, 150 },
+        { 85, 104, 123, 142 },
+        { 81, 99, 117, 135 },
+        { 77, 94, 111, 128 },
+        { 73, 89, 105, 122 },
+        { 69, 85, 100, 116 },
+        { 66, 80, 95, 110 },
+        { 62, 76, 90, 104 },
+        { 59, 72, 86, 99 },
+        { 56, 69, 81, 94 },
+        { 53, 65, 77, 89 },
+        { 51, 62, 73, 85 },
+        { 48, 59, 69, 80 },
+        { 46, 56, 66, 76 },
+        { 43, 53, 63, 72 },
+        { 41, 50, 59, 69 },
+        { 39, 48, 56, 65 },
+        { 37, 45, 54, 62 },
+        { 35, 43, 51, 59 },
+        { 33, 41, 48, 56 },
+        { 32, 39, 46, 53 },
+        { 30, 37, 43, 50 },
+        { 29, 35, 41, 48 },
+        { 27, 33, 39, 45 },
+        { 26, 31, 37, 43 },
+        { 24, 30, 35, 41 },
+        { 23, 28, 33, 39 },
+        { 22, 27, 32, 37 },
+        { 21, 26, 30, 35 },
+        { 20, 24, 29, 33 },
+        { 19, 23, 27, 31 },
+        { 18, 22, 26, 30 },
+        { 17, 21, 25, 28 },
+        { 16, 20, 23, 27 },
+        { 15, 19, 22, 25 },
+        { 14, 18, 21, 24 },
+        { 14, 17, 20, 23 },
+        { 13, 16, 19, 22 },
+        { 12, 15, 18, 21 },
+        { 12, 14, 17, 20 },
+        { 11, 14, 16, 19 },
+        { 11, 13, 15, 18 },
+        { 10, 12, 15, 17 },
+        { 10, 12, 14, 16 },
+        { 9, 11, 13, 15 },
+        { 9, 11, 12, 14 },
+        { 8, 10, 12, 14 },
+        { 8, 9, 11, 13 },
+        { 7, 9, 11, 12 },
+        { 7, 9, 10, 12 },
+        { 7, 8, 10, 11 },
+        { 6, 8, 9, 11 },
+        { 6, 7, 9, 10 },
+        { 6, 7, 8, 9 },
+        { 2, 2, 2, 2 } } };
 
     return table[pStateIdx][qRangeIdx];
 }

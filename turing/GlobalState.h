@@ -56,8 +56,8 @@ struct StateSequence :
     ValueHolder<Active<Sps>>,
     StatePictures,
     Profiler::Timers
-    {
-    };
+{
+};
 
 
 namespace Mvp {
@@ -151,12 +151,13 @@ struct StateSubstream :
     ValueHolder<mvd_sign_flag>,
     ValueHolder<mvp_l0_flag>,
     ValueHolder<mvp_l1_flag>,
-    ValueHolder<Mvd>
-    {
-        using AccessOperators<StateSubstream>::operator[];
+    ValueHolder<Mvd>,
+    StateGrey
+{
+    using AccessOperators<StateSubstream>::operator[];
 
-        template <class H>
-        StateSubstream(H &h)
+    template <class H>
+    StateSubstream(H &h)
         :
         stateSpatial(h),
         QpState(h),
@@ -164,36 +165,33 @@ struct StateSubstream :
         ValueCache<MinCbLog2SizeY>(h),
         ValueCache<PicWidthInCtbsY>(h),
         ValueCache<PicHeightInCtbsY>(h),
-        chromaArrayType(h[::ChromaArrayType()])
-        {
-            for (int i = 0; i < 2; ++i)
-            {
-                for (int j = 0; j < 2; ++j)
-                {
-                    prev_intra_luma_pred_flag[i][j] = 0;
-                }
-            }
-        }
+        chromaArrayType(h[::ChromaArrayType()]),
+        StateGrey(h)
+    {
+        for (int i = 0; i < 2; ++i)
+            for (int j = 0; j < 2; ++j)
+                prev_intra_luma_pred_flag[i][j] = 0;
+    }
 
-        Profiler::Timers timers;
+    Profiler::Timers timers;
 
-        int rem_intra_luma_pred_mode[2][2];
-        int mpm_idx[2][2];
-        int prev_intra_luma_pred_flag[2][2];
-        int intra_chroma_pred_mode[2][2];
-        int chromaArrayType;
-        int ctxSet; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
-        int greater1Ctx; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
-        int previousGreater1Flag; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
-        int lastGreater1Flag; // used in Read.h Call<residual_coding, H>
-        int lastGreater1Ctx; // used in Read.h Call<residual_coding, H>
-        int cLastAbsLevel; // used in Read.h Call<residual_coding, H>
-        int cLastRiceParam; // used in Read.h Call<residual_coding, H>
-        bool firstCoeffAbsLevelRemainingInSubblock;
-        int i; // used in Syntax<residual_coding, H>
-        StateSpatial *stateSpatial;
-        int partIdx;
-    };
+    int rem_intra_luma_pred_mode[2][2];
+    int mpm_idx[2][2];
+    int prev_intra_luma_pred_flag[2][2];
+    int intra_chroma_pred_mode[2][2];
+    int chromaArrayType;
+    int ctxSet; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
+    int greater1Ctx; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
+    int previousGreater1Flag; // used in Read.h Call<Element<coeff_abs_level_greater1_flag, ae>,  H>
+    int lastGreater1Flag; // used in Read.h Call<residual_coding, H>
+    int lastGreater1Ctx; // used in Read.h Call<residual_coding, H>
+    int cLastAbsLevel; // used in Read.h Call<residual_coding, H>
+    int cLastRiceParam; // used in Read.h Call<residual_coding, H>
+    bool firstCoeffAbsLevelRemainingInSubblock;
+    int i; // used in Syntax<residual_coding, H>
+    StateSpatial *stateSpatial;
+    int partIdx;
+};
 
 
 template <class V, class Derived>
@@ -294,18 +292,6 @@ template <class S> struct Access<intra_chroma_pred_mode, S, typename std::enable
         }
 
         return s.intra_chroma_pred_mode[0][0];
-    }
-};
-
-
-// Local state that precomputes and caches the constant value scanIdx
-struct StateResidualCoding :
-    ValueCache<scanIdx>
-{
-    template <class H>
-    StateResidualCoding(H &h) :
-        ValueCache<scanIdx>(h)
-    {
     }
 };
 

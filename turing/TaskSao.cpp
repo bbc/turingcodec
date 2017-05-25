@@ -169,14 +169,12 @@ bool TaskSao<H>::run()
         StateEncode *stateEncode = h;
         StatePicture *statePicture = h;
         StateReconstructedPicture<Sample> *currPic = h;
-        const int currentPoc = stateEncodePicture->docket->poc;
+        const int currentPoc = stateEncodePicture->docket->absolutePoc;
         if (stateEncode->psnrAnalysis)
         {
             StateEncodePicture *stateEncodePicture = h;
-            PictureWrapper &pictureWrapper = *stateEncodePicture->docket->picture;
-            using Sample = typename SampleType<H>::Type;
-            auto &picture = dynamic_cast<Picture<Sample> &>(pictureWrapper);
-            stateEncode->psnrAnalysis->analyse(currentPoc, *currPic->picture, picture);
+            auto &pictureInput = static_cast<PictureWrap<Sample> &>(*static_cast<StateEncodePicture *>(h)->docket->picture);
+            stateEncode->psnrAnalysis->analyse(currentPoc, *currPic->picture, pictureInput);
         }
 
         if (stateEncode->decodedHashSei)

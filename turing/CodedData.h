@@ -116,39 +116,113 @@ namespace CodedData {
 
     struct SubBlock
     {
-        Type *p;
+        friend struct Residual;
 
-        Bit sigCoeffFlag(int i) const
+        inline SubBlock(Type *p) : p(p) {}
+
+        inline void init(Type *p)
         {
-            return Bit{ this->p + 0, static_cast<uint16_t>(1 << i) };
+            this->p = p;
         }
 
-        bool significant() const
+        inline Type *remaining()
+        {
+            return this->p + 3;
+        }
+
+        inline int sigCoeffFlag(int i) const
+        {
+            return (this->p[0] >> (15 - i)) & 1;
+        }
+
+        inline void  setSigCoeffFlag(int i)
+        {
+            this->p[0] |= bit(15 - i);
+        }
+
+        inline uint16_t sigCoeffFlags() const
+        {
+            return this->p[0];
+        }
+
+        inline bool significant() const
         {
             return !!this->p[0];
         }
 
-        Bit coeffSignFlag(int i) const
+        inline int coeffSignFlag(int i) const
         {
-            return Bit{ this->p + 1, static_cast<uint16_t>(1 << i) };
+            return (this->p[2] >> (15 - i)) & 1;
         }
 
-        Bit coeffGreater1Flag(int i) const
+        inline void setCoeffSignFlag(int i)
         {
-            return Bit{ this->p + 2, static_cast<uint16_t>(1 << i) };
+            this->p[2] |= bit(15 - i);
         }
 
-        void clearFlags()
+        inline uint16_t coeffSignFlags()
+        {
+            uint16_t b = 0;
+            for (int i = 0; i < 16; ++i)
+                if (coeffSignFlag(i))
+                    b |= 0x8000 >> i;
+            return b;
+        }
+
+        inline int coeffGreater1Flag(int i) const
+        {
+            return (this->p[1] >> (15 - i)) & 1;
+        }
+
+        inline uint16_t greater1Flags() const
+        {
+            return this->p[1];
+        }
+
+        inline void setCoeffGreater1Flag(int i)
+        {
+            this->p[1] |= bit(15 - i);
+        }
+
+        inline void clearFlags()
         {
             this->p[0] = 0;
             this->p[1] = 0;
             this->p[2] = 0;
         }
+
+        static inline uint16_t bit(int i)
+        {
+            return 1 << i;
+        }
+
+        inline int lastScanPos() const
+        {
+            unsigned long mask = this->sigCoeffFlags();
+            ASSERT(mask);
+            unsigned long index;
+#if WIN32
+            _BitScanForward(&index, mask);
+#else
+            index = 0;
+            while (!(mask & (1 << index)))
+                ++index;
+#endif
+            return 15 - index;
+        }
+
+    private:
+        Type *p;
     };
 
 
     struct Residual
     {
+        void init(SubBlock const &subBlock)
+        {
+            this->p = subBlock.p;
+        }
+
         Type *p;
 
         Bit transformSkipFlag() const
@@ -380,10 +454,12 @@ namespace CodedData {
     };
 
 
-    // make this method of StateCodedData?
     static void storeResidual(CodingUnit codedCu, Residual &residual, int16_t *coefficients, int log2TrafoSize, int scanIdx, bool cbf, TransformTree transformTree, int cIdx)
     {
-        if (!cbf) return;
+        if (!cbf) 
+            return;
+
+        //std::cout << "storeResidual codedCu.p=" << codedCu.p << " residual.p=" << residual.p << "\n";
 
         codedCu.word0().cbf[cIdx] = 1;
         transformTree.word0().cbf[cIdx] = 1;
@@ -397,34 +473,34 @@ namespace CodedData {
 
         residual.clearSubBlockFlags(log2TrafoSize);
 
+        auto *rasterC = rasterScanOrderC(log2TrafoSize, scanIdx);
+        auto *rasterS = rasterScanOrderS(log2TrafoSize - 2, scanIdx);
+
         for (int i = nSubBlocks - 1; i >= 0; --i)
         {
-            int const xS = ScanOrder(log2TrafoSize - 2, scanIdx, i, 0);
-            int const yS = ScanOrder(log2TrafoSize - 2, scanIdx, i, 1);
-
             subBlock.clearFlags();
 
-            CodedData::Type *p = subBlock.p + 3;
+            CodedData::Type *p = subBlock.remaining();
+
+            auto coefficientsSubBlock = coefficients + rasterS[i];
 
             for (int n = 15; n >= 0; --n)
             {
-                int const xC = (xS << 2) + ScanOrder(2, scanIdx, n, 0);
-                int const yC = (yS << 2) + ScanOrder(2, scanIdx, n, 1);
+                auto value= coefficientsSubBlock[rasterC[n]];
 
-                auto value = TransCoeffLevel(xC, yC);
                 if (value != 0)
                 {
-                    subBlock.sigCoeffFlag(n) = 1;
+                    subBlock.setSigCoeffFlag(n);
 
                     if (value < 0)
                     {
-                        subBlock.coeffSignFlag(n) = 1;
+                        subBlock.setCoeffSignFlag(n);
                         value = -value;
                     }
 
                     if (value > 1)
                     {
-                        subBlock.coeffGreater1Flag(n) = 1;
+                        subBlock.setCoeffGreater1Flag(n);
                         *p++ = value;
                     }
                 }
@@ -433,11 +509,11 @@ namespace CodedData {
             if (subBlock.significant())
             {
                 residual.codedSubBlockFlag(i) = 1;
-                subBlock.p = p;
+                subBlock.init(p);
             }
         }
 
-        residual.p = subBlock.p;
+        residual.init(subBlock);
     }
 
 } // namespace CodedData

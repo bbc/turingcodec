@@ -26,7 +26,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "havoc/pred_inter.h"
 #include "havoc/pred_intra.h"
 #include "havoc/quantize.h"
-#include "havoc/residual_decode.h"
+#include "havoc/transform.h"
 #include "havoc/sad.h"
 #include "havoc/ssd.h"
 #include "havoc/hadamard.h"
@@ -37,17 +37,18 @@ For more information, contact us at info @ turingcodec.org.
 struct StateFunctionTables :
     HavocTablePredUni<uint16_t>,
     HavocTablePredBi<uint16_t>,
-    havoc_table_inverse_transform_add<uint16_t>,
-    havoc_table_inverse_transform_add<uint8_t>,
-    havoc_table_inverse_transform,
+    havoc::table_inverse_transform_add<uint16_t>,
+    havoc::table_inverse_transform_add<uint8_t>,
+    havoc::table_inverse_transform,
     HavocTablePredUni<uint8_t>,
     HavocTablePredBi<uint8_t>,
     havoc_table_quantize_inverse,
     havoc_table_quantize,
     havoc_table_quantize_reconstruct,
-    havoc_table_pred_intra,
-    havoc_table_transform<8>, // encode only
-    havoc_table_transform<10>, // encode only
+    havoc::intra::Table<uint16_t>,
+    havoc::intra::Table<uint8_t>,
+    havoc::table_transform<8>, // encode only
+    havoc::table_transform<10>, // encode only
     havoc_table_ssd<uint8_t>, // encode only
     havoc_table_ssd<uint16_t>, // encode only
     havoc_table_sad<uint8_t>, // encode only
@@ -63,8 +64,7 @@ struct StateFunctionTables :
         :
         instruction_set_support(mask)
     {
-        this->code = havoc_new_code(mask, 8000000);
-        this->code2 = havoc_new_code(havoc_instruction_set(HAVOC_C_OPT | HAVOC_C_REF), 8000000);
+        this->code = havoc_new_code(mask, 12000000);
         havocPopulatePredUni<uint8_t>(this, this->code);
         havocPopulatePredUni<uint16_t>(this, this->code);
         havocPopulatePredBi<uint8_t>(this, this->code);
@@ -72,12 +72,13 @@ struct StateFunctionTables :
         havoc_populate_quantize_inverse(this, this->code);
         havoc_populate_quantize(this, this->code);
         havoc_populate_quantize_reconstruct(this, this->code);
-        havoc_populate_inverse_transform(this, this->code, encoder ? 1 : 0);
-        havoc_populate_inverse_transform_add<uint8_t>(this, this->code, encoder ? 1 : 0);
-        havoc_populate_inverse_transform_add<uint16_t>(this, this->code, encoder ? 1 : 0);
-        havoc_populate_pred_intra(this, this->code);
-        havoc_populate_transform<8>(this, this->code); // encode
-        havoc_populate_transform<10>(this, this->code); // encode
+        havoc::populate_inverse_transform(this, this->code, encoder ? 1 : 0);
+        havoc::populate_inverse_transform_add<uint8_t>(this, this->code, encoder ? 1 : 0);
+        havoc::populate_inverse_transform_add<uint16_t>(this, this->code, encoder ? 1 : 0);
+        this->havoc::intra::Table<uint16_t>::populate(this->code);
+        this->havoc::intra::Table<uint8_t>::populate(this->code);
+        havoc::populate_transform<8>(this, this->code); // encode
+        havoc::populate_transform<10>(this, this->code); // encode
         havoc_populate_ssd<uint8_t>(this, this->code); // encode
         havoc_populate_ssd<uint16_t>(this, this->code); // encode
         havoc_populate_sad<uint8_t>(this, this->code); // encode
@@ -93,11 +94,9 @@ struct StateFunctionTables :
     ~StateFunctionTables()
     {
         havoc_delete_code(this->code);
-        havoc_delete_code(this->code2);
     }
 
     havoc_code code;
-    havoc_code code2;
 
     havoc_instruction_set const instruction_set_support;
 };

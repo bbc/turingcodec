@@ -148,42 +148,120 @@ struct ScanPos
 };
 
 
-typedef std::vector<ScanPos > Scan;
-
-
 template <int blkSize>
 struct ScanArray
 {
     ScanPos lookup[3][blkSize * blkSize];
+    uint8_t raster[3][blkSize * blkSize];
+    uint16_t rasterC[3][4*4];
+    uint16_t rasterS[3][blkSize * blkSize];
     ScanArray()
     {
         diagScan(this->lookup[0], blkSize);
         horizScan(this->lookup[1], blkSize);
         vertScan(this->lookup[2], blkSize);
+        for (int scanIdx = 0; scanIdx < 3; ++scanIdx)
+            for (int y = 0; y < blkSize; ++y)
+                for (int x = 0; x < blkSize; ++x)
+                {
+                    this->raster[scanIdx][x + y * blkSize]
+                        = (int)this->lookup[scanIdx][x + y * blkSize].x
+                        + (int)this->lookup[scanIdx][x + y * blkSize].y * blkSize;
+                    this->rasterS[scanIdx][x + y * blkSize]
+                        = (int)this->lookup[scanIdx][x + y * blkSize].x * 4
+                        + (int)this->lookup[scanIdx][x + y * blkSize].y * 4 * 4 * blkSize;
+                }
+
+        ScanPos temp[3][4 * 4];
+        diagScan(temp[0], 4);
+        horizScan(temp[1], 4);
+        vertScan(temp[2], 4);
+        for (int scanIdx = 0; scanIdx < 3; ++scanIdx)
+            for (int y = 0; y < 4; ++y)
+                for (int x = 0; x < 4; ++x)
+                {
+                    this->rasterC[scanIdx][x + y * 4]
+                        = temp[scanIdx][x + y * 4].x
+                        + temp[scanIdx][x + y * 4].y * blkSize;
+                }
     }
 };
 
+#ifndef SCANORDER_CPP
+extern ScanArray<1> scanArray1x1;
+extern ScanArray<2> scanArray2x2;
+extern ScanArray<4> scanArray4x4;
+extern ScanArray<8> scanArray8x8;
+extern ScanArray<16> scanArray16x16;
+extern ScanArray<32> scanArray32x32;
 
-template <int log2BlockSize>
-ScanArray<1 << log2BlockSize> const &scanPos()
-{
-    static const ScanArray<1 << log2BlockSize> scanArray;
+template <int log2BlockSize> 
+static ScanArray<1 << log2BlockSize> const &scanPos() 
+{ 
+    static ScanArray<1 << log2BlockSize> scanArray;
     return scanArray;
-}
+};
+
+template <> ScanArray<2> const &scanPos<1>() { return scanArray2x2; }
+template <> ScanArray<4> const &scanPos<2>() { return scanArray4x4; }
+template <> ScanArray<8> const &scanPos<3>() { return scanArray8x8; }
+template <> ScanArray<16> const &scanPos<4>() { return scanArray16x16; }
+template <> ScanArray<32> const &scanPos<5>() { return scanArray32x32; }
 
 
 static inline int ScanOrder(int log2BlockSize, int scanIdx, int sPos, int sComp)
 {
     switch (log2BlockSize)
     {
-    case 5: return scanPos<5>().lookup[scanIdx][sPos][sComp];
-    case 4: return scanPos<4>().lookup[scanIdx][sPos][sComp];
-    case 3: return scanPos<3>().lookup[scanIdx][sPos][sComp];
-    case 2: return scanPos<2>().lookup[scanIdx][sPos][sComp];
-    case 1: return scanPos<1>().lookup[scanIdx][sPos][sComp];
+    case 1: return scanArray2x2.lookup[scanIdx][sPos][sComp];
+    case 2: return scanArray4x4.lookup[scanIdx][sPos][sComp];
+    case 3: return scanArray8x8.lookup[scanIdx][sPos][sComp];
+    case 4: return scanArray16x16.lookup[scanIdx][sPos][sComp];
+    case 5: return scanArray32x32.lookup[scanIdx][sPos][sComp];
     default: return 0;
     }
 }
+
+static inline uint8_t const *rasterScanOrder(int log2BlockSize, int scanIdx)
+{
+    switch (log2BlockSize)
+    {
+    case 1: return scanArray2x2.raster[scanIdx];
+    case 2: return scanArray4x4.raster[scanIdx];
+    case 3: return scanArray8x8.raster[scanIdx];
+    case 4: return scanArray16x16.raster[scanIdx];
+    case 5: return scanArray32x32.raster[scanIdx];
+    default: return 0;
+    }
+}
+
+static inline uint16_t const *rasterScanOrderC(int log2BlockSize, int scanIdx)
+{
+    switch (log2BlockSize)
+    {
+    case 1: return scanArray2x2.rasterC[scanIdx];
+    case 2: return scanArray4x4.rasterC[scanIdx];
+    case 3: return scanArray8x8.rasterC[scanIdx];
+    case 4: return scanArray16x16.rasterC[scanIdx];
+    case 5: return scanArray32x32.rasterC[scanIdx];
+    default: return 0;
+    }
+}
+static inline uint16_t const *rasterScanOrderS(int log2BlockSize, int scanIdx)
+{
+    switch (log2BlockSize)
+    {
+    case 0: return scanArray1x1.rasterS[scanIdx];
+    case 1: return scanArray2x2.rasterS[scanIdx];
+    case 2: return scanArray4x4.rasterS[scanIdx];
+    case 3: return scanArray8x8.rasterS[scanIdx];
+    case 4: return scanArray16x16.rasterS[scanIdx];
+    case 5: return scanArray32x32.rasterS[scanIdx];
+    default: return 0;
+    }
+}
+
+#endif
 
 
 template <int blkSize>

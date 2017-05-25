@@ -76,7 +76,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
     {
         for (int rIdx = 0; rIdx <= h[num_ref_idx_l0_active_minus1()]; rIdx++)
         {
-            StateEncodePicture *stateEncodePicture = dynamic_cast<StateEncodePicture *>(h[RefPicList(L0)][rIdx].dp.get());
+            StateEncodePicture *stateEncodePicture = static_cast<StateEncodePicture *>(h[RefPicList(L0)][rIdx].dp.get());
             StateWavefront *stateWavefrontRef = stateEncodePicture;
             if (!stateWavefrontRef->saoed(depX, depY)) return true;
         }
@@ -86,7 +86,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
     {
         for (int rIdx = 0; rIdx <= h[num_ref_idx_l1_active_minus1()]; rIdx++)
         {
-            StateEncodePicture *stateEncodePicture = dynamic_cast<StateEncodePicture *>(h[RefPicList(L1)][rIdx].dp.get());
+            StateEncodePicture *stateEncodePicture = static_cast<StateEncodePicture *>(h[RefPicList(L1)][rIdx].dp.get());
             StateWavefront *stateWavefrontRef = stateEncodePicture;
             if (!stateWavefrontRef->saoed(depX, depY)) return true;
         }
@@ -96,6 +96,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
     if (stateEncode->useRateControl)
     {
         StateEncodePicture *stateEncodePictureCurr = h;
+        const bool currNotIntra = true;//(stateEncodePictureCurr->docket->intraFramePoc != stateEncodePictureCurr->docket->poc);
         for (auto &response : stateEncode->responses)
         {
             const int rx = h[CtbAddrInRs()] % h[PicWidthInCtbsY()];
@@ -108,17 +109,27 @@ bool TaskEncodeSubstream<Sample>::blocked()
                 const bool previousHierarchyLevel = stateEncodePicture->docket->hierarchyLevel < stateEncodePictureCurr->docket->hierarchyLevel;
                 const bool previousIntraPeriod = stateEncodePicture->docket->intraFramePoc < stateEncodePictureCurr->docket->intraFramePoc;
                 const bool sameIntraPeriod = stateEncodePicture->docket->intraFramePoc == stateEncodePictureCurr->docket->intraFramePoc;
-                if ((previousHierarchyLevel && sameIntraPeriod) || previousIntraPeriod)
+
+                if (previousHierarchyLevel && currNotIntra)
                 {
                     StateWavefront *stateWavefrontRef = stateEncodePicture;
-                    if (!stateWavefrontRef->encoded(rx, ry)) return true;
-                }
 
-                if (previousHierarchyLevel && sameIntraPeriod && stateEncode->rateControlEngine->numLeftSameHierarchyLevel(stateEncodePicture->docket->poc) > 1)
-                {
-                    return true;
+                    if (!stateWavefrontRef->deblocked(rx, ry)) 
+                    {
+                        return true;
+                    }
                 }
             }
+        }
+        int segmentPoc = stateEncodePictureCurr->docket->segmentPoc;
+        int currPoc = stateEncodePictureCurr->docket->poc;
+        int blockingPoc = -1;
+        stateEncode->rateControlParams->takeTokenOnRCLevel();
+        bool blockedNumLeft = stateEncode->rateControlMap.find(segmentPoc)->second->blockedByNumLeftHierarchyLevel(currPoc, blockingPoc);
+        stateEncode->rateControlParams->releaseTokenOnRCLevel();
+        if (currNotIntra && blockedNumLeft)
+        {
+            return true;
         }
     }
     return false;
@@ -161,6 +172,7 @@ bool TaskEncodeSubstream<Sample>::run()
 
         // Is this task blocked, waiting for previous substreams or other dependencies?
         if (this->blockedLock()) return true;
+        StateEncodePicture *stateEncodePictureCurr = h;
 
         if (!this->isLastSubstream && rx == 0)
         {

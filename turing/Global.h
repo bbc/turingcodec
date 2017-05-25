@@ -296,6 +296,7 @@ static bool compareZ(int xC, int yC, int xN, int yN)
     return p > q;
 }
 
+
 // object designed to persist for lifetime of CTU
 struct AvailabilityCtu
 {
@@ -311,6 +312,7 @@ struct AvailabilityCtu
         this->above = initialiseNeighbour(h, 0, -1);
         this->aboveRight = initialiseNeighbour(h, 1, -1);
     }
+
     template <char mode=0>
     bool available(int xCurr, int yCurr, int xN, int yN, int log2CtuSize) const
     {
@@ -411,17 +413,6 @@ private:
 };
 
 
-
-DEFINE_STRUCT_ARITY_4(availableX, xCurr, yCurr, xN, yN)
-template <> struct ValueType<availableX> { typedef bool Type; };
-DEFINE_DERIVED_LONG(availableX)
-{
-    AvailabilityCtu &a = *static_cast<AvailabilityCtu *>(h);
-    return a.available(v.xCurr, v.yCurr, v.xN, v.yN, h[CtbLog2SizeY()]);
-}
-};
-
-
 DEFINE_STRUCT_ARITY_0(sps_range_extension);
 struct transform_skip_rotation_enabled_flag { };
 struct transform_skip_context_enabled_flag { };
@@ -432,7 +423,6 @@ struct intra_smoothing_disabled_flag { };
 struct high_precision_offsets_enabled_flag { };
 struct persistent_rice_adaptation_enabled_flag { };
 struct cabac_bypass_alignment_enabled_flag { };
-
 
 
 DEFINE_STRUCT_ARITY_0(pic_parameter_set_rbsp);
@@ -849,7 +839,7 @@ DEFINE_STRUCT_ARITY_4(coding_quadtree, x0, y0, log2CbSize, cqtDepth)
 // A special syntax construct designed to represent spatial element V that are not walked by the syntax.
 // This is used to invoke code for coding_quadtree()s that are not parsed because they fall outside of the picture.
 // The Direction parameter allows more intelligent behaviour based on whether the deleted coding_quadtree was
-// Right, Down or DownRight of the picture boundary.
+// Right or Down of the picture boundary.
 template <class V, class Direction>
 struct Deleted :
     V
@@ -900,7 +890,6 @@ struct Up {}; // above the current block
 struct Left {}; // left of the current block
 struct Down {}; // down of the current block
 struct Right {}; // right of the current block
-struct DownRight {}; // below and right of the current block
 struct Current {}; // within the current block
 struct CurrentCu {}; // within the current coding_unit
 struct Anywhere {}; // wanted value could be anywhere
@@ -1065,7 +1054,7 @@ struct interSplitFlag { };
 DEFINE_STRUCT_ARITY_3(split_transform_flag, x0, y0, trafoDepth )
 
 template <class H>
-int infer(split_transform_flag e, H &h)
+inline int infer(split_transform_flag e, H &h)
 {
     const transform_tree &tt = *static_cast<transform_tree *>(h);
     if (tt.log2TrafoSize > h[MaxTbLog2SizeY()])
@@ -1084,20 +1073,13 @@ int infer(split_transform_flag e, H &h)
 }
 
 DEFINE_DERIVED_LONG(interSplitFlag)
-{
-    const transform_tree &tt = *static_cast<transform_tree *>(h);
-    if (h[max_transform_hierarchy_depth_inter()] == 0
-            && h[current(CuPredMode(tt.x0, tt.y0))] == MODE_INTER
+    {
+        const transform_tree &tt = *static_cast<transform_tree *>(h);
+        return (h[current(CuPredMode(tt.x0, tt.y0))] == MODE_INTER
+            && h[max_transform_hierarchy_depth_inter()] == 0
             && h[PartMode()] != PART_2Nx2N
-            && tt.trafoDepth == 0)
-    {
-        return 1;
+            && tt.trafoDepth == 0);
     }
-    else
-    {
-        return 0;
-    }
-}
 };
 
 DEFINE_STRUCT_ARITY_3(cbf_cb, x0, y0, trafoDepth )
@@ -1229,23 +1211,20 @@ struct transform_skip_flag_1 { };
 struct transform_skip_flag_2 { };
 struct scanIdx { };
 DEFINE_DERIVED_LONG(scanIdx)
-{
-    const coding_quadtree *cqt = h;
-    const coding_unit cu(cqt->x0, cqt->y0, cqt->log2CbSize);
-    const residual_coding &rc = *static_cast<residual_coding *>(h);
-
-    if (h[current(CuPredMode(cu.x0, cu.y0))] == MODE_INTRA)
     {
-        assert(h[current(CuPredMode(cu.x0, cu.y0))] == MODE_INTRA);
-        if (rc.log2TrafoSize == 2 || (rc.log2TrafoSize == 3 && rc.cIdx == 0) || (rc.log2TrafoSize == 3 && h[ChromaArrayType()] == 3))
+        coding_quadtree const *cqt = h;
+        residual_coding const *rc = h;
+        if (h[current(CuPredMode(cqt->x0, cqt->y0))] == MODE_INTRA)
         {
-            const int predModeIntra = rc.cIdx ? h[IntraPredModeC(rc.x0, rc.y0)] : h[IntraPredModeY(rc.x0, rc.y0)];
-            if (predModeIntra >= 6 && predModeIntra <= 14) return 2;
-            if (predModeIntra >= 22 && predModeIntra <= 30) return 1;
+            if (rc->log2TrafoSize == 2 || (rc->log2TrafoSize == 3 && rc->cIdx == 0) || (rc->log2TrafoSize == 3 && h[ChromaArrayType()] == 3))
+            {
+                int const predModeIntra = rc->cIdx ? h[IntraPredModeC(rc->x0, rc->y0)] : h[IntraPredModeY(rc->x0, rc->y0)];
+                static uint8_t const lookup[35] = { 0,0,0,0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0 };
+                return lookup[predModeIntra];
+            }
         }
+        return 0;
     }
-    return 0;
-}
 };
 struct LastSignificantCoeffX { };
 struct LastSignificantCoeffY { };
@@ -1495,38 +1474,38 @@ namespace Turing {
     };
 }
 
-static int xPositionOf(const Turing::Rectangle& rectangle) { return rectangle.x0; }
-static int yPositionOf(const Turing::Rectangle& rectangle) { return rectangle.y0; }
-static int widthOf(const Turing::Rectangle& rectangle) { return rectangle.width; }
-static int heightOf(const Turing::Rectangle& rectangle) { return rectangle.height; }
+static inline int xPositionOf(const Turing::Rectangle& rectangle) { return rectangle.x0; }
+static inline int yPositionOf(const Turing::Rectangle& rectangle) { return rectangle.y0; }
+static inline int widthOf(const Turing::Rectangle& rectangle) { return rectangle.width; }
+static inline int heightOf(const Turing::Rectangle& rectangle) { return rectangle.height; }
 
-static int xPositionOf(const coding_quadtree& cqt) { return cqt.x0; }
-static int yPositionOf(const coding_quadtree& cqt) { return cqt.y0; }
-static int widthOf(const coding_quadtree& cqt) { return 1 << cqt.log2CbSize; }
-static int heightOf(const coding_quadtree& cqt) { return 1 << cqt.log2CbSize; }
+static inline int xPositionOf(const coding_quadtree& cqt) { return cqt.x0; }
+static inline int yPositionOf(const coding_quadtree& cqt) { return cqt.y0; }
+static inline int widthOf(const coding_quadtree& cqt) { return 1 << cqt.log2CbSize; }
+static inline int heightOf(const coding_quadtree& cqt) { return 1 << cqt.log2CbSize; }
 
-static int xPositionOf(const coding_unit& cu) { return cu.x0; }
-static int yPositionOf(const coding_unit& cu) { return cu.y0; }
-static int widthOf(const coding_unit& cu) { return 1 << cu.log2CbSize; }
-static int heightOf(const coding_unit& cu) { return 1 << cu.log2CbSize; }
+static inline int xPositionOf(const coding_unit& cu) { return cu.x0; }
+static inline int yPositionOf(const coding_unit& cu) { return cu.y0; }
+static inline int widthOf(const coding_unit& cu) { return 1 << cu.log2CbSize; }
+static inline int heightOf(const coding_unit& cu) { return 1 << cu.log2CbSize; }
 
-static int xPositionOf(const prediction_unit& pu) { return pu.x0; }
-static int yPositionOf(const prediction_unit& pu) { return pu.y0; }
-static int widthOf(const prediction_unit& pu) { return pu.nPbW; }
-static int heightOf(const prediction_unit& pu) { return pu.nPbH; }
+static inline int xPositionOf(const prediction_unit& pu) { return pu.x0; }
+static inline int yPositionOf(const prediction_unit& pu) { return pu.y0; }
+static inline int widthOf(const prediction_unit& pu) { return pu.nPbW; }
+static inline int heightOf(const prediction_unit& pu) { return pu.nPbH; }
 
-static int xPositionOf(const transform_tree& tt) { return tt.x0; }
-static int yPositionOf(const transform_tree& tt) { return tt.y0; }
-static int widthOf(const transform_tree& tt) { return 1 << tt.log2TrafoSize; }
-static int heightOf(const transform_tree& tt) { return 1 << tt.log2TrafoSize; }
+static inline int xPositionOf(const transform_tree& tt) { return tt.x0; }
+static inline int yPositionOf(const transform_tree& tt) { return tt.y0; }
+static inline int widthOf(const transform_tree& tt) { return 1 << tt.log2TrafoSize; }
+static inline int heightOf(const transform_tree& tt) { return 1 << tt.log2TrafoSize; }
 
-static int xPositionOf(const IntraPartition& e) { return e.x0 + ((e.blkIdx & 1) << (e.log2CbSize - e.split)); }
-static int yPositionOf(const IntraPartition& e) { return e.y0 + ((e.blkIdx & 2) << (e.log2CbSize - e.split - 1)); }
-static int widthOf(const IntraPartition& e) { return 1 << (e.log2CbSize - e.split); }
-static int heightOf(const IntraPartition& e) { return 1 << (e.log2CbSize - e.split); }
+static inline int xPositionOf(const IntraPartition& e) { return e.x0 + ((e.blkIdx & 1) << (e.log2CbSize - e.split)); }
+static inline int yPositionOf(const IntraPartition& e) { return e.y0 + ((e.blkIdx & 2) << (e.log2CbSize - e.split - 1)); }
+static inline int widthOf(const IntraPartition& e) { return 1 << (e.log2CbSize - e.split); }
+static inline int heightOf(const IntraPartition& e) { return 1 << (e.log2CbSize - e.split); }
 
-static int xPositionOf(const residual_coding& e) { return e.x0; }
-static int yPositionOf(const residual_coding& e) { return e.y0; }
+static inline int xPositionOf(const residual_coding& e) { return e.x0; }
+static inline int yPositionOf(const residual_coding& e) { return e.y0; }
 template <class E> static int zPositionOf(const E &e) { return cartesianToZ(xPositionOf(e), yPositionOf(e)); }
 
 struct numGreater1Flag { };

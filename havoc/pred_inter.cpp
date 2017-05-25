@@ -1128,7 +1128,7 @@ static void test_partitions(int *error_count, bound_pred_uni *b, havoc_instructi
 
         b[1] = b[0];
 
-        *error_count += havoc_test(&b[0], &b[1], get_pred_uni, invoke_pred_uni, mismatch_pred_uni, mask, 1000);
+        *error_count += havoc_test(&b[0], &b[1], get_pred_uni, invoke_pred_uni, mismatch_pred_uni, mask, 10);
     }
 
     if (b[0].taps == 4)
@@ -1145,7 +1145,7 @@ static void test_partitions(int *error_count, bound_pred_uni *b, havoc_instructi
 
             b[1] = b[0];
 
-            *error_count += havoc_test(&b[0], &b[1], get_pred_uni, invoke_pred_uni, mismatch_pred_uni, mask, 1000);
+            *error_count += havoc_test(&b[0], &b[1], get_pred_uni, invoke_pred_uni, mismatch_pred_uni, mask, 10);
         }
     }
 }
@@ -1998,7 +1998,7 @@ static void test_partitions_bi(int *error_count, bound_pred_bi *b, havoc_instruc
 
         b[1] = b[0];
 
-        *error_count += havoc_test(&b[0], &b[1], init_pred_bi, invoke_pred_bi, mismatch_pred_bi, mask, 1000);
+        *error_count += havoc_test(&b[0], &b[1], init_pred_bi, invoke_pred_bi, mismatch_pred_bi, mask, 10);
     }
 
     if (b[0].taps == 4)
@@ -2012,7 +2012,7 @@ static void test_partitions_bi(int *error_count, bound_pred_bi *b, havoc_instruc
 
             b[1] = b[0];
 
-            *error_count += havoc_test(&b[0], &b[1], init_pred_bi, invoke_pred_bi, mismatch_pred_bi, mask, 1000);
+            *error_count += havoc_test(&b[0], &b[1], init_pred_bi, invoke_pred_bi, mismatch_pred_bi, mask, 10);
         }
 }
 
@@ -2236,7 +2236,7 @@ namespace havoc {
 
             b[1] = b[0];
 
-            havoc_test(&b[0], &b[1], initSubtractBi, invokeSubtractBi, mismatchSubtractBi, mask, 1000);
+            havoc_test(&b[0], &b[1], initSubtractBi, invokeSubtractBi, mismatchSubtractBi, mask, 10);
         }
     }
 

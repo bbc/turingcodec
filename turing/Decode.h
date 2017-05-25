@@ -29,7 +29,8 @@ For more information, contact us at info @ turingcodec.org.
 #include "Handlers.h"
 #include "Picture.h"
 #include "Mvp.h"
-#include "havoc/residual_decode.h"
+#include "IntraReferenceSamples.h"
+#include "havoc/transform.h"
 #include "havoc/quantize.h"
 
 
@@ -193,7 +194,7 @@ void pictureOutput(PictureOutput &po, H &h)
     Handler<typename H::Tag, StatePicture> hPicture;
     hPicture.state = po.statePicture.get();
 
-    auto &dp = dynamic_cast<StateReconstructedPicture<Sample> &>(*hPicture.state->reconstructedPicture);
+    auto &dp = static_cast<StateReconstructedPicture<Sample> &>(*hPicture.state->reconstructedPicture);
 
     ThreePlanes<Sample> conformanceWindow = { *dp.picture,
         hPicture[SubWidthC()] * hPicture[conf_win_left_offset()],
@@ -372,8 +373,30 @@ template <> struct Decode<IntraPrediction>
 {
     template <class H> static void go(IntraPrediction f, H &h)
     {
-        auto reconstructedSamples = h[ReconstructedSamples(f.rc.x0, f.rc.y0, f.rc.cIdx)];
-        predictBlockIntra(h, reconstructedSamples, reconstructedSamples, f.rc);
+        auto const &rc = f.rc;
+
+        auto samples = h[ReconstructedSamples(rc.x0, rc.y0, rc.cIdx)];
+        using Sample = typename SampleType<H>::Type;
+        IntraReferenceSamples<Sample> unfiltered;
+        IntraReferenceSamples<Sample> filtered;
+
+        unfiltered.substitute(h, samples, rc);
+
+        const int predModeIntra = rc.cIdx ? h[IntraPredModeC(rc.x0, rc.y0)] : h[IntraPredModeY(rc.x0, rc.y0)];
+
+        auto const ff = filterFlag(rc.cIdx, predModeIntra, 1 << rc.log2TrafoSize);
+
+        if (ff)
+            filtered.filter(unfiltered, h[strong_intra_smoothing_enabled_flag()], h[BitDepthY()], 1 << rc.log2TrafoSize);
+
+        auto const &pF = ff ? filtered : unfiltered;
+
+        auto const bitDepth = rc.cIdx ? h[BitDepthC()] : h[BitDepthY()];
+
+        havoc::intra::Table<Sample> *table = h;
+        auto *function = table->lookup(rc.cIdx, bitDepth, rc.log2TrafoSize, predModeIntra);
+
+        (*function)(samples.p, samples.stride, &pF(0, -1), predModeIntra);
     }
 };
 
@@ -479,7 +502,7 @@ struct Decode<residual_coding>
         }
         else
         {
-            auto *inverseTransformAdd = *havoc_get_inverse_transform_add<Sample>(h, trType, rc.log2TrafoSize);
+            auto *inverseTransformAdd = *havoc::get_inverse_transform_add<Sample>(h, trType, rc.log2TrafoSize);
             inverseTransformAdd(recSamples.p, recSamples.stride, predSamples.p, predSamples.stride, coefficients.p, bitDepth);
         }
     }

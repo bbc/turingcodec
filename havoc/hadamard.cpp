@@ -885,7 +885,7 @@ void testHadamardSatd(int *error_count, havoc_instruction_set mask)
     for (b[0].log2TrafoSize = 3; b[0].log2TrafoSize >= 1; --b[0].log2TrafoSize)
     {
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_hadamard_satd, invoke_hadamard_satd, mismatch_hadamard_satd, mask, 100000);
+        *error_count += havoc_test(&b[0], &b[1], init_hadamard_satd, invoke_hadamard_satd, mismatch_hadamard_satd, mask, 10);
     }
 }
 

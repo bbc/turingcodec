@@ -305,7 +305,7 @@ void testSsd(int *error_count, havoc_instruction_set mask)
     for (b[0].log2TrafoSize = 2; b[0].log2TrafoSize <= 6; ++b[0].log2TrafoSize)
     {
         b[1] = b[0];
-        *error_count += havoc_test(&b[0], &b[1], init_ssd, invoke_ssd, mismatch_ssd, mask, 100000);
+        *error_count += havoc_test(&b[0], &b[1], init_ssd, invoke_ssd, mismatch_ssd, mask, 10);
     }
 }
 

@@ -149,6 +149,11 @@ struct Speed
         return *this >= medium;
     }
 
+    bool useSao() const
+    {
+        return *this <= medium;
+    }
+
     bool useSaoSlow() const
     {
         return *this < medium;

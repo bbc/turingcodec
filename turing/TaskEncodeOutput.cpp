@@ -163,8 +163,24 @@ bool writeOut(H &h)
         h[last_payload_type_byte()] = PayloadTypeOf<pic_timing>::value;
         h[frame_field_info_present_flag()] = 1;
         h[pic_struct()] = picturewrapper.fieldTB;
-        h[source_scan_type()] = 0;
+        h[source_scan_type()] = 2;
         h[duplicate_flag()] = 0;
+        h(byte_stream_nal_unit(0));
+    }
+    else if (stateEncode->framedoubling)
+    {
+        // active_parameter_sets
+        h[nal_unit_type()] = PREFIX_SEI_NUT;
+        h[last_payload_type_byte()] = PayloadTypeOf<active_parameter_sets>::value;
+        h[active_video_parameter_set_id()] = 0;
+        h[self_contained_cvs_flag()] = 1;
+        h(byte_stream_nal_unit(0));
+
+        // pic_timing
+        h[nal_unit_type()] = PREFIX_SEI_NUT;
+        h[last_payload_type_byte()] = PayloadTypeOf<pic_timing>::value;
+        h[frame_field_info_present_flag()] = 1;
+        h[pic_struct()] = 7;
         h(byte_stream_nal_unit(0));
     }
 
@@ -197,15 +213,11 @@ bool writeOut(H &h)
         StateEncodePicture *stateEncodePicture = h;
         int currentPictureLevel = stateEncodePicture->docket->sopLevel;
         size_t codingBits = (nalWriter->data->size()) << 3;
-
-        stateEncode->rateControlEngine->updateAfterEncoding(stateEncodePicture->docket, static_cast<int>(codingBits));
-
-        stateEncode->rateControlEngine->updateSequenceControllerFinishedFrames(stateEncodePicture->docket);
-#if WRITE_RC_LOG
-        char data[100];
-        sprintf(data, " %10d |\n", static_cast<int>(codingBits));
-        stateEncode->rateControlEngine->writetoLogFile(data);
-#endif
+        int segmentPoc = stateEncodePicture->docket->segmentPoc;
+        stateEncode->rateControlParams->takeTokenOnRCLevel();
+        stateEncode->rateControlMap.find(segmentPoc)->second->updateAfterEncoding(stateEncodePicture->docket, static_cast<int>(codingBits));
+        stateEncode->rateControlMap.find(segmentPoc)->second->updateSequenceControllerFinishedFrames(stateEncodePicture->docket);
+        stateEncode->rateControlParams->releaseTokenOnRCLevel();
     }
 
     return isKeyframe;

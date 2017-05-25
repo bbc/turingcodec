@@ -17,7 +17,10 @@ if (MSVC)
 endif (MSVC)
 
 if (CMAKE_COMPILER_IS_GNUCC)
-	set(GCC_COMPILE_FLAGS "-fno-operator-names -std=c++0x -O3")
+	set(GCC_COMPILE_FLAGS "-fno-operator-names -std=c++0x")
+	set(GCC_COMPILE_FLAGS "-fno-operator-names -pthread -std=c++1y")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fno-strict-aliasing -DNDEBUG ")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -DVALGRIND_FRIENDLY")
 	set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_COMPILE_FLAGS}")
 endif (CMAKE_COMPILER_IS_GNUCC	)
 
@@ -30,9 +33,9 @@ add_library (havoc
 	pred_inter.h
 	pred_intra.h
 	quantize.h
-	residual_decode.h
 	sad.h
 	ssd.h
+	transform.h
 	havoc.cpp
 	havoc_test.c 
 	diff.cpp 
@@ -40,15 +43,17 @@ add_library (havoc
 	pred_inter.cpp 
 	pred_intra.cpp 
 	quantize.cpp 
-	residual_decode.cpp 
 	sad.cpp 
 	ssd.cpp
+	transform.cpp
 	README.md
 )
 
 add_executable(havoc-exe
 	main.cpp
 )
+
+unset(CMAKE_IMPORT_LIBRARY_SUFFIX)
 
 target_link_libraries(havoc-exe havoc)
 

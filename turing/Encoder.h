@@ -72,6 +72,7 @@ struct Encoder
     int frameHeight;
     int pictureWidth;
     int pictureHeight;
+    int confWinBottomOffset;
     int bitDepth;
     int externalBitDepth;
     boost::timer::cpu_timer cpuTimer;

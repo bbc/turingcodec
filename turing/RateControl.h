@@ -54,7 +54,9 @@ For more information, contact us at info @ turingcodec.org.
 #define MAX_NUM_LEVELS     6
 #define CTB_SMOOTH_WINDOW  4
 #define BETA_INTRA_MAD     1.2517
-#define WRITE_RC_LOG       0
+#define DISABLE_CLIP_PL    0
+#define DISABLE_CLIP_CTL   0
+#define WIN_LENGTH         100
 
 using namespace std;
 
@@ -62,29 +64,111 @@ struct EstimateIntraComplexity;
 struct StateEncodePicture;
 struct StatePicture;
 
+struct int128bit
+{
+public:
+
+    int128bit()
+    {
+        high = 0;
+        low = 0;
+    }
+    int128bit(const int64_t  rhs)
+    {
+        high = 0;
+        low = rhs;
+    }
+
+
+    int128bit operator=(const int64_t & rhs)
+    {
+        int128bit curr;
+        curr.low = rhs;
+        return curr;
+    }
+
+    int128bit operator+(const int128bit & rhs)
+    {
+        int128bit sum;
+        sum.high = high + rhs.high;
+        sum.low = low + rhs.low;
+        // check for overflow of low 64 bits, add carry to high
+        if (sum.low < low)
+            ++sum.high;
+        return sum;
+    }
+
+    int128bit& operator+=(const int128bit & rhs)
+    {
+        int128bit sum;
+        sum.high = high + rhs.high;
+        sum.low = low + rhs.low;
+        // check for overflow of low 64 bits, add carry to high
+        if (sum.low < low)
+            ++sum.high;
+        high = sum.high;
+        low = sum.low;
+        return *this;
+    }
+
+    int128bit& operator+=(const int64_t & rhs)
+    {
+        int128bit sum;
+        sum.low = low + rhs;
+        // check for overflow of low 64 bits, add carry to high
+        if (sum.low < low)
+            ++sum.high;
+        high = sum.high;
+        low = sum.low;
+        return *this;
+    }
+
+    int128bit operator-(const int128bit & rhs)
+    {
+        int128bit difference;
+        difference.high = high - rhs.high;
+        difference.low = low - rhs.low;
+        // check for underflow of low 64 bits, subtract carry to high
+        if (difference.low > low)
+            --difference.high;
+        return difference;
+    }
+    int64_t to64()
+    {
+        return low;
+    }
+
+private:
+    int64_t  high;
+    int64_t low;
+};
+
+
 class CpbInfo
 {
 private:
     int m_cpbStatus;
     int m_cpbSize;
     int m_cpbBufferingRate;
+    double m_cpbBufferingRateCtb;
     mutex m_cpbStatusMutex;
 
 public:
     CpbInfo() : m_cpbStatus(0),
     m_cpbSize(0),
-    m_cpbBufferingRate(0) {}
+    m_cpbBufferingRate(0), m_cpbBufferingRateCtb(0.0){}
 
-    CpbInfo(int cpbSize, int targetRate, double frameRate, double initialFullness)
+    CpbInfo(int cpbSize, int targetRate, double frameRate, double initialFullness, int numCtbsInFrame)
     {
         m_cpbSize          = cpbSize;
         m_cpbStatus        = static_cast<int>(static_cast<double>(m_cpbSize * initialFullness));
-        m_cpbBufferingRate = static_cast<int>(static_cast<double>(targetRate) / frameRate);
+        m_cpbBufferingRate = static_cast<int>(static_cast<double>(targetRate * 1000) / frameRate);
+        m_cpbBufferingRateCtb = static_cast<double>(m_cpbBufferingRate)/ static_cast<double>(numCtbsInFrame);
     }
     void updateCpbStatus(int codingBits)
     {
         unique_lock<mutex> lockCpbInfo(m_cpbStatusMutex);
-        m_cpbStatus += m_cpbBufferingRate - codingBits;
+        m_cpbStatus = max(0,(m_cpbStatus + m_cpbBufferingRate - codingBits));
     }
 
     void setCpbInfo(int cpbSize, int targetRate, double frameRate, double initialFullness)
@@ -102,11 +186,12 @@ public:
 
     void adjustAllocatedBits(int &currentBitsPerPicture)
     {
+        const double currBits = static_cast<double>(currentBitsPerPicture);
+        const int minBits = static_cast<int>(currBits*0.3);
+        const int maxBits = static_cast<int>(currBits*3);
         unique_lock<mutex> lockCpbInfo(m_cpbStatusMutex);
-
         // Cpb correction
         int estimatedCpbFullness = m_cpbStatus + m_cpbBufferingRate;
-
         // Check whether the allocated bits will lead to cpb overflow
         int overflowLevel = static_cast<int>(static_cast<double>(m_cpbSize) * 0.9);
         if(estimatedCpbFullness - currentBitsPerPicture > overflowLevel)
@@ -121,6 +206,8 @@ public:
         {
             currentBitsPerPicture = max<int>(200, estimatedCpbFullness - underflowLevel);
         }
+
+        currentBitsPerPicture = Clip3(minBits,maxBits, currentBitsPerPicture);
     }
 };
 
@@ -144,31 +231,71 @@ class CodedPicture
 private:
     int    m_codingBits;
     int    m_headerBits;
+    double m_cumulativeTargetBpp;
+    double m_cumulativeActualBpp;
+
+    std::deque<double> targetBppWindow;
+    std::deque<double> actualBppWindow;
+
     double m_lambda;
     int    m_qp;
     double m_alpha;
     double m_beta;
     int    m_level;
     int    m_poc;
-    int    m_updateCounter;
+    int    m_counter;
 
 public:
     CodedPicture() : m_codingBits(0),
     m_headerBits(0),
+    m_cumulativeTargetBpp(0.0),
+    m_cumulativeActualBpp(0.0),
     m_lambda(NON_VALID_LAMBDA),
     m_qp(NON_VALID_QP),
     m_alpha(INITIAL_ALPHA),
     m_beta(INITIAL_BETA),
     m_level(-1),
     m_poc(-1),
-    m_updateCounter(0) {}
+        m_counter(0) 
+    {
+        targetBppWindow.resize(0);
+        actualBppWindow.resize(0);
+    }
 
     void setCodingBits(int bits)   { m_codingBits = bits; }
     void setHeaderBits(int bits)
     {
         m_headerBits = bits;
-        m_updateCounter++;
     }
+    void updateBits(double targetBpp, double actualBpp)
+    {
+        int win_length = -1;
+        int num_gops = 4;
+        if (m_level <= 2)
+        {
+            win_length = num_gops * 1;
+        }
+        else if (m_level == 3)
+        {
+            win_length = num_gops * 2;
+        }
+        else
+        {
+            win_length = num_gops * 4;
+        }
+        m_cumulativeTargetBpp += targetBpp;
+        m_cumulativeActualBpp += actualBpp;
+
+        targetBppWindow.push_back(targetBpp);
+        actualBppWindow.push_back(actualBpp);
+        if (targetBppWindow.size() > win_length)
+        {
+            targetBppWindow.pop_front();
+            actualBppWindow.pop_front();
+        }
+
+    }
+    void updateCounter() { m_counter++; }
     void setLambda(double lambda)  { m_lambda = lambda;   }
     void setQp(int qp)             { m_qp = qp;           }
     void setAlpha(double alpha)    { m_alpha = alpha;     }
@@ -176,6 +303,51 @@ public:
     void setLevel(int level)       { m_level = level;     }
     void setPoc(int poc)           { m_poc = poc;         }
 
+    double getCumulativeTargetBpp() { return m_cumulativeTargetBpp;}
+    double getCumulativeActualBpp() { return m_cumulativeActualBpp; }
+
+    double getAverageTargetBpp() 
+    { 
+        double sum = 0.0;
+        if(targetBppWindow.size())
+        {
+        for (int i =0; i < targetBppWindow.size(); i++)
+            sum += targetBppWindow[i];
+        sum /= targetBppWindow.size();
+        }
+        return sum;
+    }
+    double getAverageActualBpp()
+    {
+        double sum = 0.0;
+        if (actualBppWindow.size())
+        {
+            for (int i = 0; i < actualBppWindow.size(); i++)
+                sum += actualBppWindow[i];
+            sum /= actualBppWindow.size();
+        }
+        return sum;
+    }
+    bool isVectorFull() 
+    {
+        int win_length = -1;
+        int num_gops = 4;
+        if (m_level <= 2)
+        {
+            win_length = num_gops * 1;
+        }
+        else if (m_level == 3)
+        {
+            win_length = num_gops * 2;
+        }
+        else
+        {
+            win_length = num_gops * 4;
+        }
+        return (actualBppWindow.size() == win_length);
+    } 
+
+    int getCounter() { return m_counter;}
     double getAlpha()              { return m_alpha;      }
     double getBeta()               { return m_beta;       }
     double getLambda()             { return m_lambda;     }
@@ -187,8 +359,8 @@ public:
     int    getHeaderBitsEstimate()
     {
         int estimate = 0;
-        if(m_updateCounter)
-            estimate = m_headerBits / m_updateCounter;
+        if(m_counter)
+            estimate = m_headerBits / m_counter;
         return estimate;
     }
 };
@@ -244,7 +416,8 @@ private:
     int    m_targetBits;
     int    m_targetBitsEst;
     int    m_ctbQp;
-    int    m_lastValidQp;
+    int     m_lastValidQp;
+    double m_lastValidLambda;
     double m_ctbLambda;
     double m_ctbAlpha;
     double m_ctbBeta;
@@ -253,7 +426,7 @@ private:
     double m_costIntra;
     double m_bpp;
     int    m_numberOfPixels;
-    bool   m_isValid;       // non fully skipped CTB
+    bool   m_isValid;
     bool   m_finished;
     bool   m_isIntra;
 
@@ -262,6 +435,7 @@ public:
     CtbController() : m_codedBits(0),
     m_ctbQp(NON_VALID_QP),
     m_lastValidQp(NON_VALID_QP),
+    m_lastValidLambda(NON_VALID_LAMBDA),
     m_costIntra(0),
     m_ctbLambda(NON_VALID_LAMBDA),
     m_ctbAlpha(INITIAL_ALPHA),
@@ -279,6 +453,7 @@ public:
     void setCodedBits(int bits)                   { m_codedBits      = bits;           }
     void setCtbQp(int qp)                         { m_ctbQp          = qp;             }
     void setLastValidQp(int qp)                   { m_lastValidQp = qp;                }
+    void setLastValidLambda(double lambda)        { m_lastValidLambda = lambda;            }
     void setTargetBits(int bits)                  { m_targetBits     = bits;           }
     void setTargetBitsEst(int bits)               { m_targetBitsEst  = bits;           }
     void setCtbLambda(double lambda)              { m_ctbLambda      = lambda;         }
@@ -300,6 +475,7 @@ public:
     int     getCodedBits()                        { return m_codedBits;                }
     int     getCtbQp()                            { return m_ctbQp;                    }
     int     getLastValidQp()                      { return m_lastValidQp;              }
+    double     getLastValidLambda()               { return m_lastValidLambda;          }
     int     getTargetBits()                       { return m_targetBits;               }
     int     getTargetBitsEst()                    { return m_targetBitsEst;            }
     double  getCtbLambda()                        { return m_ctbLambda;                }
@@ -340,7 +516,7 @@ private:
     double m_pictureAlpha;
     double m_pictureBeta;
     double m_pictureBpp;
-    DataStorage   *m_dataStorageAccess;
+    std::shared_ptr<DataStorage> m_dataStorageAccess;
     CtbController *m_ctbControllerEngine;
     int    m_codingBits;
     int    m_intraPoc;
@@ -349,6 +525,8 @@ private:
     int  estimateCtbLambdaAndQpIntra(int ctbAddrInRs);
     int  estimateCtbLambdaAndQpInter(int ctbAddrInRs);
 
+
+
 public:
     PictureController() :
     m_targetBits(0),
@@ -356,7 +534,6 @@ public:
     m_averageBpp(0.0),
     m_alphaUpdateStep(ALPHA_UPDATE_STEP),
     m_betaUpdateStep(BETA_UPDATE_STEP),
-    m_dataStorageAccess(0),
     m_pictureLambdaIni(NON_VALID_LAMBDA),
     m_pictureLambdaFin(NON_VALID_LAMBDA),
     m_pictureQp(NON_VALID_QP),
@@ -377,9 +554,9 @@ public:
     m_poc(-1),
     m_codingBits(0),
     m_segmentPoc(-1),
-    m_intraPoc(-1) {}
+    m_intraPoc(-1) {};
 
-    PictureController(DataStorage *storageAccess, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctbSize, int targetBits, double averageBpp, std::shared_ptr<InputQueue::Docket> docket);
+    PictureController(std::shared_ptr<DataStorage> dataStorage, int pictureHeight, int pictureWidth, int pictureHeightInCtbs, int pictureWidthInCtbs, int ctbSize, int targetBits, double averageBpp, std::shared_ptr<InputQueue::Docket> docket);
 
     ~PictureController()
     {
@@ -401,7 +578,7 @@ public:
     const int getCodingBits()          { return m_codingBits;                }
     const int getIntraPoc()            { return m_intraPoc;                  }
     const int getSegmentPoc()          { return m_segmentPoc;                }
-    DataStorage* getStorageAccess()    { return m_dataStorageAccess;         }
+
     int getCtbStoredQp(int ctbIdx)
     {
         assert(ctbIdx < m_pictureSizeInCtbs);
@@ -446,11 +623,11 @@ public:
 
     void updateAfterEncoding(const int codingBits);
 
-    void computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, int64_t cumulativeTargetBits, int64_t cumulativeBitsSpent, int64_t ctbsLeftInPicture);
+    void computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, double lastValidLambda, int128bit cumulativeTargetBits, int128bit cumulativeBitsSpent, int128bit cumulativeDeltaBits, int64_t ctbsLeftInPicture, int64_t cumulativeCtbsCoded, int bitdepth, std::shared_ptr<CpbInfo> cpbInfo);
 
     void updateModelParameters();
 
-    void getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int& lastValidQp, int64_t &cumulativeTargetBits, int64_t &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame);
+    void getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int& lastValidQp, double& lastValidLambda, int128bit &cumulativeTargetBits, int128bit &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame, int callerPoc);
 
     double estimateLambda(double previousLambdaIni);
 
@@ -460,9 +637,7 @@ public:
 
     int estimateCtbLambdaAndQp(int ctbAddrInRs);
 
-    void storeCtbParameters(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel);
-
-    void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda);
+    void storeCtbParameters(int codingBits, bool isIntra, int ctbAddrInRs, int pictureLevel, std::shared_ptr<CpbInfo> cpbInfo);
 
     int getFinishedCtbs();
 
@@ -479,18 +654,18 @@ private:
     int  m_framesCoded;
     int  m_bitsCoded;
     int *m_weight;
-    DataStorage *m_dataStorageAccess;
-
+    std::shared_ptr<DataStorage> m_dataStorageAccess;
 public:
     SOPController() : m_size(0),
     m_targetBits(0),
     m_weight(0),
     m_sopId(-1),
     m_framesCoded(0),
-    m_bitsCoded(0),
-    m_dataStorageAccess(nullptr) {}
+    m_bitsCoded(0) {};
 
-    SOPController(DataStorage *dataStorageAccess, int sopId, int size, int *bitrateWeight, int targetBits);
+    SOPController(std::shared_ptr<DataStorage> dataStorageAccess, int sopId, int size, int *bitrateWeight, int targetBits, bool intraInSop);
+
+    SOPController(std::shared_ptr<DataStorage> dataStorageAccess, int sopId, int size, int *bitrateWeight, int *maxbitrateWeight, bool intraInSop, int totalIntraPeriodBits, int numFramesInIP, int maxSopSize);
 
     ~SOPController()
     {
@@ -500,7 +675,7 @@ public:
         }
     }
 
-    int getRateCurrentPicture(std::shared_ptr<InputQueue::Docket> docket);
+    int getRateCurrentPicture(std::shared_ptr<InputQueue::Docket> docket, std::shared_ptr<DataStorage> dataStorage);
 
     void updateSopController(int bitsCoded);
 
@@ -514,8 +689,9 @@ public:
 struct IntraPeriodData
 {
     int m_framesLeft;
-    int64_t m_bitsSpent;
-    int64_t m_targetBits;
+    int128bit m_bitsSpent;
+    int128bit m_targetBits;
+    int128bit m_deltaBits;
     int64_t m_targetBitsEst;
     int m_totalCtbsCoded;
     int m_framesEncoded;
@@ -523,28 +699,62 @@ struct IntraPeriodData
         m_framesLeft(0),
         m_bitsSpent(0),
         m_targetBits(0),
+        m_deltaBits(0),
         m_targetBitsEst(0),
         m_totalCtbsCoded(0),
         m_framesEncoded(0) {};
 };
 
-struct SegmentData
+
+struct RateControlParameters
 {
-    DataStorage    *m_dataStorageEngine;
-    SegmentData(int picSizeInCtbsY)
-    {
-        m_dataStorageEngine = new DataStorage();
-        m_dataStorageEngine->initCtbStorage(picSizeInCtbsY);
-        m_dataStorageEngine->initPictureStorage();
-    };
+public:
+    double m_targetRate;
+    double m_frameRate;
+    int    m_intraPeriod;
+    int    m_sopSize;
+    int    m_picHeight;
+    int    m_picWidth;
+    int    m_ctbSize;
+    int    m_baseQp;
+    bool   m_useWpp;
+    int    m_concurrentFrames;
+    mutex  m_RCLevelToken;
 
-    ~SegmentData()
+    std::shared_ptr<CpbInfo> cpbInfo;
+
+    RateControlParameters(double targetRate,
+        double frameRate,
+        int    intraPeriod,
+        int    sopSize,
+        int    picHeight,
+        int    picWidth,
+        int    ctbSize,
+        int    baseQp,
+        bool   useWpp,
+        int    concurrentFrames)
+    :m_targetRate(targetRate), m_frameRate(frameRate), m_intraPeriod(intraPeriod), 
+     m_sopSize(sopSize), m_picHeight(picHeight), m_picWidth(picWidth),
+     m_ctbSize(ctbSize), m_baseQp(baseQp), m_useWpp(useWpp),
+     m_concurrentFrames(concurrentFrames) {};
+
+
+    void initCpbInfo(int cpbMaxSize)
     {
-        if (m_dataStorageEngine)
-            delete m_dataStorageEngine;
+        int picHeightInCtbsY = m_picHeight % m_ctbSize == 0 ? m_picHeight / m_ctbSize : m_picHeight / m_ctbSize + 1;
+        int picWidthInCtbsY = m_picWidth  % m_ctbSize == 0 ? m_picWidth / m_ctbSize : m_picWidth / m_ctbSize + 1;
+
+        int numCtbsInFrame = picHeightInCtbsY * picWidthInCtbsY;
+        //m_cpbControllerEngine.setCpbInfo(cpbMaxSize, (int)m_targetRate, m_frameRate, 0.8);
+        cpbInfo.reset(new CpbInfo(cpbMaxSize, (int)m_targetRate, m_frameRate, 0.8, numCtbsInFrame));
     }
-};
 
+
+    void takeTokenOnRCLevel() { m_RCLevelToken.lock(); }
+
+    void releaseTokenOnRCLevel() { m_RCLevelToken.unlock(); }
+
+};
 
 class SequenceController
 {
@@ -571,14 +781,9 @@ private:
 
     map<int, PictureController*> m_pictureControllerEngine;
     map<int, SOPController*>     m_sopControllerEngine;
-    CpbInfo                      m_cpbControllerEngine;
-    map<int, IntraPeriodData*>   m_ipDataEngine;
-    map<int, SegmentData*>       m_segmentData;
 
-    mutex  m_pictureControllerMutex;
-    mutex  m_sopControllerMutex;
-    mutex  m_ipDataMutex;
-    mutex  m_segmentDataMutex;
+    map<int, IntraPeriodData*>   m_ipDataEngine;
+   std::shared_ptr<DataStorage> m_dataStorage;
 
     int    m_picSizeInCtbsY;
     int    m_picHeightInCtbs;
@@ -589,10 +794,6 @@ private:
     int    m_averageBitsPerCtb;
     bool   m_useWpp;
     int    m_concurrentFrames;
-#if WRITE_RC_LOG
-    ofstream m_logFile;
-#endif
-
 public:
     SequenceController() : m_targetRate(0),
     m_smoothingWindow(40),
@@ -618,6 +819,8 @@ public:
     {
     }
 
+    SequenceController(std::shared_ptr<RateControlParameters> rateControlParams);
+
     SequenceController(double targetRate,
                        double frameRate,
                        int    intraPeriod,
@@ -634,52 +837,68 @@ public:
         m_pictureControllerEngine.clear();
         m_sopControllerEngine.clear();
         m_ipDataEngine.clear();
-        m_segmentData.clear();
-#if WRITE_RC_LOG
-        if(m_logFile)
-            m_logFile.close();
-#endif
     }
 
     int  numLeftSameHierarchyLevel(int poc)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         PictureController *currentPictureController = m_pictureControllerEngine.find(poc)->second;
         return currentPictureController->getNumLeftSameHierarchyLevel();
     }
 
-    template <class H>
-    void   computeCtbTargetBits(H &h, bool isIntraSlice, int ctbAddrInRs, int poc)
+    bool blockedByNumLeftHierarchyLevel(int poc, int& blockingPoc)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
+        PictureController *currentPictureController = m_pictureControllerEngine.find(poc)->second;
+            
+        for (auto &pictureController : m_pictureControllerEngine)
+        {
+            bool previousHierarchyLayer = (pictureController.second->getHierarchyLevel() < currentPictureController->getHierarchyLevel());
+            int numLeftSameHierarchyLayer = pictureController.second->getNumLeftSameHierarchyLevel();
+            if(previousHierarchyLayer && numLeftSameHierarchyLayer > 1)
+            {
+                blockingPoc = pictureController.first;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    template <class H>
+    void   computeCtbTargetBits(H &h, bool isIntraSlice, int ctbAddrInRs, int poc, std::shared_ptr<CpbInfo> cpbInfo)
+    {
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
 
         int avgBits = 0;
         int lastValidQp = NON_VALID_QP;
-        int64_t  cumulativeTargetBits = 0,  cumulativeBitsSpent = 0, ctbsLeftInPicture = 0;
-
-        getCodedInfoCtbs(h, ctbAddrInRs, lastValidQp, cumulativeTargetBits, cumulativeBitsSpent, ctbsLeftInPicture);
-
+        double lastValidLambda = NON_VALID_LAMBDA;
+        int64_t   ctbsLeftInPicture = 0, cumulativeCtbsCoded = 0;
+        int128bit cumulativeTargetBits = 0, cumulativeBitsSpent = 0, cumulativeDeltaBits = 0;
+        getCodedInfoCtbs(h, ctbAddrInRs, lastValidQp, lastValidLambda, cumulativeTargetBits, cumulativeBitsSpent, ctbsLeftInPicture, cumulativeCtbsCoded);
+        cumulativeDeltaBits += (cumulativeTargetBits - cumulativeBitsSpent);
         if (!currentPictureController->second->getIsIntra())
         {
-            unique_lock<mutex> lock(m_ipDataMutex);
             auto currentIpData = m_ipDataEngine.find(currentPictureController->second->getIntraPoc());
             assert(currentIpData != m_ipDataEngine.end());
             cumulativeBitsSpent += currentIpData->second->m_bitsSpent;
             cumulativeTargetBits += currentIpData->second->m_targetBits;
+            cumulativeDeltaBits += currentIpData->second->m_deltaBits;
+            cumulativeCtbsCoded += currentIpData->second->m_totalCtbsCoded;
         }
-        currentPictureController->second->computeCtbTargetBits(ctbAddrInRs, lastValidQp, cumulativeTargetBits, cumulativeBitsSpent, ctbsLeftInPicture);
+        int bitDepth = h[BitDepthY()];
+        currentPictureController->second->computeCtbTargetBits(ctbAddrInRs, lastValidQp, lastValidLambda, cumulativeTargetBits, cumulativeBitsSpent, cumulativeDeltaBits, ctbsLeftInPicture, cumulativeCtbsCoded, bitDepth, cpbInfo);
     }
 
+
     template <class H>
-    void getCodedInfoCtbs(H &h, int ctbAddrInRs, int &lastValidQp, int64_t &cumulativeTargetBits, int64_t &cumulativeBitsSpent, int64_t &ctbsLeftInPicture)
+    void getCodedInfoCtbs(H &h, int ctbAddrInRs, int &lastValidQp, double& lastValidLambda, int128bit &cumulativeTargetBits, int128bit &cumulativeBitsSpent, int64_t &ctbsLeftInPicture, int64_t &cumulativeCtbsCoded)
     {
         auto currentPictureController = m_pictureControllerEngine.find(h[PicOrderCntVal()]);
         assert(currentPictureController != m_pictureControllerEngine.end());
-        int64_t cumulativeCtbsCoded = 0;
-        currentPictureController->second->getCodedInfoFromWavefront(m_useWpp, ctbAddrInRs, lastValidQp, cumulativeTargetBits, cumulativeBitsSpent, cumulativeCtbsCoded, true);
-        ctbsLeftInPicture = currentPictureController->second->getPictureSizeInCtbs() - cumulativeCtbsCoded;
+        int64_t cumulativeCtbsCodedInPicture = 0;
+        currentPictureController->second->getCodedInfoFromWavefront(m_useWpp, ctbAddrInRs, lastValidQp, lastValidLambda, cumulativeTargetBits, cumulativeBitsSpent, cumulativeCtbsCodedInPicture, true, currentPictureController->first);
+        ctbsLeftInPicture = currentPictureController->second->getPictureSizeInCtbs() - cumulativeCtbsCodedInPicture;
+        cumulativeCtbsCoded += cumulativeCtbsCodedInPicture;
         if (currentPictureController->second->getIsIntra())
             return;
 
@@ -688,7 +907,6 @@ public:
 
         for(auto &pictureController : m_pictureControllerEngine)
         {
-            if(pictureController.second->getIntraPoc() == currentPictureController->second->getIntraPoc())
             {
                 if(pictureController.second->getHierarchyLevel() < currentPictureController->second->getHierarchyLevel() && (pictureController.second->getHierarchyLevel() >= currentPictureController->second->getHierarchyLevel() - (m_concurrentFrames - 1)))
                 {
@@ -696,14 +914,16 @@ public:
                     offset = offset < 0 ? 0 : offset;
                     int depX = std::min(rx + (2 * offset), h[PicWidthInCtbsY()] - 1);
                     int depY = std::min(ry + (1 * offset), h[PicHeightInCtbsY()] - 1);
-                    int ctbAddrInRsRef = ctbAddrInRs;// h[PicWidthInCtbsY()]* depY + depX;
+                    int ctbAddrInRsRef = ctbAddrInRs;
                     int dummyLastQp;
-                    pictureController.second->getCodedInfoFromWavefront(m_useWpp, ctbAddrInRsRef, dummyLastQp, cumulativeTargetBits, cumulativeBitsSpent, cumulativeCtbsCoded, false);
+                    double dummyLastLambda;
+                    pictureController.second->getCodedInfoFromWavefront(m_useWpp, ctbAddrInRsRef, dummyLastQp, dummyLastLambda, cumulativeTargetBits, cumulativeBitsSpent, cumulativeCtbsCoded, false, currentPictureController->first);
                 }
-                else if (pictureController.second->getHierarchyLevel() < currentPictureController->second->getHierarchyLevel())
+                else if (pictureController.second->getHierarchyLevel() < currentPictureController->second->getHierarchyLevel() && (pictureController.second->getIntraPoc() == currentPictureController->second->getIntraPoc()))
                 {
-                    cumulativeBitsSpent += pictureController.second->getCodingBits();
-                    cumulativeTargetBits += pictureController.second->getPictureTargetBits();
+                    cumulativeBitsSpent += static_cast<int64_t>(pictureController.second->getCodingBits());
+                    cumulativeTargetBits += static_cast<int64_t>(pictureController.second->getPictureTargetBits());
+                    cumulativeCtbsCoded += pictureController.second->getPictureSizeInCtbs();
                 }
             }
         }
@@ -712,14 +932,12 @@ public:
     void updateAfterEncoding(std::shared_ptr<InputQueue::Docket> docket, const int codingBits)
     {
         {
-            unique_lock<mutex> lockPicture(m_pictureControllerMutex);
             auto currentPictureController = m_pictureControllerEngine.find(docket->poc);
             assert(currentPictureController != m_pictureControllerEngine.end());
             currentPictureController->second->updateAfterEncoding(codingBits);
         }
 
         {
-            unique_lock<mutex> lockSopController(m_sopControllerMutex);
             auto currentSopController = m_sopControllerEngine.find(docket->sopId);
             assert(currentSopController != m_sopControllerEngine.end());
             if(!currentSopController->second->finished())
@@ -732,9 +950,6 @@ public:
     void updateSequenceControllerFinishedFrames(std::shared_ptr<InputQueue::Docket> docket)
     {
         // Take the token on both picture controller and ip data
-        unique_lock<mutex> lockPicture(m_pictureControllerMutex);
-        unique_lock<mutex> lockIpData(m_ipDataMutex);
-
         auto currentIpData = m_ipDataEngine.find(docket->intraFramePoc);
         assert(currentIpData != m_ipDataEngine.end());
         int poc = docket->poc;
@@ -754,82 +969,66 @@ public:
         {
             const bool updated = currentPictureController->second->getParamsUpdates();
             const bool correctHierarchyLevel = currentPictureController->second->getHierarchyLevel() <= (docket->hierarchyLevel - m_concurrentFrames + 1);
-            const bool correctIntraPeriod = currentPictureController->second->getIntraPoc() == docket->intraFramePoc;
-            const bool previousIntraPeriod = currentPictureController->second->getIntraPoc() < docket->intraFramePoc;
-            const bool previousSegment     = currentPictureController->second->getSegmentPoc() < docket->segmentPoc;
-            if (updated && correctHierarchyLevel && correctIntraPeriod)
+            const bool currentIntraPeriod = currentPictureController->second->getIntraPoc() == docket->intraFramePoc;
+            if (updated && correctHierarchyLevel && currentIntraPeriod)
             {
-                currentIpData->second->m_bitsSpent += currentPictureController->second->getCodingBits();
-                currentIpData->second->m_targetBits += currentPictureController->second->getPictureTargetBits();
-                currentIpData->second->m_totalCtbsCoded += currentPictureController->second->getPictureSizeInCtbs();
-                currentIpData->second->m_framesEncoded++;
+                if(currentIntraPeriod)
+                {
+                    currentIpData->second->m_deltaBits += (currentPictureController->second->getPictureTargetBits() - currentPictureController->second->getCodingBits());
+                    currentIpData->second->m_bitsSpent += currentPictureController->second->getCodingBits();
+                    currentIpData->second->m_targetBits += currentPictureController->second->getPictureTargetBits();
+                    currentIpData->second->m_totalCtbsCoded += currentPictureController->second->getPictureSizeInCtbs();
+                    currentIpData->second->m_framesEncoded++;
+                }
+
+                assert(currentPictureController->second->getNumLeftSameHierarchyLevel() == 1);
                 m_pictureControllerEngine.erase(currentPictureController++);
-                
+               
             }
             else
             {
-                if (previousIntraPeriod && currentPictureController->second->getFinishedCtbs() != m_picSizeInCtbsY)
-                    removeIntraPeriod = false;
-
-                if (previousSegment     && currentPictureController->second->getFinishedCtbs() != m_picSizeInCtbsY)
-                    removeSegment = false;
-
                 ++currentPictureController;
             }
         }
 
-        if(removeIntraPeriod)
+        for (auto currentIpData = m_ipDataEngine.cbegin(); currentIpData != m_ipDataEngine.cend(); )
         {
-            for (auto currentPictureController = m_pictureControllerEngine.cbegin(); currentPictureController != m_pictureControllerEngine.cend() /* not hoisted */; /* no increment */)
+            bool removeIP = true;
+            for (auto currentPictureController = m_pictureControllerEngine.cbegin(); currentPictureController != m_pictureControllerEngine.cend(); currentPictureController++)
             {
-                const bool previousIntraPeriod = currentPictureController->second->getIntraPoc() < docket->intraFramePoc;
-                if (previousIntraPeriod)
-                {
-                    m_pictureControllerEngine.erase(currentPictureController++);
-                }
-                    
-                else
-                    ++currentPictureController;
+                if (currentPictureController->second->getIntraPoc() <= currentIpData->first)
+                    removeIP = false;
             }
 
-            for (auto currentIpData = m_ipDataEngine.cbegin(); currentIpData != m_ipDataEngine.cend() /* not hoisted */; /* no increment */)
+            if(removeIP)
             {
-                const bool previousIntraPeriod = currentIpData->first < docket->intraFramePoc;
-                if (previousIntraPeriod)
-                    m_ipDataEngine.erase(currentIpData++);
-                else
-                    ++currentIpData;
+                m_ipDataEngine.erase(currentIpData++);
+            }
+            else
+            {
+                ++currentIpData;
             }
         }
 
-        if (removeSegment)
-        {
-            for (auto currentSegment = m_segmentData.cbegin(); currentSegment != m_segmentData.cend() /* not hoisted */; /* no increment */)
-            {
-                const bool previousSegment = currentSegment->first < docket->segmentPoc;
-                if (previousSegment)
-                    m_segmentData.erase(currentSegment++);
-                else
-                    ++currentSegment;
-            }
-        }
 
         {
             // Remove also finished SOP controllers
-            unique_lock<mutex> lockSopController(m_sopControllerMutex);
             for(auto currentSopController = m_sopControllerEngine.cbegin(); currentSopController != m_sopControllerEngine.cend(); )
             {
                 if(currentSopController->second->finished())
+                {
                     m_sopControllerEngine.erase(currentSopController++);
+                }
                 else
                     ++currentSopController;
             }
         }
     }
 
+
     void initNewSop(std::shared_ptr<InputQueue::Docket> docket);
 
-    void pictureRateAllocation(std::shared_ptr<InputQueue::Docket> docket);
+    void pictureRateAllocation(std::shared_ptr<InputQueue::Docket> docket, std::shared_ptr<CpbInfo> cpbInfo);
 
     void decreaseNumLeftSameHierarchyLevel(std::shared_ptr<InputQueue::Docket> docket);
 
@@ -839,15 +1038,19 @@ public:
 
     int deriveQpFromLambda(double lambda, bool isIntra, int sopLevel, int poc);
 
-    void pictureRateAllocationIntra(std::shared_ptr<InputQueue::Docket> docket);
+    void pictureRateAllocationIntra(std::shared_ptr<InputQueue::Docket> docket, std::shared_ptr<CpbInfo> cpbInfo);
 
     int estimateCtbLambdaAndQp(int ctbAddrInRs, int poc);
 
-    void storeCtbParameters(int codingBitsCtb, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc);
+    void storeCtbParameters(int codingBitsCtb, bool isIntra, int ctbAddrInRs, int currentPictureLevel, int poc, std::shared_ptr<CpbInfo> cpbInfo);
+
+    bool bInitNewSop(std::shared_ptr<InputQueue::Docket> docket)
+    {
+        return (m_sopControllerEngine.find(docket->sopId) == m_sopControllerEngine.end());
+    }
 
     void updateValidityFlag(bool flag, int ctbIdx, int poc)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         currentPictureController->second->updateCtbValidityFlag(flag, ctbIdx);
@@ -855,7 +1058,6 @@ public:
 
     void setValidityFlag(bool flag, int ctbIdx, int poc)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         currentPictureController->second->setCtbValidityFlag(flag, ctbIdx);
@@ -863,56 +1065,26 @@ public:
 
     int getCtbStoredQp(int ctbIdx, int poc)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
+        
         return currentPictureController->second->getCtbStoredQp(ctbIdx);
-    }
-
-    void getAveragePictureQpAndLambda(int &averageQp, double &averageLambda, int poc);
-
-    void initCpbInfo(int cpbMaxSize)
-    {
-        m_cpbControllerEngine.setCpbInfo(cpbMaxSize, (int)m_targetRate, m_frameRate, 0.8);
-    }
-
-#if WRITE_RC_LOG
-    void writetoLogFile(string s)
-    {
-        m_logFile<<s;
-        m_logFile.flush();
-    }
-    int getPictureTargetBits(int poc)
-    {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
-        auto currentPictureController = m_pictureControllerEngine.find(poc);
-        assert(currentPictureController != m_pictureControllerEngine.end());
-        return currentPictureController->second->getPictureTargetBits();
-    }
-#endif
-
-    int getCpbFullness()
-    {
-        return m_cpbControllerEngine.getCpbStatus();
     }
 
     double getCtbLambda(int poc, int ctbAddrInRs)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtbLambda(ctbAddrInRs);
     }
     double getCtbReciprocalLambda(int poc, int ctbAddrInRs)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtbReciprocalLambda(ctbAddrInRs);
     }
     double getCtbReciprocalSqrtLambda(int poc, int ctbAddrInRs)
     {
-        unique_lock<mutex> lock(m_pictureControllerMutex);
         auto currentPictureController = m_pictureControllerEngine.find(poc);
         assert(currentPictureController != m_pictureControllerEngine.end());
         return currentPictureController->second->getCtbReciprocalSqrtLambda(ctbAddrInRs);

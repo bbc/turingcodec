@@ -198,7 +198,9 @@ public:
 
         int tot_window = WINDOW_SIZE * 2 + 1;
      
-        if (numFrames < tot_window) return;
+        if (numFrames < tot_window) return; //double check if fades can still be detected.
+
+        bool nextIsFade = false;
 
         {
             auto picture = entriesPreanalysis.at(0).picture;
@@ -259,6 +261,18 @@ public:
                 unsigned char s = v >> SHIFT_DOWN;
                 ++(cur)[s];
             }
+            int numblacks = 0;
+            int numwhites = 0;
+            for (int i = 0; i < 9; i++)
+            {
+                numblacks += cur[i];
+                numwhites += cur[1 << (8 - SHIFT_DOWN) - 1 - i];
+            }
+            if (numblacks == lumaSize|| numwhites == lumaSize)
+            {
+                //if it is all black
+                nextIsFade = true;
+            }
             frame_queue.push_back(p_frame);
         }
         for (auto i = 1; i<(seqFront ? 0 :  tot_window); ++i)
@@ -302,6 +316,26 @@ public:
                 unsigned char s = v >> SHIFT_DOWN;
                 ++(next)[s];
             }
+            int numblacks = 0;
+            int numwhites = 0;
+            for (int i = 0; i < 9; i++)
+            {
+                numblacks += next[i];
+                numwhites += next[(1 << (8 - SHIFT_DOWN)) - 1 - i];
+            }
+            if (numblacks == lumaSize || numwhites == lumaSize)
+            {
+                //if it is all black
+                nextIsFade = true;
+            }
+            else if (nextIsFade && (i + 1 - m_last_shot_change) > DELAY)
+            {
+                //FADE DETECTED
+                m_last_shot_change = i;
+                m_shotChangeList[i] = 1;
+                nextIsFade = false;
+            }
+
             int dhist = 0;
             for (unsigned int k = 0; k<cur.size(); ++k)
             {
@@ -384,6 +418,28 @@ public:
                 unsigned char s = v >> SHIFT_DOWN;
                 ++(next)[s];
             }
+
+            int numblacks = 0;
+            int numwhites = 0;
+            for (int i = 0; i < 9; i++)
+            {
+                numblacks += next[i];
+                numwhites += next[(1 << (8 - SHIFT_DOWN)) - 1 - i];
+            }
+            if (numblacks == lumaSize || numwhites == lumaSize)
+            {
+                //if it is all black
+                nextIsFade = true;
+            }
+            else if (nextIsFade && (i + 1 - m_last_shot_change) > DELAY)
+            {
+                //FADE DETECTED
+                m_last_shot_change = i;
+                m_shotChangeList[i] = 1;
+                nextIsFade = false;
+            }
+
+
             int dhist = 0;
             for (unsigned int k = 0; k<cur.size(); ++k)
             {
@@ -396,7 +452,6 @@ public:
          
         m_seqFront = seqFront;
         m_seqEnd = seqEnd;
-        printf("Shot change detection: completed analysis of frames %d-%d. \n", m_seqFront, m_seqEnd);
     }
 };
 

@@ -637,7 +637,7 @@ struct Read<DecodeTerminate<V>>
         CabacState &state = *static_cast<CabacState *>(h);
 
         state.ivlCurrRange -= 2;
-        const unsigned scaledRange = state.ivlCurrRange << 7;
+        auto const scaledRange = state.ivlCurrRange << 7;
 
         int binVal;
 
@@ -917,12 +917,14 @@ void optimisedReadResidualCoding(H &hParent)
     auto const lastSigCoeffRaster = ((h[LastSignificantCoeffY()] & 3) << 2) | (h[LastSignificantCoeffX()] & 3);
     auto const lastSigSubBlockRaster = subBlockRaster(log2TrafoSize, h[LastSignificantCoeffX()], h[LastSignificantCoeffY()]);
 
+    constexpr auto log2TrafoSizeMinus2 = log2TrafoSize - 2;
+
     auto const lastScanPos = scanPosInverse<2>(h[scanIdx()], lastSigCoeffRaster);
-    auto const lastSubBlock = scanPosInverse<log2TrafoSize - 2>(h[scanIdx()], lastSigSubBlockRaster);
+    auto const lastSubBlock = scanPosInverse<log2TrafoSizeMinus2>(h[scanIdx()], lastSigSubBlockRaster);
 
     int escapeDataPresent = 0;
 
-    auto const &sp = scanPos<log2TrafoSize - 2>().lookup[h[scanIdx()]];
+    auto const &sp = scanPos<log2TrafoSizeMinus2>().lookup[h[scanIdx()]];
     auto const &sp2 = scanPos<2>().lookup[h[scanIdx()]];
     int &i = stateSubstream->i;
     for (i = lastSubBlock; i >= 0; i--)
@@ -1983,38 +1985,26 @@ struct Read<Element<cu_qp_delta_sign_flag, ae>>
 {
     template <class H> static void go(Element<cu_qp_delta_sign_flag, ae> fun, H &h)
     {
-        int binVal;
-        h(DecodeBypass<cu_qp_delta_sign_flag>(&binVal));
-        h[fun.v] = binVal;
+        h(DecodeBypass<cu_qp_delta_sign_flag>(&h[fun.v]));
 
         h[CuQpDeltaVal()] = h[cu_qp_delta_abs()] * (1 - 2 * h[cu_qp_delta_sign_flag()]);
 
-        int refQp = h[QpY()];
-
         h[QpY()] = ((h[QpY()] + h[CuQpDeltaVal()] + 52 + 2 * h[QpBdOffsetY()]) % (52 + h[QpBdOffsetY()])) - h[QpBdOffsetY()];
-        static_cast<QpState *>(h)->update();
+
+        QpState *qpState = h;
+        qpState->update();
     }
 };
 
 
 template <>
-struct Read < Element<cu_chroma_qp_offset_flag, ae> >
+struct Read<Element<cu_chroma_qp_offset_flag, ae>>
 {
     template <class H> static void go(Element<cu_chroma_qp_offset_flag, ae> fun, H &h)
     {
-        transform_tree *tt = h;
-        if (h[PicOrderCntVal()] == 4 && tt->x0 == 888 && tt->y0 == 160)
-        {
-            std::cout << "\n";
-        }
-
-        int binVal;
-        h(DecodeDecision<cu_chroma_qp_offset_flag>(&binVal, 0));
-        h[fun.v] = binVal;
-
+        h(DecodeDecision<cu_chroma_qp_offset_flag>(&h[fun.v], 0));
         h[IsCuChromaQpOffsetCoded()] = 1;
-
-        if (binVal)
+        if (h[fun.v])
         {
             h[CuQpOffsetCb()] = h[cb_qp_offset_list(0)];
             h[CuQpOffsetCr()] = h[cr_qp_offset_list(0)];
@@ -2024,7 +2014,8 @@ struct Read < Element<cu_chroma_qp_offset_flag, ae> >
             h[CuQpOffsetCb()] = 0;
             h[CuQpOffsetCr()] = 0;
         }
-        static_cast<QpState *>(h)->update();
+        QpState *qpState = h;
+        qpState->update();
     }
 };
 
@@ -2034,19 +2025,22 @@ struct Read<Element<cu_chroma_qp_offset_idx, ae>>
 {
     template <class H> static void go(Element<cu_chroma_qp_offset_idx, ae> fun, H &h)
     {
-        const int cMax = h[chroma_qp_offset_list_len_minus1()];
+        int const cMax = h[chroma_qp_offset_list_len_minus1()];
 
         int binIdx;
         for (binIdx = 0; binIdx < cMax; ++binIdx)
         {
             int binVal;
             h(DecodeDecision<cu_chroma_qp_offset_idx>(&binVal, 0));
-            if (!binVal) break;
+            if (!binVal) 
+                break;
         }
         h[fun.v] = binIdx;
         h[CuQpOffsetCb()] = h[cb_qp_offset_list(h[fun.v])];
         h[CuQpOffsetCr()] = h[cr_qp_offset_list(h[fun.v])];
-        static_cast<QpState *>(h)->update();
+        
+        QpState *qpState = h;
+        qpState->update();
     }
 };
 
