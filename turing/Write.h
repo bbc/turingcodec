@@ -85,7 +85,6 @@ struct SetParameters<Element<cu_qp_delta_abs, ae>>
         QpState *qpState = h;
         h[IsCuQpDeltaCoded()] = 1;
         int qpY = qpState->getQp(0) - h[QpBdOffsetY()];
-
         qpY = Clip3(0, 51, qpY);
         qpState->setCodedQp(qpY);
     }

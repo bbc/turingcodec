@@ -102,6 +102,7 @@ int parseEncodeOptions(po::variables_map &vm, int argc, const char* const argv[]
     po::options_description optionsStructure("Structure options");
     optionsStructure.add_options()
         ("shot-change", po::bool_switch()->default_value(false), "enable shot change detection")
+        ("temp-scalability", po::bool_switch()->default_value(false), "enable temporal scalability")
         ("field-coding", po::bool_switch()->default_value(false), "enable field coding")
         ("frame-doubling", po::bool_switch()->default_value(false), "enable frame doubling")
         ("max-gop-n", po::value<int>()->default_value(250), "maximum intra picture interval")
@@ -252,12 +253,13 @@ bool turing_check_binary_option(const char *option)
     // review: default values are not used
     supportedBinaryOptions["aq"] = false;
     supportedBinaryOptions["shot-change"] = false;
+    supportedBinaryOptions["temp-scalability"] = false;
     supportedBinaryOptions["field-coding"] = false;
     supportedBinaryOptions["frame-doubling"] = false;
     supportedBinaryOptions["wpp"] = true;
     supportedBinaryOptions["repeat-headers"] = true;
     supportedBinaryOptions["deblock"] = true;
-    supportedBinaryOptions["sao"] = false;
+    supportedBinaryOptions["sao"] = true;
     supportedBinaryOptions["strong-intra-smoothing"] = true;
     supportedBinaryOptions["rqt"] = true;
     supportedBinaryOptions["amp"] = true;

@@ -183,6 +183,8 @@ Encoder::Encoder(boost::program_options::variables_map &vm) :
     Handler<Encode<void>, StateEncode> h;
     h.state = &this->stateEncode;
 
+    this->tempScalability = this->vm["temp-scalability"].as<bool>();
+
     this->pictureHeight = this->frameHeight;
     this->pictureWidth = this->frameWidth;
 
@@ -518,7 +520,7 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 int qp = h[init_qp_minus26()] + 26 + h[slice_qp_delta()];
                 boost::chrono::duration<double> frameEncoderTimeSec = boost::chrono::nanoseconds(this->frameCpuTimer.elapsed().user);
                 int sliceType = h[slice_type()];
-
+                
                 std::ostringstream oss;
                 
                 const int currentPoc = h[PicOrderCntVal()];
@@ -526,7 +528,14 @@ bool Encoder::encodePicture(std::shared_ptr<PictureWrapper> picture, std::vector
                 const int absolutePoc = stateEncodePicture->docket->absolutePoc;
                 double psnrY, psnrU, psnrV;
                 stateEncode.psnrAnalysis->getPsnrFrameData(absolutePoc, psnrY, psnrU, psnrV);
-                oss << "POC" << std::setw(5) << currentPoc << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
+                
+                if(!this->tempScalability)
+                    oss << "POC" << std::setw(5) << currentPoc << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << " ) ";
+                else
+                {
+                    int tid = h[nuh_temporal_id_plus1()] - 1;
+                    oss << "POC" << std::setw(5) << currentPoc << " ( " << sliceTypeToChar(sliceType) << "-SLICE, QP " << std::setw(4) << qp << "  TID " << tid << ") ";
+                }
                 oss << std::setw(12) << 8 * bytes << " bits ";
                 oss << std::setprecision(4);
                 oss << std::fixed;
@@ -593,6 +602,19 @@ void Encoder::setupPtl(H &h)
 
     h[general_level_idc()] = 0;
 
+    if (this->tempScalability)
+    {
+        h[sub_layer_level_present_flag()] = 1;
+        for (auto level : levels)
+        {
+            if (level.parameters[Level::MaxLumaPs] >= h[PicSizeInSamplesY()] && level.parameters[Level::MaxLumaSr] >= h[PicSizeInSamplesY()] * (this->frameRate / 2))
+            {
+                h[sub_layer_level_idc()] = level.level_idc();
+                break;
+            }
+        }
+    }
+
     for (auto level : levels)
     {
         if (level.parameters[Level::MaxLumaPs] >= h[PicSizeInSamplesY()] && level.parameters[Level::MaxLumaSr] >= h[PicSizeInSamplesY()] * this->frameRate)
@@ -622,8 +644,14 @@ void Encoder::setupVps(H &hhh, ProfileTierLevel *ptl)
 
 
     h[vps_sub_layer_ordering_info_present_flag()] = 1;
+    h[vps_max_sub_layers_minus1()] = this->tempScalability ? 1 : 0;
     h[vps_max_dec_pic_buffering_minus1(0)] = 4;
     h[vps_max_num_reorder_pics(0)] = 3;
+    if (this->tempScalability)
+    {
+        h[vps_max_dec_pic_buffering_minus1(1)] = 4;
+        h[vps_max_num_reorder_pics(1)] = 3;
+    }
     h[vps_temporal_id_nesting_flag()] = 1;
 }
 
@@ -670,8 +698,14 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         // temporal configuration
         h[sps_max_dec_pic_buffering_minus1()] = 4;
         h[sps_max_num_reorder_pics()] = 3; // review - could be 2?
-        h[sps_temporal_id_nesting_flag()] = 1;
+        if (this->tempScalability)
+        {
+            h[sps_max_dec_pic_buffering_minus1(1)] = 4;
+            h[sps_max_num_reorder_pics(1)] = 3; // review - could be 2?
+        }
 
+        h[sps_temporal_id_nesting_flag()] = 1;
+        
         // coding configuration
 #ifdef FORCE_PCM_PICTURES
         h[pcm_enabled_flag()] = 1;
@@ -689,6 +723,9 @@ ProfileTierLevel *Encoder::setupSps(H &hhh)
         h[amp_enabled_flag()] = this->stateEncode.amp;
         h[sample_adaptive_offset_enabled_flag()] = this->stateEncode.sao;
         h[sps_temporal_mvp_enabled_flag()] = 1;
+
+        //h[sps_sub_layer_ordering_info_present_flag()] = 0;
+        h[sps_max_sub_layers_minus1()] = this->tempScalability ? 1 : 0;
     }
 
     setupPtl(h);

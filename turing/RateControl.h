@@ -64,32 +64,33 @@ struct EstimateIntraComplexity;
 struct StateEncodePicture;
 struct StatePicture;
 
-struct int128bit
+/*
+struct int64_t
 {
 public:
 
-    int128bit()
+    int64_t()
     {
         high = 0;
         low = 0;
     }
-    int128bit(const int64_t  rhs)
+    int64_t(const int64_t  rhs)
     {
         high = 0;
         low = rhs;
     }
 
 
-    int128bit operator=(const int64_t & rhs)
+    int64_t operator=(const int64_t & rhs)
     {
-        int128bit curr;
+        int64_t curr;
         curr.low = rhs;
         return curr;
     }
 
-    int128bit operator+(const int128bit & rhs)
+    int64_t operator+(const int64_t & rhs)
     {
-        int128bit sum;
+        int64_t sum;
         sum.high = high + rhs.high;
         sum.low = low + rhs.low;
         // check for overflow of low 64 bits, add carry to high
@@ -98,9 +99,9 @@ public:
         return sum;
     }
 
-    int128bit& operator+=(const int128bit & rhs)
+    int64_t& operator+=(const int64_t & rhs)
     {
-        int128bit sum;
+        int64_t sum;
         sum.high = high + rhs.high;
         sum.low = low + rhs.low;
         // check for overflow of low 64 bits, add carry to high
@@ -111,9 +112,9 @@ public:
         return *this;
     }
 
-    int128bit& operator+=(const int64_t & rhs)
+    int64_t& operator+=(const int64_t & rhs)
     {
-        int128bit sum;
+        int64_t sum;
         sum.low = low + rhs;
         // check for overflow of low 64 bits, add carry to high
         if (sum.low < low)
@@ -123,9 +124,9 @@ public:
         return *this;
     }
 
-    int128bit operator-(const int128bit & rhs)
+    int64_t operator-(const int64_t & rhs)
     {
-        int128bit difference;
+        int64_t difference;
         difference.high = high - rhs.high;
         difference.low = low - rhs.low;
         // check for underflow of low 64 bits, subtract carry to high
@@ -142,6 +143,7 @@ private:
     int64_t  high;
     int64_t low;
 };
+*/
 
 
 class CpbInfo
@@ -623,11 +625,11 @@ public:
 
     void updateAfterEncoding(const int codingBits);
 
-    void computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, double lastValidLambda, int128bit cumulativeTargetBits, int128bit cumulativeBitsSpent, int128bit cumulativeDeltaBits, int64_t ctbsLeftInPicture, int64_t cumulativeCtbsCoded, int bitdepth, std::shared_ptr<CpbInfo> cpbInfo);
+    void computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, double lastValidLambda, int64_t cumulativeTargetBits, int64_t cumulativeBitsSpent, int64_t cumulativeDeltaBits, int64_t ctbsLeftInPicture, int64_t cumulativeCtbsCoded, int bitdepth, std::shared_ptr<CpbInfo> cpbInfo);
 
     void updateModelParameters();
 
-    void getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int& lastValidQp, double& lastValidLambda, int128bit &cumulativeTargetBits, int128bit &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame, int callerPoc);
+    void getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int& lastValidQp, double& lastValidLambda, int64_t &cumulativeTargetBits, int64_t &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame, int callerPoc);
 
     double estimateLambda(double previousLambdaIni);
 
@@ -689,9 +691,9 @@ public:
 struct IntraPeriodData
 {
     int m_framesLeft;
-    int128bit m_bitsSpent;
-    int128bit m_targetBits;
-    int128bit m_deltaBits;
+    int64_t m_bitsSpent;
+    int64_t m_targetBits;
+    int64_t m_deltaBits;
     int64_t m_targetBitsEst;
     int m_totalCtbsCoded;
     int m_framesEncoded;
@@ -873,7 +875,7 @@ public:
         int lastValidQp = NON_VALID_QP;
         double lastValidLambda = NON_VALID_LAMBDA;
         int64_t   ctbsLeftInPicture = 0, cumulativeCtbsCoded = 0;
-        int128bit cumulativeTargetBits = 0, cumulativeBitsSpent = 0, cumulativeDeltaBits = 0;
+        int64_t cumulativeTargetBits = 0, cumulativeBitsSpent = 0, cumulativeDeltaBits = 0;
         getCodedInfoCtbs(h, ctbAddrInRs, lastValidQp, lastValidLambda, cumulativeTargetBits, cumulativeBitsSpent, ctbsLeftInPicture, cumulativeCtbsCoded);
         cumulativeDeltaBits += (cumulativeTargetBits - cumulativeBitsSpent);
         if (!currentPictureController->second->getIsIntra())
@@ -891,7 +893,7 @@ public:
 
 
     template <class H>
-    void getCodedInfoCtbs(H &h, int ctbAddrInRs, int &lastValidQp, double& lastValidLambda, int128bit &cumulativeTargetBits, int128bit &cumulativeBitsSpent, int64_t &ctbsLeftInPicture, int64_t &cumulativeCtbsCoded)
+    void getCodedInfoCtbs(H &h, int ctbAddrInRs, int &lastValidQp, double& lastValidLambda, int64_t &cumulativeTargetBits, int64_t &cumulativeBitsSpent, int64_t &ctbsLeftInPicture, int64_t &cumulativeCtbsCoded)
     {
         auto currentPictureController = m_pictureControllerEngine.find(h[PicOrderCntVal()]);
         assert(currentPictureController != m_pictureControllerEngine.end());

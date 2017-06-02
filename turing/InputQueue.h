@@ -34,7 +34,8 @@ For more information, contact us at info @ turingcodec.org.
 
 struct InputQueue
 {
-    InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool shotChange, int segmentLength, int baseQP);
+
+    InputQueue(int maxGopN, int maxGopM, bool fieldCoding, bool tempScalability, bool shotChange, int segmentLength, int baseQP);
 
     ~InputQueue();
 
@@ -66,6 +67,7 @@ struct InputQueue
         int poc;
         int absolutePoc;
         int nut;
+        int tid;
         int sliceType;
         int qpOffset;
         double qpFactor;

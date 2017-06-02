@@ -68,30 +68,20 @@ PictureController::PictureController(std::shared_ptr<DataStorage> dataStorage, i
     }
 
     {
-        if (averageBpp < 0.005)
-        {
-            m_alphaUpdateStep = 0.005;
-            m_betaUpdateStep = 0.0025;
-        }
-        else if (averageBpp < 0.01)
+        if (averageBpp < 0.03)
         {
             m_alphaUpdateStep = 0.01;
             m_betaUpdateStep = 0.005;
         }
-        else if (averageBpp < 0.05)
+        else if (averageBpp < 0.08)
         {
             m_alphaUpdateStep = 0.05;
             m_betaUpdateStep = 0.025;
         }
-        else if (averageBpp < 0.1)
+        else if (averageBpp < 0.2)
         {
             m_alphaUpdateStep = 0.1;
             m_betaUpdateStep = 0.05;
-        }
-        else if (averageBpp < 0.2)
-        {
-            m_alphaUpdateStep = 0.15;
-            m_betaUpdateStep = 0.075;
         }
         else if (averageBpp < 0.5)
         {
@@ -218,7 +208,7 @@ int PictureController::estimateQp(int sopLevel, int previousQp)
 
     if (previousQp > NON_VALID_QP)
     {
-        qp = Clip3(previousQp - 5, previousQp + 5, qp);
+        qp = Clip3(previousQp - 10, previousQp + 10, qp);
     }
 
     qp = Clip3(2, 46, qp);
@@ -226,7 +216,7 @@ int PictureController::estimateQp(int sopLevel, int previousQp)
     return qp;
 }
 
-void PictureController::getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int &lastValidQp, double& lastValidLambda, int128bit &cumulativeTargetBits, int128bit &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame, int callerPoc)
+void PictureController::getCodedInfoFromWavefront(bool wpp, int ctbAddrInRs, int &lastValidQp, double& lastValidLambda, int64_t &cumulativeTargetBits, int64_t &cumulativeBitsSpent, int64_t &cumulativeCtbsCoded, bool currFrame, int callerPoc)
 {
     assert(ctbAddrInRs < m_pictureSizeInCtbs);
     int rowStart = ctbAddrInRs / m_pictureWidthInCtbs;
@@ -398,17 +388,17 @@ void PictureController::updateModelParameters()
     }
     else
     {
-        if (initialLambda < 0.01 || finalLambda < 0.01 || averageActualBpp < 0.0001)
+        if (m_pictureLambdaIni < 0.01 || m_pictureLambdaFin < 0.01 || m_pictureBpp < 0.0001)
         {
             currentAlpha *= (1.0 - m_alphaUpdateStep / 2.0);
             currentBeta *= (1.0 - m_betaUpdateStep / 2.0);
         }
         else
         {
-            currentAlpha += m_alphaUpdateStep * (log(initialLambda) - log(finalLambda)) * currentAlpha;
-            double lnbpp = log(averageActualBpp);
+            currentAlpha += m_alphaUpdateStep * (log(m_pictureLambdaIni) - log(m_pictureLambdaFin)) * currentAlpha;
+            double lnbpp = log(m_pictureBpp);
             lnbpp = Clip3(-5.0, -0.1, lnbpp);
-            currentBeta += m_betaUpdateStep * (log(initialLambda) - log(finalLambda)) * lnbpp;
+            currentBeta += m_betaUpdateStep * (log(m_pictureLambdaIni) - log(m_pictureLambdaFin)) * lnbpp;
 
         }
         currentAlpha = Clip3(ALPHA_MIN, ALPHA_MAX, currentAlpha);
@@ -462,17 +452,23 @@ void PictureController::updateModelParameters()
     
 }
 
-void PictureController::computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, double lastValidLambda, int128bit cumulativeTargetBits, int128bit cumulativeBitsSpent, int128bit cumulativeDeltaBits, int64_t ctbsLeftInPicture, int64_t cumulativeCtbsCoded, int bitdepth, std::shared_ptr<CpbInfo> cpbInfo)
+void PictureController::computeCtbTargetBits(int ctbAddrInRs, int lastValidQp, double lastValidLambda, int64_t cumulativeTargetBits, int64_t cumulativeBitsSpent, int64_t cumulativeDeltaBits, int64_t ctbsLeftInPicture, int64_t cumulativeCtbsCoded, int bitdepth, std::shared_ptr<CpbInfo> cpbInfo)
 {
     int avgBits = 0;
     int influence = CTB_SMOOTH_WINDOW;
     int ctbEstBits = m_ctbControllerEngine[ctbAddrInRs].getTargetBitsEst();
     cumulativeCtbsCoded = std::max<int64_t>(1, cumulativeCtbsCoded);
-    int128bit tempDiff = (cumulativeTargetBits - cumulativeBitsSpent);
+    int64_t tempDiff = (cumulativeTargetBits - cumulativeBitsSpent);
     int maxBitsPerCtb = (bitdepth * m_ctbControllerEngine[ctbAddrInRs].getNumberOfPixels()* 3) >>1;
-    int delta = static_cast<int>(tempDiff.to64());
+    int delta = tempDiff;//static_cast<int>(tempDiff.to64());
 
-    avgBits = Clip3(1, maxBitsPerCtb, ctbEstBits + delta);
+    //avgBits = Clip3(1, maxBitsPerCtb, ctbEstBits + delta);
+
+    avgBits = m_ctbControllerEngine[ctbAddrInRs].getTargetBitsEst() + (cumulativeTargetBits - cumulativeBitsSpent) / influence;
+    if (avgBits < 1)
+    {
+        avgBits = 1;
+    }
 
     m_ctbControllerEngine[ctbAddrInRs].setTargetBits(avgBits);
     const double bpp = static_cast<double>(avgBits) / static_cast<double>(m_ctbControllerEngine[ctbAddrInRs].getNumberOfPixels());
@@ -707,7 +703,6 @@ void SequenceController::initNewSop(std::shared_ptr<InputQueue::Docket> docket)
 {
     // Initialise the frame-based weights according to the value of bpp
     int *bitrateProfile = 0;
-    int *maxbitrateProfile = 0;
     int sopOneSizeProfile = 1;
     int sopTargetBits = 0;
     bool intraInSop = false;
@@ -723,22 +718,18 @@ void SequenceController::initNewSop(std::shared_ptr<InputQueue::Docket> docket)
         if(m_averageBpp <= 0.05)
         {
             bitrateProfile = m_sopWeight[docket->currentGopSize-2][0];
-            maxbitrateProfile = m_sopWeight[m_sopSize - 2][0];
         }
         else if(0.05 < m_averageBpp && m_averageBpp <= 0.1)
         {
             bitrateProfile = m_sopWeight[docket->currentGopSize-2][1];
-            maxbitrateProfile = m_sopWeight[m_sopSize - 2][1];
         }
         else if(0.1 < m_averageBpp && m_averageBpp <= 0.2)
         {
             bitrateProfile = m_sopWeight[docket->currentGopSize-2][2];
-            maxbitrateProfile = m_sopWeight[m_sopSize - 2][2];
         }
         else
         {
             bitrateProfile = m_sopWeight[docket->currentGopSize-2][3];
-            maxbitrateProfile = m_sopWeight[m_sopSize - 2][3];
         }
     }
 
@@ -995,8 +986,8 @@ void SequenceController::initNewIntraPeriod(std::shared_ptr<InputQueue::Docket> 
 {
     int bitsSpent = 0;
     int64_t deltaBits = 0;
-    int128bit totalBitsSpent = 0;
-    int128bit totalTargetBits = 0;
+    int64_t totalBitsSpent = 0;
+    int64_t totalTargetBits = 0;
     int totalFramesCoded = 0;
     const bool carryForward = (docket->absolutePoc != docket->segmentPoc);
     
@@ -1032,8 +1023,8 @@ void SequenceController::initNewIntraPeriod(std::shared_ptr<InputQueue::Docket> 
                     totalFramesCoded++;
                 }
             }
-            int128bit tempDelta = totalTargetBits - totalBitsSpent;
-            deltaBits = tempDelta.to64();
+            int64_t tempDelta = totalTargetBits - totalBitsSpent;
+            deltaBits = tempDelta;
         }
     }
 

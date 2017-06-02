@@ -57,6 +57,7 @@ void setupSliceHeader(H &h, const InputQueue::Docket *docket)
 {
     StateEncode *stateEncode = h;
     h[nal_unit_type()] = docket->nut;
+    h[nuh_temporal_id_plus1()] = docket->tid + 1;
     h[slice_type()] = docket->sliceType;
     h[first_slice_segment_in_pic_flag()] = 1;
     h[slice_segment_address()] = 0;

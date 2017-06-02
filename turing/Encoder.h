@@ -81,6 +81,7 @@ struct Encoder
     size_t byteCount = 0;
     double frameRate;
     Level bitstreamLevel;
+    bool tempScalability;
 
 
     // Check whether one of the VUI parameters is set, so that VUI writing can be happen

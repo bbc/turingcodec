@@ -1136,6 +1136,7 @@ struct Search<coding_unit>
             int row = (cu.y0 & (h[CtbSizeY()] - 1)) >> 3;
             int col = (cu.x0 & (h[CtbSizeY()] - 1)) >> 3;
             int qpValue = qpState->getQpInternal(row, col);
+
             // Add qp offset if adaptive qp is enabled
             StateEncode *stateEncode = h;
             if (stateEncode->useAq)

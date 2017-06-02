@@ -746,6 +746,7 @@ struct StateEncode :
         StateEncode(const boost::program_options::variables_map &vm) :
             InputQueue(vm["max-gop-n"].as<int>(), vm["max-gop-m"].as<int>(),
                        vm["field-coding"].as<bool>(),
+                       vm["temp-scalability"].as<bool>(),
                        vm["shot-change"].as<bool>(),
                        vm["segment"].as<int>(),
                        vm["qp"].as<int>()),
