@@ -114,7 +114,7 @@ bool TaskEncodeSubstream<Sample>::blocked()
                 {
                     StateWavefront *stateWavefrontRef = stateEncodePicture;
 
-                    if (!stateWavefrontRef->deblocked(rx, ry)) 
+                    if (!stateWavefrontRef->saoed(rx, ry)) 
                     {
                         return true;
                     }

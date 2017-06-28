@@ -1558,7 +1558,7 @@ static std::ostream &operator<<(std::ostream &o, Turing::Rectangle rectangle)
 
 enum When { before = 0, after = 1, corner };
 
-const int ctbWaitingOffsetX = 4;
-const int ctbWaitingOffsetY = 3;
+const int ctbWaitingOffsetX = 5;
+const int ctbWaitingOffsetY = 4;
 
 #endif

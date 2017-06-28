@@ -121,7 +121,7 @@ struct Speed
 
     bool useRqt() const
     {
-        return *this <= slow;
+        return false;//*this <= slow;
     }
 
     bool useRdoq() const
@@ -151,12 +151,12 @@ struct Speed
 
     bool useSao() const
     {
-        return *this <= medium;
+        return *this <= slow;
     }
 
     bool useSaoSlow() const
     {
-        return *this < medium;
+        return false;//*this < medium;
     }
 
     int  setMaxNumMergeCand() const
@@ -179,16 +179,21 @@ struct Speed
         return *this <= medium;
     }
 
-    int nCandidatesIntraRefinement(int log2PartitionSize) const
+    int nCandidatesIntraRefinement(int log2PartitionSize, bool isIntra) const
     {
-        if (*this <= slow) return 8;
+        if(isIntra)
+            return 2;
+        else
+            return 1;
+        //if (*this <= slow) 
+        //    return 8;
         if (*this <= medium)
         {
-            return log2PartitionSize > 3 ? 3 : 8;
+            return log2PartitionSize > 3 ? 3 : 4;
         }
         else// if (*this <= medium)
         {
-            return log2PartitionSize > 3 ? 3 : 4;
+            return log2PartitionSize > 3 ? 2 : 3;
         }
         return 35;
     }

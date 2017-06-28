@@ -30,11 +30,14 @@ For more information, contact us at info @ turingcodec.org.
 #include "havoc/sad.h"
 #include "havoc/ssd.h"
 #include "havoc/hadamard.h"
+#include "havoc/residual.h"
 #include "havoc/havoc.h"
 
 
  // State comprising tables of pointers for optimised functions.
 struct StateFunctionTables :
+    havoc_table_residual<uint8_t>,
+    havoc_table_residual<uint16_t>,
     HavocTablePredUni<uint16_t>,
     HavocTablePredBi<uint16_t>,
     havoc::table_inverse_transform_add<uint16_t>,
@@ -65,6 +68,8 @@ struct StateFunctionTables :
         instruction_set_support(mask)
     {
         this->code = havoc_new_code(mask, 12000000);
+        havoc_populate_residual<uint8_t>(this, this->code);
+        havoc_populate_residual<uint16_t>(this, this->code);
         havocPopulatePredUni<uint8_t>(this, this->code);
         havocPopulatePredUni<uint16_t>(this, this->code);
         havocPopulatePredBi<uint8_t>(this, this->code);

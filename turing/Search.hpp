@@ -110,37 +110,289 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
             lambda.set(value);
         }
 
-        for (int n = 0; n < 35; ++n)
+
+        bool binSearch = (h[slice_type()] != I);
+        if (binSearch)
         {
-            candidate.resetPieces();
-            candidate.copy(*originalCandidate, before, intraPartition, false, true);
-            candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
-            candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
-            candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
-
-            candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
-
+            for (int n = 0; n < 35; ++n)
             {
-                Neighbourhood *neighbourhood = h;
-                Snake<BlockData>::Cursor *cursor = h;
-                BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
-                blockData.setup(cqt, MODE_INTRA);
+                costs[n] = std::numeric_limits<Cost>::max();
             }
 
-            int32_t distortion;
-
+            for (int n = 0; n < 2; ++n)
             {
-                auto &e = intraPartition;
+                candidate.resetPieces();
+                candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
 
-                const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
-                const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+                candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
 
-                distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                {
+                    Neighbourhood *neighbourhood = h;
+                    Snake<BlockData>::Cursor *cursor = h;
+                    BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                    blockData.setup(cqt, MODE_INTRA);
+                }
+
+                int32_t distortion;
+
+                {
+                    auto &e = intraPartition;
+
+                    const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                    const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                    distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                }
+
+                costs[n] = lambda * distortion;
+
+                if (n == candModeList[0])
+                {
+                    costs[n] += (rateA - rateC);
+                }
+                else if (n == candModeList[1])
+                {
+                    costs[n] += (rateB - rateC);
+                }
+
+
             }
 
-            costs[n] += lambda * distortion;
+            int searchVector[5] = {2, 10, 18, 26, 34};
+            Cost maxCost = std::numeric_limits<Cost>::max();
+            int bestIndex = -1;
+            int bestMode = -1;
+            for (int n = 0; n < 5; ++n)
+            {
+                candidate.resetPieces();
+                candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
+
+                candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = searchVector[n];
+
+                {
+                    Neighbourhood *neighbourhood = h;
+                    Snake<BlockData>::Cursor *cursor = h;
+                    BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                    blockData.setup(cqt, MODE_INTRA);
+                }
+
+                int32_t distortion;
+
+                {
+                    auto &e = intraPartition;
+
+                    const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                    const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                    distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                }
+
+                costs[searchVector[n]] = lambda * distortion;
+                if (searchVector[n] == candModeList[0])
+                {
+                    costs[searchVector[n]] += (rateA - rateC);
+                }
+                else if (searchVector[n] == candModeList[1])
+                {
+                    costs[searchVector[n]] += (rateB - rateC);
+                }
+
+
+                if (costs[searchVector[n]] < maxCost)
+                {
+                    maxCost = costs[searchVector[n]];
+                    bestIndex = n;
+                    bestMode = searchVector[n];
+                }
+            }
+
+
+            for (int n = bestMode - 4; n <= bestMode + 4; n = n + 8)
+            {
+                if(n > 2 && costs[n] == std::numeric_limits<Cost>::max())
+                {
+                    candidate.resetPieces();
+                    candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                    candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                    candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                    candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
+
+                    candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
+
+                    {
+                        Neighbourhood *neighbourhood = h;
+                        Snake<BlockData>::Cursor *cursor = h;
+                        BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                        blockData.setup(cqt, MODE_INTRA);
+                    }
+
+                    int32_t distortion;
+
+                    {
+                        auto &e = intraPartition;
+
+                        const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                        const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                        distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                    }
+
+                    costs[n] = lambda * distortion;
+
+                    if (n == candModeList[0])
+                    {
+                        costs[n] += (rateA - rateC);
+                    }
+                    else if (n == candModeList[1])
+                    {
+                        costs[n] += (rateB - rateC);
+                    }
+
+                    if (costs[n] < maxCost)
+                    {
+                        maxCost = costs[n];
+                        bestMode = n;
+                    }
+                }
+            }
+
+            for (int n = bestMode - 2; n <= bestMode + 2; n = n + 4)
+            {
+                if (n > 2 && costs[n] == std::numeric_limits<Cost>::max())
+                {
+                    candidate.resetPieces();
+                    candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                    candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                    candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                    candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
+
+                    candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
+
+                    {
+                        Neighbourhood *neighbourhood = h;
+                        Snake<BlockData>::Cursor *cursor = h;
+                        BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                        blockData.setup(cqt, MODE_INTRA);
+                    }
+
+                    int32_t distortion;
+
+                    {
+                        auto &e = intraPartition;
+
+                        const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                        const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                        distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                    }
+
+                    costs[n] = lambda * distortion;
+
+                    if (n == candModeList[0])
+                    {
+                        costs[n] += (rateA - rateC);
+                    }
+                    else if (n == candModeList[1])
+                    {
+                        costs[n] += (rateB - rateC);
+                    }
+
+                    if (costs[n] < maxCost)
+                    {
+                        maxCost = costs[n];
+                        bestMode = n;
+                    }
+                }
+            }
+
+            for (int n = bestMode - 1; n <= bestMode + 1; n = n + 2)
+            {
+                if (n > 2 && costs[n] == std::numeric_limits<Cost>::max())
+                {
+                    candidate.resetPieces();
+                    candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                    candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                    candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                    candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
+
+                    candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
+
+                    {
+                        Neighbourhood *neighbourhood = h;
+                        Snake<BlockData>::Cursor *cursor = h;
+                        BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                        blockData.setup(cqt, MODE_INTRA);
+                    }
+
+                    int32_t distortion;
+
+                    {
+                        auto &e = intraPartition;
+
+                        const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                        const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                        distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                    }
+
+                    costs[n] = lambda * distortion;
+
+                    if (n == candModeList[0])
+                    {
+                        costs[n] += (rateA - rateC);
+                    }
+                    else if (n == candModeList[1])
+                    {
+                        costs[n] += (rateB - rateC);
+                    }
+
+                    if (costs[n] < maxCost)
+                    {
+                        maxCost = costs[n];
+                        bestMode = n;
+                    }
+                }
+            }
         }
+        else
+        {
+            for (int n = 0; n < 35; ++n)
+            {
+                candidate.resetPieces();
+                candidate.copy(*originalCandidate, before, intraPartition, false, true);
+                candidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, intraPartition);
+                candidate.StatePieces<Sample>::copyBefore(intraPartition, *originalCandidate);
+                candidate.StateCodedData::copyBefore(intraPartition, *originalCandidate);
 
+                candidate.codedCu.IntraPredModeY(intraPartition.blkIdx) = n;
+
+                {
+                    Neighbourhood *neighbourhood = h;
+                    Snake<BlockData>::Cursor *cursor = h;
+                    BlockData &blockData = cursor->current(cqt->x0, cqt->y0, neighbourhood->MinCbLog2SizeYMinus1);
+                    blockData.setup(cqt, MODE_INTRA);
+                }
+
+                int32_t distortion;
+
+                {
+                    auto &e = intraPartition;
+
+                    const int i = (e.blkIdx & 1) << (e.log2CbSize - 1);
+                    const int j = (e.blkIdx >> 1) << (e.log2CbSize - 1);
+
+                    distortion = predictIntraLuma(transform_tree(e.x0 + i, e.y0 + j, e.x0, e.y0, e.log2CbSize - e.split, e.split, e.blkIdx), h);
+                }
+
+                costs[n] += lambda * distortion;
+            }
+        }
         *activeCandidate = originalCandidate;
     }
 
@@ -153,7 +405,7 @@ void searchIntraPartition(H &h, IntraPartition intraPartition)
     CandidateStash<Sample> *challenger = &candidateStash[1];
     champion->ContextsAndCost::setMax();
 
-    const auto max = static_cast<Speed *>(h)->nCandidatesIntraRefinement(intraPartition.log2CbSize >> intraPartition.split);
+    const auto max = static_cast<Speed *>(h)->nCandidatesIntraRefinement(intraPartition.log2CbSize >> intraPartition.split, (h[slice_type()] == I));
 
     // Refine using holistic rate and sum of square differences distortion
     auto nMpm = 0;
@@ -794,8 +1046,7 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     bool testFull = true;
     bool testSplit = true;
 
-
-    if (stateEncode->rcudepth)
+   if (stateEncode->rcudepth)
     {
         if (cqt.cqtDepth == 2 && originalCandidate->rcudepthstatus == 1)
             testSplit = false;
@@ -819,7 +1070,7 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
     if (mustSplit)
     {
         h[split_cu_flag()] = 1;
-
+        originalCandidate->testedParent = false;
         Syntax<coding_quadtree>::go(cqt, h);
     }
     else
@@ -828,13 +1079,26 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
         StateReconstructionCache<Sample> *stateReconstructionCache = h;
         CandidateStash<Sample> splitCandidate(*originalCandidate, cqt, *stateReconstructionCache);
         splitCandidate.resetPieces();
-        splitCandidate.copy(*originalCandidate, before, cqt, true, true);
-        splitCandidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, cqt);
-        splitCandidate.copyIntraReferenceSamplesChroma(*originalCandidate, before, cqt);
-        splitCandidate.ContextsAndCost::copy(*originalCandidate);
-        splitCandidate.StatePieces<Sample>::copyBefore(cqt, *originalCandidate);
-        splitCandidate.StateCodedData::copyBefore(cqt, *originalCandidate);
+    
+        if(splitCandidate.tested)
+        {
+            splitCandidate.copy(*originalCandidate, before, cqt, true, true);
+            splitCandidate.copyIntraReferenceSamplesLuma(*originalCandidate, before, cqt);
+            splitCandidate.copyIntraReferenceSamplesChroma(*originalCandidate, before, cqt);
+            splitCandidate.ContextsAndCost::copy(*originalCandidate);
+            splitCandidate.StatePieces<Sample>::copyBefore(cqt, *originalCandidate);
+            splitCandidate.StateCodedData::copyBefore(cqt, *originalCandidate);
+        }
         splitCandidate.rcudepthstatus = originalCandidate->rcudepthstatus;
+
+        bool newSpeedup = (cqt.log2CbSize != h[CtbLog2SizeY()] && originalCandidate->testedParent);
+
+        if (newSpeedup)
+        {
+            testFull = testFull && (originalCandidate->cost2() < originalCandidate->costParent);
+            testFull = testFull && (originalCandidate->tested);
+        }
+
 
         if (testFull)
         {
@@ -849,15 +1113,27 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
 
             // resultant state of single CU / split=0 test is now in *originalCandidate
         }
-        const bool trySplit = !testFull || (testSplit && (
+        bool trySplit = !testFull || (testSplit && (
             cqt.log2CbSize > h[MinCbLog2SizeY()] &&
             (!stateEncode->ecu || h[current(CuPredMode(cqt.x0, cqt.y0))] != MODE_SKIP) &&
             static_cast<Speed *>(h)->trySplit(cqt)));
 
+        if (newSpeedup)
+        {
+            trySplit = trySplit && (originalCandidate->cost2() < originalCandidate->costParent);
+            trySplit = trySplit && (originalCandidate->tested);
+        }
+
         if (trySplit)
         {
             Candidate<Sample> &singleCandidate = *originalCandidate;
-
+            if(testFull)
+            {
+                splitCandidate.costParent = singleCandidate.cost2();
+                splitCandidate.testedParent = true;
+            }
+            else
+                splitCandidate.testedParent = false;
             // restore original states
             *activeCandidate = &splitCandidate;
 
@@ -865,14 +1141,15 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
             h[split_cu_flag()] = 1;
 
             Syntax<coding_quadtree>::go(cqt, h);
-
-            static_cast<Candidate<Sample> *>(h)->checkPieces(0, after, cqt);
-            static_cast<Candidate<Sample> *>(h)->checkPieces(1, after, cqt);
-            static_cast<Candidate<Sample> *>(h)->checkPieces(2, after, cqt);
-
+            if(splitCandidate.tested)
+            {
+                static_cast<Candidate<Sample> *>(h)->checkPieces(0, after, cqt);
+                static_cast<Candidate<Sample> *>(h)->checkPieces(1, after, cqt);
+                static_cast<Candidate<Sample> *>(h)->checkPieces(2, after, cqt);
+            }
             *activeCandidate = originalCandidate;
 
-            if (!testFull || splitCandidate.cost2() < singleCandidate.cost2())
+            if (!testFull || (splitCandidate.tested && splitCandidate.cost2() < singleCandidate.cost2()))
             {
                 // Copy
                 originalCandidate->copy(splitCandidate, after, cqt, true, true);
@@ -882,6 +1159,11 @@ void Search<coding_quadtree>::go(const coding_quadtree &cqt, H &h)
                 originalCandidate->StatePieces<Sample>::copyAfter(cqt, splitCandidate);
                 originalCandidate->StateCodedData::copyAfter(cqt, splitCandidate);
             }
+        }
+
+        if (!trySplit && !testFull)
+        {
+            originalCandidate->tested = false;
         }
     }
 }
@@ -972,6 +1254,12 @@ void searchInterCuPartMode(H &h, coding_quadtree const &cqt, int partMode, Candi
 
     stateEncodeSubstream->originalCandidate = *activeCandidate;
     *activeCandidate = contender;
+
+    bool newSpeedUpCtxid = true;
+    if (newSpeedUpCtxid)
+    {
+        contender->costChampion = champion->cost2();
+    }
 
     auto const zY = zPositionOf(cqt);
     auto const zC = zY >> 2;
@@ -1164,7 +1452,7 @@ struct Search<coding_unit>
             Profiler::Scope scope(static_cast<Profiler::Timers*>(h)->searchInter);
 
             doTryIntra = searchInterCu(h, *cqt, challenger, champion);
-            if (!(speed->doIntraInInter())) 
+            if (!(speed->doIntraInInter()) || cqt->log2CbSize> 4) 
                 doTryIntra = false;
         }
 
@@ -1336,6 +1624,7 @@ template <class H> static void searchMotionUni(H &h, int refList)
 
     MotionVector mvd = best.mvd;
 
+    bool quarterPelMv = false;
     if (speed->doHalfPelRefinement())
     {
         using Sample = typename SampleType<H>::Type;
@@ -1347,8 +1636,14 @@ template <class H> static void searchMotionUni(H &h, int refList)
         Picture<Sample> &pictureReference = *reconstructedPicture.picture;
         auto const reference = pictureReference(pu->x0, pu->y0, 0);
         auto mv = best.mv;
-        subPelRefinement(mv, mvd, mvdc, h, input, reference);
+        subPelRefinement(mv, mvd, mvdc, h, input, reference, quarterPelMv);
     }
+    {
+        // Store information whether best candidate was selected with quarter-pel resolution
+        Candidate<Sample> *candidate = h;
+        candidate->quarterPelMv |= quarterPelMv;
+    }
+
 
     stateCodedData->codedPu.mvd(mvdc.refList) = mvd;
     stateCodedData->codedPu.word0().metadata[mvdc.refList].mvp_lX_flag = best.mvpFlag;
@@ -1630,6 +1925,11 @@ template <class H> static void searchMotionBi(H &h, int refList)
     if (speed->doHalfPelRefinement())
     {
         int refinement = (speed->doQuarterPelRefinement()) ? 1 : 2;
+        if(refinement == 1)
+        {
+            Candidate<Sample> *candidate = h;
+            //refinement = (candidate->quarterPelMv) ? 1 : 2;
+        }
         for (int step = 2; step; step -= refinement)
         {
             MotionVector origin = best.mv;
@@ -1851,7 +2151,14 @@ struct Search<prediction_unit>
             bool debug = false;//pu == prediction_unit(116, 0, 12, 16) && h[PicOrderCntVal()] == 8;
 
             originalContextsAndCost = *static_cast<ContextsAndCost *>(h);
-
+            {
+                Candidate<Sample> *candidate = h;
+                if (candidate->cost2() >= candidate->costChampion)
+                {
+                    return;
+                }
+                candidate->quarterPelMv = false;
+            }
 
             if (std::is_same<typename H::Tag, SearchMerge2Nx2N<void>>::value)
             {
@@ -2009,13 +2316,13 @@ Cost costMv(H& h, MotionVector mv, MotionVector const &mvd, Raster<Sample> input
 
 // Refinement search (half or quarter pixel)
 template <typename Sample, class H, class P>
-void patternSearch(H &h, mvd_coding mvdc, const P &pattern, bool tryOrigin, MotionVector &mv, MotionVector &mvd, Cost &bestCost, Raster<Sample> input, Raster<Sample> reference, int maxIterations = 0)
+void patternSearch(H &h, mvd_coding mvdc, const P &pattern, bool tryOrigin, MotionVector &mv, MotionVector &mvd, Cost &bestCost, Raster<Sample> input, Raster<Sample> reference, int maxIterations, bool& improved)
 {
     //if (match(mvdc, h)) logEncode() << "pattern[" << boost::size(pattern) << "] ";
 
     int min = 0;
     int max = static_cast<int>(boost::size(pattern));
-    bool improved;
+    //bool improved;
 
     if (tryOrigin)
     {
@@ -2338,22 +2645,23 @@ template <class H> static void fullPelMotionEstimation(mvd_coding mvdc, H &h, Mv
 
 
 template <typename Sample, class H>
-void subPelRefinement(MotionVector &mv, MotionVector &mvd, mvd_coding const &mvdc, H &h, Raster<Sample> input, Raster<Sample> reference)
+void subPelRefinement(MotionVector &mv, MotionVector &mvd, mvd_coding const &mvdc, H &h, Raster<Sample> input, Raster<Sample> reference, bool& quarterPelMv)
 {
     Profiler::Timers *timers = h;
     Cost bestCost;
     Speed *speed = h;
-
+    bool improved;
     {
+        
         Profiler::Scope scope(timers->searchMotionHalfPel);
         const MotionVector diamond[8] = { { -2, -2 },{ 0, -2 },{ 2, -2 },{ -2, 0 },{ 2, 0 },{ -2, 2 },{ 0, 2 },{ 2, 2 } };
-        patternSearch(h, mvdc, diamond, true, mv, mvd, bestCost, input, reference, 1);
+        patternSearch(h, mvdc, diamond, true, mv, mvd, bestCost, input, reference, 1, improved);
     }
     if (speed->doQuarterPelRefinement())
     {
         Profiler::Scope scope(timers->searchMotionQuarterPel);
         const MotionVector diamond[8] = { { -1, -1 },{ 0, -1 },{ 1, -1 },{ -1, 0 },{ 1, 0 },{ -1, 1 },{ 0, 1 },{ 1, 1 } };
-        patternSearch(h, mvdc, diamond, false, mv, mvd, bestCost, input, reference, 1);
+        patternSearch(h, mvdc, diamond, false, mv, mvd, bestCost, input, reference, 1, improved);
     }
 }
 
@@ -2383,6 +2691,21 @@ struct Search<IfCbf<rqt_root_cbf, transform_tree>>
         stateEncodeSubstream->ssdPrediction[2] = 0;
         // encode transform tree, measure distortion (SSD) and create corresponding CodedData
         auto const ssd = reconstructInter(tt, h);
+        if (candidate->cost2() >= candidate->costChampion)
+        {
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][0]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][0]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][0]);
+
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][1]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][1]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][1]);
+
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[0].freeBlock(stateEncodeSubstream->interPieces[0][2]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[1].freeBlock(stateEncodeSubstream->interPieces[1][2]);
+            stateEncodeSubstream->originalCandidate->stateReconstructionCache->components[2].freeBlock(stateEncodeSubstream->interPieces[2][2]);
+            return;
+        }
         int rqtdepth = candidate->rqtdepth;
         Lambda reciprocalLambda = getReciprocalLambda(h);
         StateEncode *stateEncode = h;

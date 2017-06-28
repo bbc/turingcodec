@@ -253,12 +253,10 @@ struct ReconstructIntraBlock
         ALIGN(32, int16_t, resSamplesRawBuffer[32 * 32]);
         Raster<int16_t> resSamplesRaw(resSamplesRawBuffer, nTbS);
 
-        // subtract prediction from input
-        // review: SIMD optimisations, perhaps integrate into forward transform
-        for (int y = 0; y < nTbS; ++y)
-            for (int x = 0; x < nTbS; ++x)
-                resSamplesRaw(x, y) = sourceSamples(x, y) - predSamples(x, y);
-
+        {
+            auto residualFunction = *havoc_get_residual<Sample>(h, rc.log2TrafoSize);
+            residualFunction(resSamplesRaw.p, resSamplesRaw.stride, sourceSamples.p, sourceSamples.stride, predSamples.p, predSamples.stride, nTbS, nTbS);
+        }
         ALIGN(32, int16_t, coefficientsBuffer[32 * 32]);
         Raster<int16_t> coefficients(coefficientsBuffer, nTbS, 0, 0);
 
@@ -742,6 +740,13 @@ template <class Cbf> struct ReconstructInterBlock
         StateEncode *stateEncode = h;
 
         int const nTbS = 1 << rc.log2TrafoSize;
+
+
+        if (candidate->cost2() >= candidate->costChampion)
+        {
+            return;
+        }
+
 
         assert(h[current(CuPredMode(cqt->x0, cqt->y0))] != MODE_INTRA);
         assert(!h[cu_transquant_bypass_flag()]);
@@ -1327,7 +1332,8 @@ int32_t reconstructInter(transform_tree const &tt, H &h)
         auto backupCuWord0One = candidate->codedCu.word0().raw;
         if (!r[rqt_root_cbf()])
             cbfZero = true;
-        if (!cbfZero)
+
+        if (!cbfZero || (candidate->cost2() >= candidate->costChampion))
         {
             {
                 CodedData::Type *src = stateCodedData->codedPu.p;

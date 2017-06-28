@@ -348,11 +348,17 @@ struct Candidate :
         Candidate() { }
 
 public:
-        int checkParent;
         int check;
         int rcudepthstatus;
         int noresidual;
         int rqtdepth;
+        bool tested;
+        bool testedParent;
+        bool quarterPelMv;
+
+
+        Cost costParent;
+        Cost costChampion;
 
         template <class T>
         Candidate<Sample> &operator<<(const T& t)
@@ -407,6 +413,9 @@ struct CandidateStash :
 
             static_cast<Snake<BlockData>::Pointer &>(*this) = this->snake;
             this->Snake<BlockData>::Cursor::p = this->snake.origin;
+
+            this->costParent = other.costParent;
+            this->tested = other.tested;
         }
 
         void resetPieces()
@@ -425,6 +434,7 @@ struct CandidateStash :
         typename Snake<Sample>::template Array<64, 64, 32, 32> snakeVectorIntraReferenceSamples[3];
         typename ReconstructionCache<Sample>::Piece entryArray[3][256];
         CodedData::Type codedDataArray[(16*8*8 + 64*64) * 3 / 2];
+        
     };
 
 

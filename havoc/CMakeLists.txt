@@ -33,6 +33,7 @@ add_library (havoc
 	pred_inter.h
 	pred_intra.h
 	quantize.h
+	residual.h 
 	sad.h
 	ssd.h
 	transform.h
@@ -43,6 +44,7 @@ add_library (havoc
 	pred_inter.cpp 
 	pred_intra.cpp 
 	quantize.cpp 
+	residual.cpp 
 	sad.cpp 
 	ssd.cpp
 	transform.cpp

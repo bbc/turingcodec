@@ -770,11 +770,13 @@ struct Encode<coding_quadtree>
             if (stateFunctionTables->instruction_set_support & HAVOC_LZCNT)
             {
                 auto hSearch = h.template change<Search<Mode<1>>>();
+                candidate.tested = true;
                 Search<coding_quadtree>::go(cqt, hSearch);
             }
             else
             {
                 auto hSearch = h.template change<Search<Mode<0>>>();
+                candidate.tested = true;
                 Search<coding_quadtree>::go(cqt, hSearch);
             }
         }

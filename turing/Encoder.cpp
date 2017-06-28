@@ -621,7 +621,7 @@ void Encoder::setupPtl(H &h)
         {
             h[general_level_idc()] = level.level_idc();
             this->bitstreamLevel = level;
-            if(this->stateEncode.useRateControl)
+            if (this->stateEncode.useRateControl)
                 this->stateEncode.rateControlParams->initCpbInfo(static_cast<int>(level.parameters[Level::MaxCPB]) * 1000);
             break;
         }

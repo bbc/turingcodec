@@ -26,6 +26,7 @@ For more information, contact us at info @ turingcodec.org.
 #include "diff.h"
 #include "quantize.h"
 #include "hadamard.h"
+#include "residual.h"
 #include "havoc.h"
 #include "Jit.h"
 #include <stdint.h>
@@ -187,6 +188,7 @@ int havoc_main(int argc, const char *argv[])
 
     int error_count = 0;
 
+    havoc_test_residual(&error_count, mask);
     havoc::testSubtractBi<uint8_t>(&error_count, mask);
     havoc::testSubtractBi<uint16_t>(&error_count, mask);
     havoc_test_sad_multiref(&error_count, mask);
