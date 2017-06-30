@@ -84,7 +84,7 @@ turing_encoder_output const* turing_encode_picture(turing_encoder *encoder, turi
 
 void turing_destroy_encoder(turing_encoder *encoder);
 
-bool turing_check_binary_option(const char *option);
+int turing_check_binary_option(const char *option);
 
 
 #ifdef __cplusplus
