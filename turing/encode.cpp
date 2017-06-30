@@ -245,7 +245,7 @@ const char *gitDescribe()
     return (s[0] >= '0' && s[0] <= '9') ? s : "<unknown>";
 }
 
-bool turing_check_binary_option(const char *option)
+int turing_check_binary_option(const char *option)
 {
     map<string, bool> supportedBinaryOptions; // option name and default value
 
@@ -279,7 +279,7 @@ bool turing_check_binary_option(const char *option)
     supportedBinaryOptions["no-parallel-processing"] = true;
 
     string currentOption(option);
-    bool isBinaryOption = 0;
+    int isBinaryOption = 0;
 
     if(currentOption == "no-parallel-processing")
     {
