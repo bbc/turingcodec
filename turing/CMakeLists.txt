@@ -43,7 +43,7 @@ if (CMAKE_COMPILER_IS_GNUCC)
     add_compile_options(-fno-operator-names -pthread -std=c++1y)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fno-strict-aliasing")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -DVALGRIND_FRIENDLY")
-    set(LINK_LIBRARIES ${LINK_LIBRARIES} rt)
+    set(LINK_LIBRARIES ${LINK_LIBRARIES} -pthread rt)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
 set(SEI_HEADERS
