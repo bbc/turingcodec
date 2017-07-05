@@ -46,6 +46,13 @@ if (CMAKE_COMPILER_IS_GNUCC)
     set(LINK_LIBRARIES ${LINK_LIBRARIES} -pthread rt)
 endif (CMAKE_COMPILER_IS_GNUCC)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-fno-operator-names -pthread -std=c++1y)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fno-strict-aliasing -DNDEBUG ")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -DVALGRIND_FRIENDLY")
+    set(LINK_LIBRARIES ${LINK_LIBRARIES} -pthread rt)
+endif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+
 set(SEI_HEADERS
     sei/ReadSei.h
     sei/active_parameter_sets.h
